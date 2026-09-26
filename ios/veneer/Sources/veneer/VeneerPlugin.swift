@@ -99,6 +99,26 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
       overlay?.setTabBar(nil)
       result(nil)
 
+    case "setNavigationBar":
+      overlay?.setNavigationBar(args)
+      result(nil)
+
+    case "removeNavigationBar":
+      overlay?.setNavigationBar(nil)
+      result(nil)
+
+    case "setComposer":
+      overlay?.setComposer(args)
+      result(nil)
+
+    case "removeComposer":
+      overlay?.setComposer(nil)
+      result(nil)
+
+    case "composerCommand":
+      overlay?.composerCommand(args)
+      result(nil)
+
     case "setChromeHidden":
       overlay?.setChromeHidden((args["hidden"] as? Bool) ?? false)
       result(nil)

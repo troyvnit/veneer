@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:veneer/veneer.dart';
 
+import 'pages/chat_page.dart';
 import 'pages/clip_page.dart';
 import 'pages/diagnostics_page.dart';
 import 'pages/morph_page.dart';
@@ -59,6 +60,15 @@ final ValueNotifier<TrailingIconKind> trailingIconKind = ValueNotifier(TrailingI
 class _HomePageState extends State<HomePage> {
   int _index = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    // Scripted measurement runs (tool/measure_sync.py) open the sync test directly.
+    if (launchMeasureMode) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => openSyncTest(context));
+    }
+  }
+
   static const _trailingIcons = {
     TrailingIconKind.symbol: NativeIcon.symbol('plus'),
     TrailingIconKind.iconData: NativeIcon.icon(Icons.add),
@@ -83,23 +93,30 @@ class _HomePageState extends State<HomePage> {
         // One of each icon type: SF Symbol, Material IconData (with a selected
         // variant), an SVG asset, and Cupertino IconData from a package font.
         tabs: const [
-          NativeTabItem(title: 'Sync', icon: NativeIcon.symbol('arrow.up.arrow.down')),
+          NativeTabItem(
+            title: 'Chat',
+            icon: NativeIcon.symbol('bubble.left.and.bubble.right'),
+            selectedIcon: NativeIcon.symbol('bubble.left.and.bubble.right.fill'),
+          ),
           NativeTabItem(
             title: 'Morph',
             icon: NativeIcon.icon(Icons.water_drop_outlined),
             selectedIcon: NativeIcon.icon(Icons.water_drop),
           ),
           NativeTabItem(title: 'Clip', icon: NativeIcon.svgAsset('assets/icons/scissors.svg')),
-          NativeTabItem(title: 'Diagnostics', icon: NativeIcon.icon(CupertinoIcons.gauge), badge: '3'),
+          NativeTabItem(title: 'Lab', icon: NativeIcon.icon(CupertinoIcons.gauge), badge: '3'),
         ],
+        scrollEdgeEffect: NativeScrollEdgeEffect.soft,
         trailingAction: NativeTabAction(icon: _trailingIcons[kind]!, title: 'New', onPressed: _compose),
         selectedIndex: _index,
         onTabSelected: (i) => setState(() => _index = i),
-        child: IndexedStack(
-          index: _index,
-          children: const [SyncTestPage(), MorphPage(), ClipPage(), DiagnosticsPage()],
-        ),
+        child: IndexedStack(index: _index, children: const [ChatPage(), MorphPage(), ClipPage(), DiagnosticsPage()]),
       ),
     );
   }
+}
+
+/// Pushes the glass sync-lag test (see tool/measure_sync.py).
+void openSyncTest(BuildContext context) {
+  Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const SyncTestPage()));
 }

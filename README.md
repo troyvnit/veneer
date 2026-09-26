@@ -18,8 +18,11 @@ UIWindow
       │  │  │  └─ …
       │  │  └─ GlassClipScopeView (unclipped) …
       │  └─ GlassGroupView (zIndex 1) …
-      └─ UITabBarController.view   ← native chrome: a real tab bar controller (child of
-                                     the FlutterViewController) with empty, touch-transparent tabs
+      ├─ UIScrollView (clear)      ← hosts iOS 26's scroll edge effect over Flutter content
+      ├─ UITabBarController.view   ← native chrome: a real tab bar controller (child of
+      │                              the FlutterViewController) with empty, touch-transparent tabs
+      ├─ UINavigationBar           ← native bar: glass back button, title capsule, trailing group
+      └─ NativeComposerView        ← native composer: glass capsule ⇄ card, keyboard-synced
 ```
 
 Glass samples whatever is composited beneath it, so it refracts Flutter
@@ -42,6 +45,9 @@ NativeChromeScope(
 )
 ```
 
+- **At most 5 items**, counting the trailing button: that's all `UITabBarController` shows on
+  iPhone before collapsing the rest into a "More" tab (and dropping the split button), so
+  `NativeChromeScope` asserts on it.
 - It's a real **`UITabBarController`**, so the floating glass bar, selection morph,
   badges, VoiceOver and the long-press large content viewer are UIKit's own. Its tabs host
   empty pages that ignore touches; Flutter draws the real pages underneath.
@@ -53,6 +59,74 @@ NativeChromeScope(
 - Icons, titles and badges update **in place** on the existing `UITab`s. Tabs are only
   replaced when the structure changes (tab count, trailing button added or removed).
 - Under Flutter popups the bar hides with UIKit's own `setTabBarHidden(_:animated:)`.
+
+## Native navigation bar and scroll edge effect
+
+```dart
+NativeNavigationBar(
+  leading: NativeBarButton(icon: NativeIcon.symbol('chevron.left'), title: 'Back', onPressed: pop),
+  title: NativeBarTitle(title: 'launch-crew', subtitle: '6 members', icon: NativeIcon.symbol('lock.fill'), capsule: true),
+  trailing: [
+    NativeBarButton(icon: NativeIcon.svgAsset('assets/icons/app_mark.svg', tinted: false), title: 'Apps'),
+    NativeBarButton(icon: NativeIcon.symbol('headphones'), title: 'Huddle'),
+  ],
+)
+```
+
+- It's a real **`UINavigationBar`**, so on iOS 26 the items are Liquid Glass with the system
+  metrics: 44 pt circles and capsules, and adjacent trailing items sharing one capsule. With
+  `capsule: true` the title is a tappable glass capsule holding an icon, title and subtitle,
+  like a chat app's channel header; otherwise it's the system's title and subtitle.
+- Put it anywhere in a page under a `NativeChromeScope`. It shows while that page is
+  visible (hidden on other `IndexedStack` tabs and under pushed routes), and its height
+  goes into `MediaQuery` top padding.
+- **Scroll edge effect:** content scrolling under the bar dissolves into iOS 26's *own*
+  soft edge effect, not an imitation. A transparent, non-interactive `UIScrollView` in the
+  overlay hosts it, and the bar registers through `UIScrollEdgeElementContainerInteraction`,
+  so the effect is shaped around the bar's controls exactly as on a UIKit screen. The same
+  applies at the bottom (`NativeChromeScope(scrollEdgeEffect:)`), shaped around the tab bar and
+  the composer.
+
+## Native composer
+
+```dart
+NativeComposer(
+  controller: composer,
+  placeholder: 'Message launch-crew',
+  leading: NativeComposerButton(icon: NativeIcon.symbol('plus'), title: 'Attach', onPressed: attach),
+  idleAction: NativeComposerButton(icon: NativeIcon.symbol('mic'), title: 'Voice clip'),
+  toolbar: [
+    NativeComposerButton(icon: NativeIcon.symbol('textformat'), title: 'Formatting'),
+    NativeComposerButton(icon: NativeIcon.symbol('face.smiling'), title: 'Emoji'),
+    NativeComposerButton(icon: NativeIcon.symbol('at'), title: 'Mention'),
+    NativeComposerButton(icon: NativeIcon.svgAsset('assets/icons/slash_command.svg'), title: 'Shortcuts'),
+  ],
+  tintColor: Color(0xFF2BAC76),
+  onSend: send,
+  child: ListView(reverse: true, ...),
+)
+```
+
+- **Everything is UIKit**, including the text view, the glass (`UIGlassEffect`, and
+  `UIButton.Configuration.glass()` for the + circle) and the toolbar buttons.
+- **Idle:** a 44 pt glass capsule 9 pt above the tab bar, aligned with its edges:
+  `(+) placeholder … 🎙`.
+- **Focused:** it morphs into a card 8 pt from the screen edges and 9 pt above the keyboard,
+  with the text on top and the toolbar row `(+) Aa ☺ @ /  …  ➤` below. The morph runs **inside
+  the keyboard's own animation** (its duration and curve from the keyboard notification),
+  so the card and keyboard move as one. A hardware keyboard falls back to a spring.
+- **Text:** grows to `maxLines`, then scrolls. Send enables and tints when there's text, and
+  `clearOnSend` clears natively.
+- **Flutter content:** `child` gets bottom padding for the space the composer takes above the
+  keyboard or tab bar (animated with the morph), and the keyboard inset is consumed so an
+  inner `Scaffold` doesn't also resize.
+- **Controller:** `NativeComposerController` exposes the text and focus, plus
+  `focus()`/`unfocus()`/`clear()`; call `unfocus()` from list taps or drags to dismiss the keyboard.
+- **Metrics** were measured from Slack's iOS composer: 36 pt + circle, toolbar glyphs about
+  19 pt spaced 41 pt apart, send 25 pt from the trailing edge, and a 28 pt maximum corner radius.
+
+The example's **Chat** tab puts it all together: native bar, scroll edge effect, Flutter-drawn
+messages, the composer and the split tab bar.
 
 ## Native icons
 
@@ -140,13 +214,14 @@ has a rounded card with a scrolling list, a capsule card with a horizontal list,
 ```
 lib/src/core/     veneer_bridge.dart (FFI + channel), anchor_geometry.dart, native_icon.dart
 lib/src/glass/    glass_shape.dart, glass_group.dart, glass_coordinator.dart
-lib/src/chrome/   native_chrome.dart
+lib/src/chrome/   native_chrome.dart, native_navigation_bar.dart, native_composer.dart
 ios/veneer/Sources/veneer/
   VeneerPlugin.swift
   Core/           VeneerOverlayView.swift, NativeIcon.swift, SVGIcon.swift (document + renderer),
                   SVGPathParser.swift, SVGValues.swift
   Glass/          GlassLayerView.swift, GlassShapeView.swift, ShapeClip.swift
-  Chrome/         NativeTabBarHost.swift
+  Chrome/         NativeTabBarHost.swift, NativeNavigationBarHost.swift, NativeComposerView.swift,
+                  ScrollEdgeEffectHost.swift
 ```
 
 ## Pieces
@@ -191,6 +266,10 @@ ios/veneer/Sources/veneer/
 | Native tab bar over scrolling Flutter content; hides natively under a Flutter dialog or sheet | works |
 | Split tab bar: detached trailing button, action fires without changing selection | works |
 | Tab icons: SF Symbol, Material IconData + selected variant, SVG asset, Cupertino IconData + badge | all native and crisp; icon swaps update in place |
+| Native navigation bar: glass back button, title capsule, grouped trailing capsule | matches Slack's layout |
+| Scroll edge effect over Flutter content (system `UIScrollEdgeEffect`) | content blurs progressively under the bar |
+| Composer: idle capsule → focused card over the keyboard → idle | about 0.4 s each way, continuous and keyboard-synced (checked frame by frame in a recording) |
+| Composer typing, growth, send, clear; list taps and drags dismiss the keyboard | works |
 | Native XCTests: SVG rendering (CSS, use/symbol, gradients, clip/mask, group opacity, dashes, viewports, text, images); IconData fonts, fallbacks, mirroring, variable axes; dark-mode SVG | 28 / 28 pass |
 | Clipping: rounded card + scrolling list, capsule + horizontal list, `ClipOval` | clipped, and follows scrolling |
 | Clipping: toggle clips off and on | shapes spill out and merge, then move back into their scopes |
@@ -221,6 +300,11 @@ representative.
 - **Glass ignores masks on its own views.** Neither a per-shape `mask` nor one on the
   `UIGlassContainerEffect` view clips glass (the container renders its shapes together).
   A `mask` on an **ordinary `UIView` ancestor** does. Hence one wrapper per clip scope.
+- **Check the composer's frame before hit-testing it.** While its text view is first
+  responder, UIKit resolves hits on it to text-interaction views even for points far outside
+  it, which steals every tap from Flutter (and pops up AutoFill).
+- **Only send chrome config when it changes.** Pages rebuild every frame while the keyboard
+  animates (`MediaQuery` changes); callbacks are refreshed locally instead.
 - **Hit-test each overlay layer separately.** The tab bar controller's full-screen (empty)
   view sits above the glass layer, so a plain `super.hitTest` returns that container and
   interactive glass stops receiving taps.
@@ -244,6 +328,8 @@ representative.
 - **Accessibility:** glass is announced through Flutter `Semantics`, the tab bar through UIKit.
   Neither has been audited with VoiceOver.
 - **Pre-iOS 26 fallback and non-iOS platforms:** not built.
+- **Composer:** no interactive (finger-tracking) keyboard dismissal yet; drags dismiss it
+  with the standard animation. No attachment previews or rich text.
 - **Tab bar:** no sidebar/iPad adaptation or tab groups yet; the trailing button's search
   role isn't wired to real search UI.
 - Not yet native: nav bar, toolbar, search, sheets and menus (present these natively),
@@ -255,10 +341,10 @@ representative.
 cd example && flutter run
 ```
 
-Tabs: **Sync** (the lag test; ▶ auto-scrolls, 📏 switches to measure mode), **Morph**
+Tabs: **Chat** (Slack-style channel: native bar, edge effect, composer), **Morph**
 (drag the loose drop into the cluster, Split/Join, Shared/Own group), **Clip** (Flutter
-clips on native glass), **Diagnostics** (transport A/B, native stats, dialog/sheet/route
-edge cases).
+clips on native glass), **Lab** (the sync lag test, transport A/B, native stats, icon
+showcase, dialog/sheet/route edge cases).
 
 ### Measuring sync lag
 

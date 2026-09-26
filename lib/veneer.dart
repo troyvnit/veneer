@@ -16,6 +16,8 @@ import 'src/core/veneer_bridge.dart';
 import 'src/glass/glass_group.dart';
 
 export 'src/chrome/native_chrome.dart';
+export 'src/chrome/native_composer.dart';
+export 'src/chrome/native_navigation_bar.dart';
 export 'src/core/native_icon.dart';
 export 'src/core/veneer_bridge.dart' show VeneerBridge, VeneerTransport;
 export 'src/glass/glass_group.dart';

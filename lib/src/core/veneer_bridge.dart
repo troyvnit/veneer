@@ -41,9 +41,15 @@ class VeneerBridge {
   /// Distance from the top of native chrome to the bottom of the screen.
   final ValueNotifier<double> chromeBottomInset = ValueNotifier(0);
 
+  /// Distance from the top of the screen to the bottom of the native
+  /// navigation bar; 0 when none is showing.
+  final ValueNotifier<double> chromeTopInset = ValueNotifier(0);
+
   final Map<int, VoidCallback> _shapeTapHandlers = {};
   ValueChanged<int>? _tabSelectedHandler;
   VoidCallback? _tabActionHandler;
+  ValueChanged<String>? _navItemHandler;
+  VeneerComposerHandlers? _composerHandlers;
 
   _ApplyFrameDart? _ffiApplyFrame;
   Pointer<Double>? _ffiBufferPointer;
@@ -66,6 +72,8 @@ class VeneerBridge {
     _shapeTapHandlers.clear();
     _tabSelectedHandler = null;
     _tabActionHandler = null;
+    _navItemHandler = null;
+    _composerHandlers = null;
   }
 
   bool get isSupported => defaultTargetPlatform == TargetPlatform.iOS && !kIsWeb;
@@ -175,6 +183,39 @@ class VeneerBridge {
     await _channel.invokeMethod<void>('removeTabBar');
   }
 
+  Future<void> setNavigationBar(Map<String, Object?> config, ValueChanged<String> onItem) async {
+    _navItemHandler = onItem;
+    if (!await ensureAttached()) return;
+    await _channel.invokeMethod<void>('setNavigationBar', config);
+  }
+
+  void updateNavigationBarHandler(ValueChanged<String> onItem) => _navItemHandler = onItem;
+
+  void updateComposerHandlers(VeneerComposerHandlers handlers) => _composerHandlers = handlers;
+
+  Future<void> removeNavigationBar() async {
+    _navItemHandler = null;
+    if (!_attached) return;
+    await _channel.invokeMethod<void>('removeNavigationBar');
+  }
+
+  Future<void> setComposer(Map<String, Object?> config, VeneerComposerHandlers handlers) async {
+    _composerHandlers = handlers;
+    if (!await ensureAttached()) return;
+    await _channel.invokeMethod<void>('setComposer', config);
+  }
+
+  Future<void> removeComposer() async {
+    _composerHandlers = null;
+    if (!_attached) return;
+    await _channel.invokeMethod<void>('removeComposer');
+  }
+
+  Future<void> composerCommand(String command, {String? text}) async {
+    if (!_attached) return;
+    await _channel.invokeMethod<void>('composerCommand', {'command': command, 'text': text});
+  }
+
   Future<void> setChromeHidden(bool hidden) async {
     if (!_attached) return;
     await _channel.invokeMethod<void>('setChromeHidden', {'hidden': hidden});
@@ -195,7 +236,42 @@ class VeneerBridge {
         _tabActionHandler?.call();
       case 'chromeInsets':
         chromeBottomInset.value = (args['bottom']! as num).toDouble();
+        chromeTopInset.value = ((args['top'] as num?) ?? 0).toDouble();
+      case 'navItemPressed':
+        _navItemHandler?.call(args['id']! as String);
+      case 'composerButton':
+        _composerHandlers?.onButton(args['id']! as String);
+      case 'composerText':
+        _composerHandlers?.onText(args['text']! as String);
+      case 'composerFocus':
+        _composerHandlers?.onFocus(args['focused']! as bool);
+      case 'composerSend':
+        _composerHandlers?.onSend(args['text']! as String);
+      case 'composerLayout':
+        _composerHandlers?.onLayout(
+          (args['height']! as num).toDouble(),
+          Duration(microseconds: (((args['duration'] as num?) ?? 0) * 1e6).round()),
+        );
     }
     return null;
   }
+}
+
+/// Callbacks from the native composer.
+class VeneerComposerHandlers {
+  const VeneerComposerHandlers({
+    required this.onButton,
+    required this.onText,
+    required this.onFocus,
+    required this.onSend,
+    required this.onLayout,
+  });
+
+  final ValueChanged<String> onButton;
+  final ValueChanged<String> onText;
+  final ValueChanged<bool> onFocus;
+  final ValueChanged<String> onSend;
+
+  /// Space above the keyboard/tab bar, and how long the change animates.
+  final void Function(double height, Duration duration) onLayout;
 }

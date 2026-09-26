@@ -4,7 +4,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:veneer/veneer.dart';
 
-import '../main.dart' show TrailingIconKind, trailingIconKind;
+import '../main.dart' show TrailingIconKind, openSyncTest, trailingIconKind;
 
 /// Transport A/B switch, native apply stats, and overlay edge cases
 /// (Flutter dialog over native chrome, pushed route over glass).
@@ -41,12 +41,18 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
   Widget build(BuildContext context) {
     final bridge = VeneerBridge.instance;
     return Scaffold(
-      appBar: AppBar(title: const Text('Diagnostics')),
+      appBar: AppBar(title: const Text('Lab')),
       body: ListView(
         // An explicit padding replaces ListView's automatic MediaQuery
         // padding, so add the native tab bar's inset back.
         padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + MediaQuery.paddingOf(context).bottom),
         children: [
+          FilledButton.icon(
+            onPressed: () => openSyncTest(context),
+            icon: const Icon(Icons.swap_vert),
+            label: const Text('Open sync lag test'),
+          ),
+          const SizedBox(height: 24),
           const Text('Geometry transport', style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           SegmentedButton<VeneerTransport>(

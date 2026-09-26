@@ -1,9 +1,11 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
 import '../core/native_icon.dart';
 import '../core/veneer_bridge.dart';
+import 'native_navigation_bar.dart' show NativeScrollEdgeEffect;
 
 /// A tab in the native tab bar.
 @immutable
@@ -82,8 +84,13 @@ class NativeChromeScope extends StatefulWidget {
     required this.onTabSelected,
     this.trailingAction,
     this.tintColor,
+    this.scrollEdgeEffect = NativeScrollEdgeEffect.none,
     required this.child,
-  });
+  }) : assert(
+         tabs.length + (trailingAction == null ? 0 : 1) <= 5,
+         'UITabBarController shows at most 5 items on iPhone; more collapse into a "More" tab and the '
+         'trailing split button disappears. Use up to 4 tabs with a trailingAction, or 5 without.',
+       );
 
   final List<NativeTabItem> tabs;
 
@@ -94,6 +101,10 @@ class NativeChromeScope extends StatefulWidget {
   /// Adds the split layout's detached trailing button.
   final NativeTabAction? trailingAction;
   final Color? tintColor;
+
+  /// iOS 26's edge effect above the tab bar: content fades as it scrolls
+  /// under the bar.
+  final NativeScrollEdgeEffect scrollEdgeEffect;
   final Widget child;
 
   @override
@@ -107,6 +118,7 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
   void initState() {
     super.initState();
     _bridge.chromeBottomInset.addListener(_onInset);
+    _bridge.chromeTopInset.addListener(_onInset);
     _push();
   }
 
@@ -116,14 +128,23 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
     _push();
   }
 
+  String? _lastSent;
+
   void _push() {
+    final config = <String, Object?>{
+      'items': [for (final t in widget.tabs) t._encode()],
+      'action': widget.trailingAction?._encode(),
+      'selectedIndex': widget.selectedIndex,
+      'tintColor': widget.tintColor?.toARGB32(),
+      'edgeEffect': widget.scrollEdgeEffect.name,
+    };
+    // Rebuilds (e.g. MediaQuery changes during keyboard animation) resend
+    // nothing unless the bar actually changed.
+    final encoded = jsonEncode(config);
+    if (encoded == _lastSent) return;
+    _lastSent = encoded;
     _bridge.setTabBar(
-      {
-        'items': [for (final t in widget.tabs) t._encode()],
-        'action': widget.trailingAction?._encode(),
-        'selectedIndex': widget.selectedIndex,
-        'tintColor': widget.tintColor?.toARGB32(),
-      },
+      config,
       onSelected: (i) => widget.onTabSelected(i),
       onAction: () => widget.trailingAction?.onPressed?.call(),
     );
@@ -134,6 +155,7 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
   @override
   void dispose() {
     _bridge.chromeBottomInset.removeListener(_onInset);
+    _bridge.chromeTopInset.removeListener(_onInset);
     _bridge.removeTabBar();
     super.dispose();
   }
@@ -142,10 +164,14 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
     final bottom = math.max(mq.padding.bottom, _bridge.chromeBottomInset.value);
+    final top = math.max(mq.padding.top, _bridge.chromeTopInset.value);
     return MediaQuery(
       data: mq.copyWith(
-        padding: mq.padding.copyWith(bottom: bottom),
-        viewPadding: mq.viewPadding.copyWith(bottom: math.max(mq.viewPadding.bottom, bottom)),
+        padding: mq.padding.copyWith(top: top, bottom: bottom),
+        viewPadding: mq.viewPadding.copyWith(
+          top: math.max(mq.viewPadding.top, top),
+          bottom: math.max(mq.viewPadding.bottom, bottom),
+        ),
       ),
       child: widget.child,
     );
