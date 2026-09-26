@@ -1,0 +1,36 @@
+# The pub package leaves out the demo video and GIF (the README links to
+# them on GitHub). Everything else follows .gitignore.
+doc/demo.gif
+doc/demo.mp4
+
+# From .gitignore
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+*.iml
+*.ipr
+*.iws
+.idea/
+/pubspec.lock
+**/doc/api/
+.dart_tool/
+.flutter-plugins-dependencies
+/build/
+/coverage/
+example/build/
+example/.dart_tool/
+example/ios/Pods/
+example/ios/.symlinks/
+example/ios/Flutter/ephemeral/
+example/android/local.properties
+example/android/.gradle/
+example/.flutter-plugins-dependencies

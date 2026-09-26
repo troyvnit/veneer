@@ -125,6 +125,8 @@ final class NativeComposerView: ComposerBaseView {
     for b in toolbarButtons { b.alpha = isExpanded ? 1 : 0 }
     sendButton.alpha = isExpanded ? 1 : 0
     textView.isScrollEnabled = isExpanded && textHeight(for: max(bounds.width, 100)) >= maxTextHeight
+    // The one-line idle capsule never scrolls: show the text from the top.
+    if !isExpanded { textView.contentOffset = .zero }
   }
 
   private var minTextHeight: CGFloat { max(Metrics.row, ceil(lineHeight) + 22) }

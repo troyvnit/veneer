@@ -8,6 +8,12 @@
 sheets — driven by your Flutter widget tree, with matching Flutter UI on Android and older iOS.**
 
 <p align="center">
+  <img src="https://raw.githubusercontent.com/troyvnit/veneer/main/doc/demo.gif" width="270" alt="Demo: native tab bar and composer, glass tabs, and an assistant in a native UIKit sheet">
+  <br>
+  <sub>The example app on the iOS 27 simulator, real time. <a href="https://github.com/troyvnit/veneer/raw/main/doc/demo.mp4">Full-quality video</a>.</sub>
+</p>
+
+<p align="center">
   <img src="doc/images/chat.jpg" width="180" alt="Native tab bar, navigation bar and composer over a Flutter chat">
   <img src="doc/images/assistant.jpg" width="180" alt="Assistant in a native UIKit sheet with a native prompt composer">
   <img src="doc/images/medium.jpg" width="180" alt="The sheet at its medium detent, in Liquid Glass">

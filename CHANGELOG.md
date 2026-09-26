@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1
+
+- **Composer:** if the software keyboard goes away while the text view keeps
+  focus (for example at the end of an interactive dismissal), the composer
+  now drops focus and collapses to its capsule, instead of staying expanded
+  with no keyboard and bringing the keyboard back on the next tap.
+- **Composer:** the collapsed capsule always shows its text from the start.
+- **Docs:** a demo of the example app in the README.
+
 ## 0.1.0
 
 First public release.

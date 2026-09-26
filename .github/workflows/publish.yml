@@ -23,4 +23,14 @@ jobs:
           channel: stable
       - run: flutter pub get
       - run: flutter test
-      - run: flutter pub publish --force
+      # A version already published by hand is left alone.
+      - name: Check pub.dev
+        id: check
+        run: |
+          version=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          if curl -sf "https://pub.dev/api/packages/veneer/versions/$version" > /dev/null; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "veneer $version is already on pub.dev"
+          fi
+      - if: steps.check.outputs.published != 'true'
+        run: flutter pub publish --force

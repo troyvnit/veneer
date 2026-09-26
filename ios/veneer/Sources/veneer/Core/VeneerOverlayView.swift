@@ -266,7 +266,20 @@ final class VeneerOverlayView: UIView {
       let end = (info[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue,
       let screen = window?.screen
     else { return }
+    let wasShowing = keyboardScreenFrame != nil
     keyboardScreenFrame = end.minY < screen.bounds.height - 1 && end.height > 0 ? end : nil
+    // The software keyboard went away while the text view kept focus: UIKit
+    // can end an interactive dismissal (or a keyboard swap) without
+    // resigning a first responder outside the dragged scroll view. Drop the
+    // focus too, so the composer can't stay expanded with no keyboard (and a
+    // later tap doesn't bring the keyboard back unasked). A hardware keyboard
+    // never shows the software one, so it isn't affected.
+    if wasShowing, keyboardScreenFrame == nil, let composer, composer.isEditingText {
+      DispatchQueue.main.async { [weak composer] in
+        guard let composer, composer.isEditingText, self.keyboardScreenFrame == nil else { return }
+        composer.unfocus()
+      }
+    }
     focusAnimationPending = false
     let duration = (info[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber)?.doubleValue ?? 0.25
     let curve = (info[UIResponder.keyboardAnimationCurveUserInfoKey] as? NSNumber)?.uintValue ?? 7
