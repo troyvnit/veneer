@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:veneer/veneer.dart';
 
+import '../app_icons.dart';
+
 /// A Slack-style channel: a native navigation bar (back button, channel
 /// capsule, grouped trailing buttons) over Flutter-drawn messages that fade
 /// into iOS 26's scroll edge effect, and a native composer above the tab bar.
@@ -42,14 +44,14 @@ class _ChatPageState extends State<ChatPage> {
       resizeToAvoidBottomInset: false,
       body: NativeNavigationBar(
         leading: NativeBarButton(
-          icon: const NativeIcon.symbol('chevron.left'),
+          icon: const NativeIcon.icon(AppIcons.caretLeft),
           title: 'Back',
           onPressed: () => _toast('Back'),
         ),
         title: NativeBarTitle(
           title: 'launch-crew',
           subtitle: '6 members • 3 tabs',
-          icon: const NativeIcon.symbol('lock.fill'),
+          icon: const NativeIcon.icon(AppIcons.lockFill),
           capsule: true,
           onPressed: () => _toast('Channel details'),
         ),
@@ -60,7 +62,7 @@ class _ChatPageState extends State<ChatPage> {
             onPressed: () => _toast('Apps'),
           ),
           NativeBarButton(
-            icon: const NativeIcon.symbol('headphones'),
+            icon: const NativeIcon.icon(AppIcons.headphones),
             title: 'Huddle',
             onPressed: () => _toast('Huddle'),
           ),
@@ -69,28 +71,28 @@ class _ChatPageState extends State<ChatPage> {
           controller: _composer,
           placeholder: 'Message launch-crew',
           leading: NativeComposerButton(
-            icon: const NativeIcon.symbol('plus'),
+            icon: const NativeIcon.icon(AppIcons.plus),
             title: 'Attach',
             onPressed: () => _toast('Attach'),
           ),
           idleAction: NativeComposerButton(
-            icon: const NativeIcon.symbol('mic'),
+            icon: const NativeIcon.icon(AppIcons.microphone),
             title: 'Record voice clip',
             onPressed: () => _toast('Voice clip'),
           ),
           toolbar: [
             NativeComposerButton(
-              icon: const NativeIcon.symbol('textformat'),
+              icon: const NativeIcon.icon(AppIcons.textAa),
               title: 'Formatting',
               onPressed: () => _toast('Formatting'),
             ),
             NativeComposerButton(
-              icon: const NativeIcon.symbol('face.smiling'),
+              icon: const NativeIcon.icon(AppIcons.smiley),
               title: 'Emoji',
               onPressed: () => _toast('Emoji'),
             ),
             NativeComposerButton(
-              icon: const NativeIcon.symbol('at'),
+              icon: const NativeIcon.icon(AppIcons.at),
               title: 'Mention',
               onPressed: () => _toast('Mention'),
             ),
@@ -100,7 +102,7 @@ class _ChatPageState extends State<ChatPage> {
               onPressed: () => _toast('Shortcuts'),
             ),
           ],
-          sendIcon: const NativeIcon.symbol('paperplane.fill'),
+          sendIcon: const NativeIcon.icon(AppIcons.paperPlaneTiltFill),
           tintColor: const Color(0xFF2BAC76),
           onSend: _send,
           child: Builder(
@@ -327,7 +329,7 @@ class _AddReaction extends StatelessWidget {
       color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.06),
       borderRadius: BorderRadius.circular(15),
     ),
-    child: Icon(Icons.add_reaction_outlined, size: 18, color: color),
+    child: Icon(AppIcons.smiley, size: 18, color: color),
   );
 }
 

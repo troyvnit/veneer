@@ -30,63 +30,104 @@ final class NativeNavigationBarHost: NSObject {
     bar.setItems([item], animated: false)
   }
 
+  private var leading: NSLayoutConstraint?
+  private var trailing: NSLayoutConstraint?
+
+  /// Where UIKit puts the outermost glass items: 20 pt in from the bar's edges.
+  private static let systemSideInset: CGFloat = 20
+
   func attach(to container: UIView) {
     guard bar.superview !== container else { return }
     container.addSubview(bar)
-    NSLayoutConstraint.activate([
-      bar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-      bar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-      bar.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor),
-    ])
+    let leading = bar.leadingAnchor.constraint(equalTo: container.leadingAnchor)
+    let trailing = bar.trailingAnchor.constraint(equalTo: container.trailingAnchor)
+    self.leading = leading
+    self.trailing = trailing
+    NSLayoutConstraint.activate([leading, trailing, bar.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor)])
   }
 
   func detach() {
     bar.removeFromSuperview()
     lastConfig = nil
+    lastLeading = nil
+    lastTrailing = nil
   }
 
   /// `{leading: button?, title: {title, subtitle, icon, capsule, id}?,
-  ///   trailing: [button], tintColor}`, where button = `{id, icon, title}`.
+  ///   trailing: [button], tintColor}`, where button = `{id, icon, title, menu?}`.
+  ///
+  /// Items are replaced only when their part of the config changed, and
+  /// animated once the bar is showing, so UIKit morphs the glass between the
+  /// old and new buttons (e.g. two trailing buttons becoming one).
   func update(_ args: [String: Any]) {
     let config = args as NSDictionary
     guard lastConfig != config else { return }
+    let animated = lastConfig != nil && !isHidden && bar.window != nil
     lastConfig = config
 
-    var leading: [UIBarButtonItem] = []
-    if let back = args["leading"] as? [String: Any] { leading.append(button(back)) }
-
     let title = args["title"] as? [String: Any]
-    if let title, (title["capsule"] as? Bool) == true {
-      let capsule = TitleCapsuleControl()
-      capsule.configure(title)
-      capsule.addAction(UIAction { [weak self] _ in self?.onEvent?("navItemPressed", ["id": title["id"] ?? "title"]) }, for: .touchUpInside)
-      if !leading.isEmpty { leading.append(.fixedSpace(0)) }  // separate glass backgrounds
-      leading.append(UIBarButtonItem(customView: capsule))
-      item.title = nil
-      item.subtitle = nil
-    } else {
-      item.title = title?["title"] as? String
-      item.subtitle = title?["subtitle"] as? String
+    let leadingKey: NSArray = [args["leading"] ?? NSNull(), title ?? NSNull()]
+    if leadingKey != lastLeading {
+      lastLeading = leadingKey
+      var leading: [UIBarButtonItem] = []
+      if let back = args["leading"] as? [String: Any] { leading.append(button(back)) }
+      if let title, (title["capsule"] as? Bool) == true {
+        let capsule = TitleCapsuleControl()
+        capsule.configure(title)
+        capsule.addAction(UIAction { [weak self] _ in self?.onEvent?("navItemPressed", ["id": title["id"] ?? "title"]) }, for: .touchUpInside)
+        if !leading.isEmpty { leading.append(.fixedSpace(0)) }  // separate glass backgrounds
+        leading.append(UIBarButtonItem(customView: capsule))
+        item.title = nil
+        item.subtitle = nil
+      } else {
+        item.title = title?["title"] as? String
+        item.subtitle = title?["subtitle"] as? String
+      }
+      item.setLeftBarButtonItems(leading, animated: animated)
     }
-    item.leftBarButtonItems = leading
     item.hidesBackButton = true
-    // UIKit lays right items out trailing-first; Dart lists them in reading order.
-    item.rightBarButtonItems = (args["trailing"] as? [[String: Any]] ?? []).reversed().map(button)
+
+    let trailing = (args["trailing"] as? [[String: Any]]) ?? []
+    if trailing as NSArray != lastTrailing {
+      lastTrailing = trailing as NSArray
+      // UIKit lays right items out trailing-first; Dart lists them in reading order.
+      item.setRightBarButtonItems(trailing.reversed().map(button), animated: animated)
+    }
     bar.tintColor = (args["tintColor"] as? NSNumber).map(UIColor.init(argb:))
   }
+
+  private var lastLeading: NSArray?
+  private var lastTrailing: NSArray?
 
   private func button(_ spec: [String: Any]) -> UIBarButtonItem {
     let id = spec["id"] as? String ?? ""
     let image = NativeIconDescriptor(spec["icon"]).flatMap {
       NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : Self.iconSize)
     }
-    let action = UIAction(title: spec["title"] as? String ?? "", image: image) { [weak self] _ in
-      self?.onEvent?("navItemPressed", ["id": id])
+    let title = spec["title"] as? String
+    let item: UIBarButtonItem
+    if let menu = NativeMenu.make(spec["menu"], id: id, onSelect: { [weak self] itemId in
+      self?.onEvent?("navItemPressed", ["id": itemId])
+    }) {
+      item = image != nil ? UIBarButtonItem(image: image, menu: menu) : UIBarButtonItem(title: title, menu: menu)
+    } else {
+      let action = UIAction(title: title ?? "", image: image) { [weak self] _ in
+        self?.onEvent?("navItemPressed", ["id": id])
+      }
+      item = UIBarButtonItem(primaryAction: action)
+      if image != nil { item.title = nil }
     }
-    let item = UIBarButtonItem(primaryAction: action)
-    if image != nil { item.title = nil }
-    item.accessibilityLabel = spec["title"] as? String
+    item.accessibilityLabel = title
     return item
+  }
+
+  /// Distance from the screen (or sheet) edges to the outermost buttons;
+  /// nil keeps UIKit's. The bar ignores layout margins for its glass items,
+  /// so the bar itself is shifted.
+  func setSideInset(_ inset: CGFloat?) {
+    let shift = inset.map { $0 - Self.systemSideInset } ?? 0
+    leading?.constant = shift
+    trailing?.constant = -shift
   }
 
   func setHidden(_ hidden: Bool) {

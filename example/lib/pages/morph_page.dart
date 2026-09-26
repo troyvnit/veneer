@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:veneer/veneer.dart';
 
+import '../app_icons.dart';
+
 /// Cross-widget merging: separate [GlassShape] widgets become one glass body
 /// when they come within the group's spacing. Drag the loose drop into the
 /// cluster, toggle the cluster to split/join via a Flutter animation, or move
@@ -39,9 +41,9 @@ class _MorphPageState extends State<MorphPage> {
             const Positioned.fill(child: _Backdrop()),
             // One of each native icon type, fused into one glass body.
             for (final (i, icon) in const [
-              (-1, NativeIcon.icon(Icons.favorite)),
+              (-1, NativeIcon.icon(AppIcons.heartFill)),
               (0, NativeIcon.svgAsset('assets/icons/star.svg')),
-              (1, NativeIcon.symbol('bolt.fill')),
+              (1, NativeIcon.icon(AppIcons.lightningFill)),
             ])
               AnimatedPositioned(
                 duration: const Duration(milliseconds: 700),
@@ -88,7 +90,7 @@ class _MorphPageState extends State<MorphPage> {
                         Expanded(
                           child: GlassShape(
                             height: 50,
-                            icon: NativeIcon.symbol(_split ? 'circle.grid.cross' : 'arrow.left.and.right'),
+                            icon: NativeIcon.icon(_split ? AppIcons.squaresFour : AppIcons.arrowsLeftRight),
                             label: _split ? 'Join' : 'Split',
                             onTap: () => setState(() => _split = !_split),
                           ),
@@ -97,7 +99,7 @@ class _MorphPageState extends State<MorphPage> {
                         GlassShape(
                           width: 150,
                           height: 50,
-                          icon: NativeIcon.symbol(_dropOwnGroup ? 'square.stack.3d.up.fill' : 'square.stack.3d.up'),
+                          icon: NativeIcon.icon(_dropOwnGroup ? AppIcons.stackFill : AppIcons.stack),
                           label: _dropOwnGroup ? 'Own group' : 'Shared',
                           onTap: () => setState(() => _dropOwnGroup = !_dropOwnGroup),
                         ),
@@ -119,7 +121,7 @@ class _Drop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) =>
-      const GlassShape(width: 88, height: 88, icon: NativeIcon.symbol('hand.draw'), style: GlassStyle.clear);
+      const GlassShape(width: 88, height: 88, icon: NativeIcon.icon(AppIcons.handGrabbing), style: GlassStyle.clear);
 }
 
 class _Backdrop extends StatelessWidget {
@@ -141,7 +143,7 @@ class _Backdrop extends StatelessWidget {
         children: [
           for (var i = 0; i < 90; i++)
             Center(
-              child: Icon(Icons.circle, size: 10, color: Colors.white.withValues(alpha: i.isEven ? 0.7 : 0.3)),
+              child: Icon(AppIcons.circleFill, size: 10, color: Colors.white.withValues(alpha: i.isEven ? 0.7 : 0.3)),
             ),
         ],
       ),

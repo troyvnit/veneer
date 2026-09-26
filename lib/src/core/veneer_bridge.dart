@@ -24,8 +24,8 @@ enum VeneerTransport {
   delayedChannel,
 }
 
-typedef _ApplyFrameNative = Void Function(Pointer<Double>, Int32);
-typedef _ApplyFrameDart = void Function(Pointer<Double>, int);
+typedef _ApplyFrameNative = Void Function(Pointer<Double>, Int32, Int32);
+typedef _ApplyFrameDart = void Function(Pointer<Double>, int, int);
 
 /// Low-level link to the iOS overlay. Widgets use this; apps normally don't.
 class VeneerBridge {
@@ -48,6 +48,7 @@ class VeneerBridge {
   final ValueNotifier<double> chromeTopInset = ValueNotifier(0);
 
   final Map<int, VoidCallback> _shapeTapHandlers = {};
+  final Map<int, ValueChanged<int>> _shapeMenuHandlers = {};
   ValueChanged<int>? _tabSelectedHandler;
   VoidCallback? _tabActionHandler;
   ValueChanged<String>? _navItemHandler;
@@ -55,6 +56,7 @@ class VeneerBridge {
 
   _ApplyFrameDart? _ffiApplyFrame;
   Pointer<Double>? _ffiBufferPointer;
+  int _pluginId = 0;
   Float64List? _ffiBuffer;
   Future<bool>? _attaching;
   bool _attached = false;
@@ -72,10 +74,14 @@ class VeneerBridge {
     _ffiBufferPointer = null;
     _ffiBuffer = null;
     _shapeTapHandlers.clear();
+    _shapeMenuHandlers.clear();
     _tabSelectedHandler = null;
     _tabActionHandler = null;
     _navItemHandler = null;
     _composerHandlers = null;
+    _popupShowing = false;
+    _tabBarCovered = false;
+    _chromeHiddenSent = null;
   }
 
   /// The native layer needs iOS 26 (Liquid Glass, `UITab`, scroll edge
@@ -115,6 +121,7 @@ class VeneerBridge {
         final address = result?['applyFrameAddress'] as int?;
         final bufferAddress = result?['bufferAddress'] as int?;
         final capacity = result?['bufferCapacity'] as int?;
+        _pluginId = (result?['pluginId'] as int?) ?? 0;
         if (address != null && address != 0 && bufferAddress != null && capacity != null) {
           _ffiApplyFrame = Pointer<NativeFunction<_ApplyFrameNative>>.fromAddress(address)
               // Not `isLeaf`: UIKit can synchronously re-enter Dart from
@@ -126,6 +133,7 @@ class VeneerBridge {
         }
         _attached = true;
         onAttached?.call();
+        if (_popupShowing || _tabBarCovered) unawaited(_syncChromeHidden());
         return true;
       } on PlatformException catch (e) {
         if (e.code != 'no_view') rethrow;
@@ -147,7 +155,7 @@ class VeneerBridge {
     if (transport == VeneerTransport.ffi && ffi != null && buffer != null) {
       assert(frame.length <= buffer.length, 'Too many glass shapes on screen');
       buffer.setRange(0, frame.length, frame);
-      ffi(_ffiBufferPointer!, frame.length);
+      ffi(_ffiBufferPointer!, frame.length, _pluginId);
     } else if (transport == VeneerTransport.delayedChannel) {
       Future<void>.delayed(const Duration(milliseconds: 16), () => _channel.invokeMethod<void>('applyFrame', frame));
     } else {
@@ -155,8 +163,13 @@ class VeneerBridge {
     }
   }
 
-  Future<void> configureShape(Map<String, Object?> config, VoidCallback? onTap) async {
+  Future<void> configureShape(Map<String, Object?> config, VoidCallback? onTap, {ValueChanged<int>? onMenu}) async {
     final id = config['id']! as int;
+    if (onMenu != null) {
+      _shapeMenuHandlers[id] = onMenu;
+    } else {
+      _shapeMenuHandlers.remove(id);
+    }
     if (onTap != null) {
       _shapeTapHandlers[id] = onTap;
     } else {
@@ -168,6 +181,7 @@ class VeneerBridge {
 
   Future<void> removeShape(int id) async {
     _shapeTapHandlers.remove(id);
+    _shapeMenuHandlers.remove(id);
     if (!_attached) return;
     await _channel.invokeMethod<void>('removeShape', {'id': id});
   }
@@ -238,10 +252,73 @@ class VeneerBridge {
     await _channel.invokeMethod<void>('composerCommand', {'command': command, 'text': text});
   }
 
-  Future<void> setChromeHidden(bool hidden) async {
-    if (!_attached) return;
+  bool _popupShowing = false;
+  bool _tabBarCovered = false;
+  bool? _chromeHiddenSent;
+
+  /// Hides native chrome while a Flutter popup is showing (see
+  /// `VeneerNavigatorObserver`).
+  Future<void> setChromeHidden(bool hidden) {
+    _popupShowing = hidden;
+    return _syncChromeHidden();
+  }
+
+  /// Hides the tab bar while another route covers the page that shows it,
+  /// as `hidesBottomBarWhenPushed` does in UIKit.
+  Future<void> setTabBarCovered(bool covered) {
+    _tabBarCovered = covered;
+    return _syncChromeHidden();
+  }
+
+  Future<void> _syncChromeHidden() async {
+    final hidden = _popupShowing || _tabBarCovered;
+    if (!_attached || hidden == _chromeHiddenSent) return;
+    _chromeHiddenSent = hidden;
     await _channel.invokeMethod<void>('setChromeHidden', {'hidden': hidden});
   }
+
+  // MARK: Native sheets
+
+  /// True in an engine started by `runNativeSheet`, inside a native sheet.
+  bool isSheetEngine = false;
+
+  int _nextSheetId = 1;
+  final Map<int, Completer<Object?>> _sheetResults = {};
+  final Map<int, ValueChanged<int>> _sheetDetentHandlers = {};
+
+  /// Starts a sheet engine at [entrypoint] ahead of time.
+  Future<void> prewarmSheet(String entrypoint, {String? libraryUri}) async {
+    if (!await ensureAttached()) return;
+    await _channel.invokeMethod<void>('prewarmSheet', {'entrypoint': entrypoint, 'libraryUri': libraryUri});
+  }
+
+  /// Presents a native sheet; completes with its result when dismissed, or
+  /// throws [StateError] if it couldn't be presented.
+  Future<Object?> presentSheet(Map<String, Object?> config, {ValueChanged<int>? onDetentChanged}) async {
+    if (!await ensureAttached()) throw StateError('Veneer overlay not attached');
+    final id = _nextSheetId++;
+    final completer = Completer<Object?>();
+    _sheetResults[id] = completer;
+    if (onDetentChanged != null) _sheetDetentHandlers[id] = onDetentChanged;
+    final presented = await _channel.invokeMethod<bool>('presentSheet', {...config, 'id': id}) ?? false;
+    if (!presented) {
+      _sheetResults.remove(id);
+      _sheetDetentHandlers.remove(id);
+      throw StateError('Sheet could not be presented');
+    }
+    return completer.future;
+  }
+
+  /// From inside a native sheet: whether the content under a new touch is at
+  /// its top edge, so UIKit knows whether a pull down drags the sheet.
+  void setSheetContentAtTop(bool atTop) {
+    if (!_attached) return;
+    _channel.invokeMethod<void>('sheetContentAtTop', {'atTop': atTop});
+  }
+
+  /// From inside a native sheet: dismisses it with [result].
+  Future<bool> dismissSheet(Object? result) async =>
+      await _channel.invokeMethod<bool>('dismissSheet', {'result': result}) ?? false;
 
   Future<Map<String, Object?>> stats() async => await _channel.invokeMapMethod<String, Object?>('getStats') ?? const {};
 
@@ -252,6 +329,8 @@ class VeneerBridge {
     switch (call.method) {
       case 'shapeTapped':
         _shapeTapHandlers[args['id']]?.call();
+      case 'shapeMenu':
+        _shapeMenuHandlers[args['id']]?.call(args['index']! as int);
       case 'tabSelected':
         _tabSelectedHandler?.call(args['index']! as int);
       case 'tabActionPressed':
@@ -269,6 +348,14 @@ class VeneerBridge {
         _composerHandlers?.onFocus(args['focused']! as bool);
       case 'composerSend':
         _composerHandlers?.onSend(args['text']! as String);
+      case 'composerAttachmentRemoved':
+        _composerHandlers?.onAttachmentRemoved?.call(args['id']! as String);
+      case 'sheetDismissed':
+        final id = args['id']! as int;
+        _sheetDetentHandlers.remove(id);
+        _sheetResults.remove(id)?.complete(args['result']);
+      case 'sheetDetentChanged':
+        _sheetDetentHandlers[args['id']! as int]?.call(args['detent']! as int);
       case 'composerLayout':
         _composerHandlers?.onLayout(
           (args['height']! as num).toDouble(),
@@ -287,6 +374,7 @@ class VeneerComposerHandlers {
     required this.onFocus,
     required this.onSend,
     required this.onLayout,
+    this.onAttachmentRemoved,
   });
 
   final ValueChanged<String> onButton;
@@ -296,4 +384,7 @@ class VeneerComposerHandlers {
 
   /// Space above the keyboard/tab bar, and how long the change animates.
   final void Function(double height, Duration duration) onLayout;
+
+  /// An attachment's remove button was tapped (prompt composer).
+  final ValueChanged<String>? onAttachmentRemoved;
 }

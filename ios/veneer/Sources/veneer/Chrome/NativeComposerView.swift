@@ -11,10 +11,8 @@ import UIKit
 /// curve from the keyboard notification), so the card, the keyboard and the
 /// text move as one. Metrics follow Slack's iOS composer.
 @available(iOS 26.0, *)
-final class NativeComposerView: UIView, UITextViewDelegate {
-  var onEvent: ((String, Any?) -> Void)?
-  /// Asks the host to recompute this view's frame (text grew, config changed).
-  var onNeedsLayout: (() -> Void)?
+final class NativeComposerView: ComposerBaseView {
+  override class var style: String { "card" }
 
   enum Metrics {
     static let idleHeight: CGFloat = 44
@@ -36,38 +34,19 @@ final class NativeComposerView: UIView, UITextViewDelegate {
     static let cornerRadius: CGFloat = 28
   }
 
-  private(set) var isExpanded = false
-  private(set) var isShown = true
+  var isExpanded: Bool { isKeyboardActive }
 
   private let background = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
   private let plusButton = UIButton(configuration: .glass())
-  private let textView = UITextView()
-  private let placeholder = UILabel()
   private let idleButton = UIButton(configuration: .plain())
   private var toolbarButtons: [UIButton] = []
   private let sendButton = UIButton(configuration: .plain())
-  private var maxLines = 6
-  private var clearOnSend = true
-  private var accent: UIColor = .systemBlue
-  private var lastConfig: NSDictionary?
 
-  override init(frame: CGRect) {
+  required init(frame: CGRect) {
     super.init(frame: frame)
     background.cornerConfiguration = .capsule(maximumRadius: Metrics.cornerRadius)
     addSubview(background)
-
-    textView.backgroundColor = .clear
-    textView.font = .preferredFont(forTextStyle: .body)
-    textView.adjustsFontForContentSizeCategory = true
     textView.textContainerInset = UIEdgeInsets(top: 11, left: 0, bottom: 11, right: 0)
-    textView.textContainer.lineFragmentPadding = 0
-    textView.delegate = self
-    textView.isScrollEnabled = false
-    textView.showsVerticalScrollIndicator = false
-    placeholder.font = textView.font
-    placeholder.adjustsFontForContentSizeCategory = true
-    placeholder.textColor = .placeholderText
-    textView.addSubview(placeholder)
 
     plusButton.configuration?.cornerStyle = .capsule
     plusButton.addAction(UIAction { [weak self] _ in self?.emitButton("leading") }, for: .touchUpInside)
@@ -84,28 +63,20 @@ final class NativeComposerView: UIView, UITextViewDelegate {
 
   // MARK: - Configuration
 
-  /// `{placeholder, leading: button?, idle: button?, toolbar: [button],
-  ///   sendIcon, tintColor, maxLines, clearOnSend}`, button = `{id, icon, title}`.
-  func update(_ args: [String: Any]) {
-    let config = args as NSDictionary
-    guard lastConfig != config else { return }
-    lastConfig = config
-
-    placeholder.text = args["placeholder"] as? String
-    maxLines = (args["maxLines"] as? NSNumber)?.intValue ?? 6
-    clearOnSend = (args["clearOnSend"] as? Bool) ?? true
-    accent = (args["tintColor"] as? NSNumber).map(UIColor.init(argb:)) ?? .systemBlue
-    textView.tintColor = accent
-
+  /// `{leading: button?, idle: button?, toolbar: [button], sendIcon}`,
+  /// button = `{id, icon, title, menu?}`.
+  override func configure(_ args: [String: Any]) -> Bool {
     let leading = args["leading"] as? [String: Any]
     plusButton.isHidden = leading == nil
     plusButton.configuration?.image = leading.flatMap { icon($0["icon"]) }
     plusButton.configuration?.baseForegroundColor = .label
     plusButton.accessibilityLabel = leading?["title"] as? String
+    attachMenu(leading, to: plusButton, id: "leading")
 
     let idle = args["idle"] as? [String: Any]
     idleButton.isHidden = idle == nil
     configure(idleButton, idle, color: .secondaryLabel)
+    attachMenu(idle, to: idleButton, id: "idle")
 
     toolbarButtons.forEach { $0.removeFromSuperview() }
     toolbarButtons = (args["toolbar"] as? [[String: Any]] ?? []).map { spec in
@@ -113,6 +84,7 @@ final class NativeComposerView: UIView, UITextViewDelegate {
       configure(b, spec, color: .label)
       let id = spec["id"] as? String ?? ""
       b.addAction(UIAction { [weak self] _ in self?.emitButton(id) }, for: .touchUpInside)
+      attachMenu(spec, to: b, id: id)
       background.contentView.addSubview(b)
       return b
     }
@@ -121,9 +93,7 @@ final class NativeComposerView: UIView, UITextViewDelegate {
       ?? UIImage(systemName: "paperplane.fill", withConfiguration: UIImage.SymbolConfiguration(pointSize: Metrics.symbolSize))
     sendButton.accessibilityLabel = "Send"
     applyState()
-    updateSendButton()
-    onNeedsLayout?()
-    setNeedsLayout()
+    return false
   }
 
   private func configure(_ button: UIButton, _ spec: [String: Any]?, color: UIColor) {
@@ -134,54 +104,20 @@ final class NativeComposerView: UIView, UITextViewDelegate {
   }
 
   private func icon(_ raw: Any?) -> UIImage? {
-    guard let d = NativeIconDescriptor(raw) else { return nil }
-    return NativeIconRenderer.shared.image(for: d, pointSize: d.isSymbol ? Metrics.symbolSize : Metrics.imageSize)
-  }
-
-  // MARK: - Commands
-
-  func focus() { textView.becomeFirstResponder() }
-  func unfocus() { textView.resignFirstResponder() }
-  var isEditingText: Bool { textView.isFirstResponder }
-
-  func setText(_ text: String) {
-    guard textView.text != text else { return }
-    textView.text = text
-    textChanged(notify: false)
-  }
-
-  func setShown(_ shown: Bool) {
-    guard shown != isShown else { return }
-    isShown = shown
-    if !shown { unfocus() }
-    isUserInteractionEnabled = shown
-    UIView.animate(withDuration: shown ? 0.25 : 0.15) { self.alpha = shown ? 1 : 0 }
+    icon(raw, symbolSize: Metrics.symbolSize, imageSize: Metrics.imageSize)
   }
 
   @objc private func focusFromTap() {
     if !isEditingText { focus() }
   }
 
-  private func emitButton(_ id: String) { onEvent?("composerButton", ["id": id]) }
-
-  private func send() {
-    let text = textView.text ?? ""
-    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-    onEvent?("composerSend", ["text": text])
-    if clearOnSend {
-      textView.text = ""
-      textChanged(notify: true)
-    }
-  }
-
   // MARK: - State and layout
 
-  /// Called by the host inside the keyboard's animation block.
-  func setExpanded(_ expanded: Bool) {
-    guard expanded != isExpanded else { return }
-    isExpanded = expanded
-    applyState()
-    setNeedsLayout()
+  override func keyboardStateChanged() { applyState() }
+
+  override func contentChanged() {
+    sendButton.isEnabled = canSend
+    sendButton.configuration?.baseForegroundColor = canSend ? accent : .tertiaryLabel
   }
 
   private func applyState() {
@@ -191,19 +127,25 @@ final class NativeComposerView: UIView, UITextViewDelegate {
     textView.isScrollEnabled = isExpanded && textHeight(for: max(bounds.width, 100)) >= maxTextHeight
   }
 
-  private var lineHeight: CGFloat { (textView.font ?? .preferredFont(forTextStyle: .body)).lineHeight }
   private var minTextHeight: CGFloat { max(Metrics.row, ceil(lineHeight) + 22) }
   private var maxTextHeight: CGFloat { minTextHeight + ceil(lineHeight) * CGFloat(max(0, maxLines - 1)) }
 
   private func textHeight(for width: CGFloat) -> CGFloat {
-    let w = width - 2 * Metrics.textInset
-    let fitted = textView.sizeThatFits(CGSize(width: w, height: .greatestFiniteMagnitude)).height
-    return min(max(ceil(fitted), minTextHeight), maxTextHeight)
+    fittedTextHeight(width: width - 2 * Metrics.textInset, minimum: minTextHeight)
   }
 
   /// Height for a given width in the current state.
   func preferredHeight(width: CGFloat) -> CGFloat {
     isExpanded ? Metrics.textTop + textHeight(for: width) + Metrics.row + 4 : Metrics.idleHeight
+  }
+
+  /// 9 pt above the keyboard or the tab bar, whichever is higher; 44 pt
+  /// capsule aligned with the tab bar when idle, 8 pt margins when expanded.
+  override func frame(for placement: ComposerPlacement) -> CGRect {
+    let margin = isExpanded ? Metrics.expandedMargin : Metrics.idleMargin
+    let width = placement.bounds.width - 2 * margin
+    let height = preferredHeight(width: width)
+    return CGRect(x: margin, y: placement.baseline - Metrics.gap - height, width: width, height: height)
   }
 
   override func layoutSubviews() {
@@ -239,28 +181,9 @@ final class NativeComposerView: UIView, UITextViewDelegate {
     placeholder.frame = CGRect(x: 0, y: 11, width: textView.bounds.width, height: ceil(lineHeight))
   }
 
-  // MARK: - Hit testing
+  // MARK: - Text
 
-  override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
-    isShown && super.point(inside: point, with: event)
-  }
-
-  // MARK: - UITextViewDelegate
-
-  func textViewDidBeginEditing(_ textView: UITextView) {
-    onEvent?("composerFocus", ["focused": true])
-  }
-
-  func textViewDidEndEditing(_ textView: UITextView) {
-    onEvent?("composerFocus", ["focused": false])
-  }
-
-  func textViewDidChange(_ textView: UITextView) { textChanged(notify: true) }
-
-  private func textChanged(notify: Bool) {
-    placeholder.isHidden = !(textView.text ?? "").isEmpty
-    updateSendButton()
-    if notify { onEvent?("composerText", ["text": textView.text ?? ""]) }
+  override func textDidChangeLayout() {
     let before = bounds.height
     let after = preferredHeight(width: bounds.width)
     textView.isScrollEnabled = isExpanded && textHeight(for: bounds.width) >= maxTextHeight
@@ -270,11 +193,5 @@ final class NativeComposerView: UIView, UITextViewDelegate {
         self.superview?.layoutIfNeeded()
       }
     }
-  }
-
-  private func updateSendButton() {
-    let enabled = !(textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    sendButton.isEnabled = enabled
-    sendButton.configuration?.baseForegroundColor = enabled ? accent : .tertiaryLabel
   }
 }

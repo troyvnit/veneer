@@ -145,6 +145,161 @@ void main() {
     expect(calls, isEmpty);
   });
 
+  testWidgets('prompt composer replica: voice button becomes send, side actions, attachments', (tester) async {
+    final controller = NativeComposerController();
+    final sent = <String>[];
+    var voice = 0;
+    var ended = 0;
+    var removed = 0;
+    Widget app({bool side = false, bool attached = false}) => MaterialApp(
+      home: MediaQuery(
+        data: const MediaQueryData(size: Size(400, 800), padding: EdgeInsets.only(bottom: 34)),
+        child: Scaffold(
+          resizeToAvoidBottomInset: false,
+          body: NativePromptComposer(
+            controller: controller,
+            placeholder: 'Ask anything',
+            leading: const NativeComposerButton(icon: NativeIcon.symbol('plus'), title: 'Add'),
+            actions: const [NativeComposerButton(icon: NativeIcon.symbol('mic'), title: 'Dictate')],
+            primaryAction: NativeComposerButton(
+              icon: const NativeIcon.symbol('waveform'),
+              title: 'Voice mode',
+              onPressed: () => voice++,
+            ),
+            sideActions: [
+              NativeComposerButton(
+                icon: const NativeIcon.symbol('xmark'),
+                title: 'End',
+                prominent: true,
+                onPressed: () => ended++,
+              ),
+            ],
+            showSideActions: side,
+            attachments: [
+              if (attached)
+                NativeComposerAttachment(
+                  id: 'f',
+                  title: 'trip-plan.pdf',
+                  subtitle: 'PDF',
+                  thumbnail: const NativeIcon.symbol('doc.fill'),
+                  onRemove: () => removed++,
+                ),
+            ],
+            onSend: sent.add,
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(app());
+    expect(find.text('Ask anything'), findsOneWidget);
+    final idleHeight = tester.getSize(find.byType(AnimatedContainer).first).height;
+    expect(idleHeight, 48);
+
+    await tester.tap(find.bySemanticsLabel('Voice mode'));
+    expect(voice, 1);
+
+    await tester.pumpWidget(app(side: true));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('End'));
+    expect(ended, 1);
+
+    await tester.pumpWidget(app());
+    await tester.enterText(find.byType(TextField), 'hello');
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('Send'), findsOneWidget, reason: 'the voice button turned into send');
+    await tester.tap(find.bySemanticsLabel('Send'));
+    await tester.pumpAndSettle();
+    expect(sent, ['hello']);
+
+    // A line break or an attachment switches to the taller multi-line layout.
+    await tester.enterText(find.byType(TextField), 'one\ntwo');
+    await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(AnimatedContainer).first).height, greaterThan(idleHeight));
+
+    await tester.pumpWidget(app(attached: true));
+    await tester.pumpAndSettle();
+    expect(find.text('trip-plan.pdf'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('Remove'));
+    expect(removed, 1);
+    expect(calls, isEmpty);
+  });
+
+  testWidgets('native sheet: detents, drag to the next detent, drag down to dismiss', (tester) async {
+    final navigator = GlobalKey<NavigatorState>();
+    final detents = <NativeSheetDetent>[];
+    var closed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        home: const Scaffold(body: SizedBox.expand()),
+      ),
+    );
+    showNativeSheet<void>(
+      context: navigator.currentContext!,
+      detents: const [NativeSheetDetent.medium, NativeSheetDetent.large],
+      onDetentChanged: detents.add,
+      builder: (context) => Scaffold(
+        backgroundColor: Colors.transparent,
+        body: NativeNavigationBar(
+          leading: NativeBarButton(
+            icon: const NativeIcon.symbol('xmark'),
+            title: 'Close',
+            onPressed: () => closed = true,
+          ),
+          title: const NativeBarTitle(title: 'Sheet'),
+          child: const Center(child: Text('content')),
+        ),
+      ),
+    ).then((_) => closed = true);
+    await tester.pumpAndSettle();
+    expect(find.text('Sheet'), findsOneWidget);
+
+    final screen = tester.getSize(find.byType(Navigator)).height;
+    double sheetTop() => tester.getTopLeft(find.text('Sheet')).dy;
+    final mediumTop = sheetTop();
+    expect(mediumTop, greaterThan(screen * 0.4), reason: 'opens at the first detent, medium');
+
+    // Drag up past halfway: settles at large.
+    await tester.drag(find.text('content'), const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(sheetTop(), lessThan(mediumTop - 200));
+    expect(detents, [NativeSheetDetent.large]);
+
+    // Drag all the way down: dismissed.
+    await tester.drag(find.text('content'), Offset(0, screen));
+    await tester.pumpAndSettle();
+    expect(find.text('Sheet'), findsNothing);
+    expect(closed, isTrue);
+  });
+
+  testWidgets('glass shape replica with a menu opens the menu replica', (tester) async {
+    var picked = '';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: GlassShape(
+            width: 44,
+            height: 44,
+            icon: const NativeIcon.symbol('ellipsis'),
+            label: 'More',
+            menu: [
+              NativeMenuItem(title: 'Share', onSelected: () => picked = 'share'),
+              NativeMenuItem(title: 'Delete', destructive: true, onSelected: () => picked = 'delete'),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byType(GlassShape));
+    await tester.pumpAndSettle();
+    expect(find.text('Share'), findsOneWidget);
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(picked, 'delete');
+  });
+
   testWidgets('glass shape replica: label, icon and tap', (tester) async {
     var taps = 0;
     await tester.pumpWidget(

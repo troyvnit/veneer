@@ -12,6 +12,8 @@ import UIKit
 ///     (mirrored in right-to-left layouts, by UIKit) are honoured.
 ///   * `.svg…`   — parsed and drawn natively (`SVGIcon`), from an asset, a
 ///     file or markup.
+///   * `.image…` — a PNG/JPEG/HEIC from an asset or a file, loaded by UIKit
+///     and kept in its own colours (photos, thumbnails, avatars).
 ///
 /// Glyphs and tinted SVGs come back as template images, so they tint like SF
 /// Symbols: tab bar selection colours, glass vibrancy, `tintColor`. SVGs that
@@ -28,6 +30,8 @@ struct NativeIconDescriptor: Hashable {
     case svgAsset(asset: String, package: String?)
     case svgFile(path: String)
     case svg(String)
+    case imageAsset(asset: String, package: String?)
+    case imageFile(path: String)
   }
 
   var source: Source
@@ -59,6 +63,12 @@ struct NativeIconDescriptor: Hashable {
     case "svg":
       guard let data = map["data"] as? String else { return nil }
       source = .svg(data)
+    case "imageAsset":
+      guard let asset = map["asset"] as? String else { return nil }
+      source = .imageAsset(asset: asset, package: map["package"] as? String)
+    case "imageFile":
+      guard let path = map["path"] as? String else { return nil }
+      source = .imageFile(path: path)
     default:
       return nil
     }
@@ -68,6 +78,17 @@ struct NativeIconDescriptor: Hashable {
     if case .symbol = source { return true }
     return false
   }
+
+  var isRaster: Bool {
+    switch source {
+    case .imageAsset, .imageFile: return true
+    default: return false
+    }
+  }
+
+  /// Drawn in its own colours rather than tinted: raster images and SVGs
+  /// with `tinted: false`.
+  var keepsColors: Bool { isRaster || (original && !isSymbol) }
 }
 
 @available(iOS 26.0, *)
@@ -111,6 +132,8 @@ final class NativeIconRenderer {
     case .svgAsset, .svgFile, .svg:
       guard let svg = svg(for: icon.source) else { break }
       image = icon.original ? dynamicImage(svg, size: size) : svg.image(size: size, template: true)
+    case .imageAsset, .imageFile:
+      image = fullImage(for: icon).map { Self.fitted($0, in: size) }
     }
     // UIKit flips it only when the view's layout direction is right-to-left.
     if icon.mirrored { image = image?.imageFlippedForRightToLeftLayoutDirection() }
@@ -137,6 +160,35 @@ final class NativeIconRenderer {
     }
     // The light variant carries the asset; UIKit swaps to dark as traits change.
     return result ?? UIImage()
+  }
+
+  // MARK: - Raster images
+
+  private var rasters: [NativeIconDescriptor.Source: UIImage] = [:]
+
+  /// A raster image at its own size (for thumbnails that fill a frame).
+  func fullImage(for icon: NativeIconDescriptor) -> UIImage? {
+    if let cached = rasters[icon.source] { return cached }
+    let path: String?
+    switch icon.source {
+    case let .imageAsset(asset, package): path = assetPath?(asset, package)
+    case let .imageFile(p): path = p
+    default: return nil
+    }
+    guard let path, let image = UIImage(contentsOfFile: path)?.withRenderingMode(.alwaysOriginal) else { return nil }
+    rasters[icon.source] = image
+    return image
+  }
+
+  /// Aspect-fit into a `size`×`size` box, as an icon.
+  private static func fitted(_ image: UIImage, in size: CGFloat) -> UIImage {
+    let s = image.size
+    guard s.width > 0, s.height > 0 else { return image }
+    let scale = min(size / s.width, size / s.height)
+    let target = CGSize(width: s.width * scale, height: s.height * scale)
+    return UIGraphicsImageRenderer(size: CGSize(width: size, height: size)).image { _ in
+      image.draw(in: CGRect(x: (size - target.width) / 2, y: (size - target.height) / 2, width: target.width, height: target.height))
+    }.withRenderingMode(.alwaysOriginal)
   }
 
   // MARK: - IconData glyphs

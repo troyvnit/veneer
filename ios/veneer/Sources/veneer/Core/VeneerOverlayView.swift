@@ -28,10 +28,20 @@ final class VeneerOverlayView: UIView {
   private var tabBarHost: NativeTabBarHost?
   private var navigationBarHost: NativeNavigationBarHost?
   private let edgeEffects = ScrollEdgeEffectHost()
-  private var composer: NativeComposerView?
+  private var composer: ComposerBaseView?
   private var tabBarEdgeEffect: String?
   /// Top of the software keyboard in overlay coordinates; nil when hidden.
-  private var keyboardTop: CGFloat?
+  /// The software keyboard's frame in screen coordinates; nil when hidden.
+  /// Kept in screen space and converted when needed: this view can move
+  /// while the keyboard is up (a sheet growing to its large detent for it).
+  private var keyboardScreenFrame: CGRect?
+
+  /// Top of the software keyboard in overlay coordinates; nil when hidden.
+  private var keyboardTop: CGFloat? {
+    guard let frame = keyboardScreenFrame, let screen = window?.screen else { return nil }
+    let local = screen.coordinateSpace.convert(frame, to: self)
+    return local.minY < bounds.height - 1 && local.height > 0 ? local.minY : nil
+  }
   private var focusAnimationPending = false
   /// Drives UIKit's interactive keyboard dismissal from drags on Flutter content.
   private let keyboardDismissProxy = KeyboardDismissProxy()
@@ -48,6 +58,9 @@ final class VeneerOverlayView: UIView {
     glassLayer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     glassLayer.onShapeTapped = { [weak self] id in
       self?.onEvent?("shapeTapped", ["id": id])
+    }
+    glassLayer.onShapeMenu = { [weak self] id, index in
+      self?.onEvent?("shapeMenu", ["id": id, "index": index])
     }
     addSubview(glassLayer)
     edgeEffects.attach(to: self, at: 1)
@@ -152,6 +165,8 @@ final class VeneerOverlayView: UIView {
       navigationBarHost = host
       return host
     }()
+    // In a sheet, buttons are concentric with the sheet's corners.
+    if isInSheet { host.setSideInset(NativeSheetSession.edgeInset) }
     host.update(args)
     host.setHidden((args["hidden"] as? Bool) ?? false)
     edgeEffects.set(.top, style: host.isHidden ? nil : (args["edgeEffect"] as? String), elements: host.isHidden ? [] : [host.bar])
@@ -172,36 +187,60 @@ final class VeneerOverlayView: UIView {
 
   // MARK: - Chrome: composer
 
+  private static let composerStyles: [String: ComposerBaseView.Type] = [
+    NativeComposerView.style: NativeComposerView.self,
+    NativePromptComposerView.style: NativePromptComposerView.self,
+  ]
+
   func setComposer(_ args: [String: Any]?) {
     guard let args else {
       composer?.unfocus()
       composer?.removeFromSuperview()
       composer = nil
+      lastComposerHeight = -1
       keyboardDismissProxy.stopDriving()
       updateBottomEdgeEffect()
       return
     }
-    let view = composer ?? {
-      let view = NativeComposerView()
-      view.onEvent = { [weak self] method, payload in
-        if method == "composerFocus" { self?.focusChanged() }
-        self?.onEvent?(method, payload)
+    let type = Self.composerStyles[args["style"] as? String ?? ""] ?? NativeComposerView.self
+    let hidden = (args["hidden"] as? Bool) ?? false
+    let view: ComposerBaseView
+    if let composer, Swift.type(of: composer) == type {
+      view = composer
+    } else {
+      // Another page's composer style: cross-fade from the old one.
+      if let old = composer {
+        old.unfocus()
+        UIView.animate(withDuration: 0.2, animations: { old.alpha = 0 }, completion: { _ in old.removeFromSuperview() })
       }
-      view.onNeedsLayout = { [weak self] in
-        self?.layoutComposer()
-        self?.reportComposer(duration: 0.2)
-      }
-      addSubview(view)
-      composer = view
-      return view
-    }()
+      view = makeComposer(type)
+      view.setShown(false, animated: false)
+    }
     view.update(args)
-    view.setShown(!((args["hidden"] as? Bool) ?? false))
     interactiveDismissal = (args["interactiveDismissal"] as? Bool) ?? true
-    updateKeyboardDismissal()
     layoutComposer()
+    view.layoutIfNeeded()
+    view.setShown(!hidden)
+    updateKeyboardDismissal()
     reportComposer(duration: 0)
     updateBottomEdgeEffect()
+  }
+
+  private func makeComposer(_ type: ComposerBaseView.Type) -> ComposerBaseView {
+    let view = type.init(frame: .zero)
+    view.onEvent = { [weak self] method, payload in
+      if method == "composerFocus" { self?.focusChanged() }
+      self?.onEvent?(method, payload)
+    }
+    view.onNeedsLayout = { [weak self, weak view] in
+      guard let self, let view, view === self.composer else { return }
+      self.layoutComposer()
+      self.reportComposer(duration: 0.35)
+    }
+    addSubview(view)
+    composer = view
+    lastComposerHeight = -1
+    return view
   }
 
   func composerCommand(_ args: [String: Any]) {
@@ -217,12 +256,17 @@ final class VeneerOverlayView: UIView {
   /// Keyboard notifications drive the morph with the keyboard's own
   /// duration and curve, so card and keyboard move as one.
   @objc private func keyboardWillChangeFrame(_ note: Notification) {
+    // A native sheet over this view has its own overlay; the keyboard is its.
+    if let host = hostViewController, host.presentedViewController != nil, !host.isBeingPresented,
+      keyboardScreenFrame == nil
+    {
+      return
+    }
     guard let info = note.userInfo,
       let end = (info[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue,
       let screen = window?.screen
     else { return }
-    let local = screen.coordinateSpace.convert(end, to: self)
-    keyboardTop = local.minY < bounds.height - 1 && local.height > 0 ? local.minY : nil
+    keyboardScreenFrame = end.minY < screen.bounds.height - 1 && end.height > 0 ? end : nil
     focusAnimationPending = false
     let duration = (info[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber)?.doubleValue ?? 0.25
     let curve = (info[UIResponder.keyboardAnimationCurveUserInfoKey] as? NSNumber)?.uintValue ?? 7
@@ -243,14 +287,46 @@ final class VeneerOverlayView: UIView {
   private func animateComposer(duration: Double, options: UIView.AnimationOptions) {
     guard let composer else { return }
     UIView.animate(withDuration: duration, delay: 0, options: [options, .beginFromCurrentState, .allowUserInteraction]) {
-      composer.setExpanded(composer.isEditingText)
+      composer.setKeyboardActive(composer.isEditingText)
       self.layoutComposer()
       composer.layoutIfNeeded()
     }
     reportComposer(duration: duration)
   }
 
+  /// Whether this overlay is inside a native sheet's view.
+  private var isInSheet: Bool {
+    guard let host = hostViewController else { return false }
+    return host.presentingViewController != nil && host.modalPresentationStyle == .pageSheet
+  }
+
+  /// From the sheet's Flutter content, on each touch: whether the content
+  /// under the finger is scrolled to its top edge.
+  private var sheetContentAtTop = true
+
+  func setSheetContentAtTop(_ atTop: Bool) {
+    sheetContentAtTop = atTop
+    updateKeyboardDismissal()
+  }
+
+  /// UIKit's rule for a sheet over scrolling content: pulling down drags the
+  /// sheet when the content is at its top; pushing up grows the sheet until
+  /// its largest detent. Every other drag scrolls the content.
+  private func sheetTakesDrag(velocity: CGPoint) -> Bool {
+    guard isInSheet, let sheet = hostViewController?.sheetPresentationController else { return false }
+    if velocity.y > 0 { return sheetContentAtTop }
+    let largest = sheet.detents.last?.identifier
+    return sheet.selectedDetentIdentifier != nil && sheet.selectedDetentIdentifier != largest
+  }
+
   private func updateKeyboardDismissal() {
+    if isInSheet, let host = superview {
+      // In a sheet the proxy always runs: it's what keeps the sheet still
+      // while Flutter content scrolls (see sheetTakesDrag).
+      keyboardDismissProxy.yieldsToSheet = { [weak self] velocity in self?.sheetTakesDrag(velocity: velocity) ?? false }
+      keyboardDismissProxy.drive(from: host)
+      return
+    }
     if let host = superview, interactiveDismissal, composer?.isShown == true {
       keyboardDismissProxy.drive(from: host)
     } else {
@@ -271,19 +347,36 @@ final class VeneerOverlayView: UIView {
     return top < bounds.height - 1 ? top : nil
   }
 
-  /// 9 pt above the keyboard or the tab bar, whichever is higher; 44 pt
-  /// capsule aligned with the tab bar when idle, 8 pt margins when expanded.
+  private func composerPlacement(keyboardTop: CGFloat?) -> ComposerPlacement {
+    ComposerPlacement(
+      bounds: bounds,
+      safeAreaBottom: safeAreaInsets.bottom,
+      tabBarTop: tabBarHost.flatMap { $0.isHidden ? nil : $0.tabBar.convert($0.tabBar.bounds, to: self).minY },
+      keyboardTop: keyboardTop)
+  }
+
+  /// Where the composer's own style puts it: above the keyboard, the tab bar
+  /// or the home indicator.
   private func layoutComposer() {
     guard let composer else { return }
-    let M = NativeComposerView.Metrics.self
-    let tabTop = tabBarHost.flatMap { $0.isHidden ? nil : $0.tabBar.convert($0.tabBar.bounds, to: self).minY }
-      ?? bounds.height - safeAreaInsets.bottom
-    let limit = min(liveKeyboardTop ?? .greatestFiniteMagnitude, tabTop)
-    let margin = composer.isExpanded ? M.expandedMargin : M.idleMargin
-    let width = bounds.width - 2 * margin
-    let height = composer.preferredHeight(width: width)
-    let frame = CGRect(x: margin, y: limit - M.gap - height, width: width, height: height)
+    let frame = composer.frame(for: composerPlacement(keyboardTop: liveKeyboardTop))
+      .offsetBy(dx: composerOffset.x, dy: composerOffset.y)
     if composer.frame != frame { composer.frame = frame }
+  }
+
+  /// How far the composer's Flutter page is displaced from where it rests.
+  private var composerOffset = CGPoint.zero
+
+  /// Called with every Flutter frame's geometry (inside the FFI call), so the
+  /// composer rides whatever moves its page: a sheet sliding up or dragged
+  /// down, a route sliding in. Only moves the view; never lays out (see the
+  /// FFI rules).
+  func setComposerOffset(_ offset: CGPoint) {
+    guard offset != composerOffset else { return }
+    let delta = CGPoint(x: offset.x - composerOffset.x, y: offset.y - composerOffset.y)
+    composerOffset = offset
+    guard let composer else { return }
+    composer.center = CGPoint(x: composer.center.x + delta.x, y: composer.center.y + delta.y)
   }
 
   private var lastComposerHeight: CGFloat = -1
@@ -292,9 +385,7 @@ final class VeneerOverlayView: UIView {
   /// tab bar, and over what duration it's changing.
   private func reportComposer(duration: Double) {
     guard let composer else { return }
-    let M = NativeComposerView.Metrics.self
-    let margin = composer.isExpanded ? M.expandedMargin : M.idleMargin
-    let height = composer.preferredHeight(width: bounds.width - 2 * margin) + M.gap
+    let height = composer.occupiedHeight(for: composerPlacement(keyboardTop: keyboardTop))
     guard abs(height - lastComposerHeight) > 0.5 else { return }
     lastComposerHeight = height
     onEvent?("composerLayout", ["height": Double(height), "duration": duration])

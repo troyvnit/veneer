@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:veneer/veneer.dart';
 
+import '../app_icons.dart';
+
 /// Native glass honouring Flutter clips: a rounded card with a vertical list
 /// scrolling glass pills out through its corners, a capsule card with a
 /// horizontal list of chips, and a ClipOval. The toggle sets every clip to
@@ -41,7 +43,7 @@ class _ClipPageState extends State<ClipPage> {
                   height: 48,
                   icon: _clip
                       ? const NativeIcon.svgAsset('assets/icons/scissors.svg')
-                      : const NativeIcon.icon(Icons.content_cut),
+                      : const NativeIcon.icon(AppIcons.scissors),
                   label: _clip ? 'Clips on' : 'Clips off',
                   onTap: () => setState(() => _clip = !_clip),
                 ),
@@ -63,7 +65,12 @@ class _ClipPageState extends State<ClipPage> {
                     height: 64,
                     child: Center(
                       child: i.isEven
-                          ? GlassShape(width: 240, height: 48, icon: NativeIcon.symbol('drop.fill'), label: 'Item $i')
+                          ? GlassShape(
+                              width: 240,
+                              height: 48,
+                              icon: NativeIcon.icon(AppIcons.dropFill),
+                              label: 'Item $i',
+                            )
                           : Text('Item $i', style: const TextStyle(color: Colors.white70, fontSize: 18)),
                     ),
                   ),
@@ -85,7 +92,7 @@ class _ClipPageState extends State<ClipPage> {
                   itemCount: 12,
                   separatorBuilder: (_, _) => const SizedBox(width: 24),
                   itemBuilder: (context, i) =>
-                      GlassShape(width: 110, height: 56, icon: NativeIcon.symbol('tag.fill'), label: 'Chip $i'),
+                      GlassShape(width: 110, height: 56, icon: NativeIcon.icon(AppIcons.tagFill), label: 'Chip $i'),
                 ),
               ),
             ),
@@ -105,7 +112,7 @@ class _ClipPageState extends State<ClipPage> {
                         child: GlassShape(
                           width: 300,
                           height: 64,
-                          icon: NativeIcon.symbol('circle.lefthalf.filled'),
+                          icon: NativeIcon.icon(AppIcons.circleHalf),
                           label: 'Oval',
                         ),
                       ),

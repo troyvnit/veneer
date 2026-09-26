@@ -24,6 +24,11 @@ final class KeyboardDismissProxy: UIScrollView, UIScrollViewDelegate {
   private weak var host: UIView?
   private static let contentHeight: CGFloat = 1_000_000
 
+  /// In a sheet: whether a drag starting with this velocity belongs to the
+  /// sheet. UIKit's sheet only drags when no scroll view claims the touch,
+  /// so this pan stays out of those drags.
+  var yieldsToSheet: ((CGPoint) -> Bool)?
+
   override init(frame: CGRect) {
     super.init(frame: frame)
     backgroundColor = .clear
@@ -79,6 +84,7 @@ final class KeyboardDismissProxy: UIScrollView, UIScrollViewDelegate {
     // Vertical drags on Flutter content only.
     let velocity = panGestureRecognizer.velocity(in: host)
     guard abs(velocity.y) >= abs(velocity.x) else { return false }
+    if yieldsToSheet?(velocity) == true { return false }
     return isFlutterTouch?(panGestureRecognizer.location(in: host)) ?? false
   }
 

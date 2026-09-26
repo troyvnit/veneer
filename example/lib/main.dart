@@ -1,13 +1,14 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:veneer/veneer.dart';
 
+import 'pages/assistant_page.dart';
 import 'pages/chat_page.dart';
 import 'pages/clip_page.dart';
 import 'pages/diagnostics_page.dart';
 import 'pages/morph_page.dart';
 import 'pages/sync_test_page.dart';
+import 'app_icons.dart';
 
 /// Launch arguments (see ios/Runner/AppDelegate.swift) let
 /// `tool/measure_sync.py` runs be scripted:
@@ -30,6 +31,20 @@ Future<void> main() async {
   runApp(const ExampleApp());
 }
 
+/// The assistant sheet's own engine (see `openAssistant`): on iOS 26 the
+/// sheet is a real UIKit sheet, and its Flutter content starts here.
+@pragma('vm:entry-point')
+void assistantSheet() => runNativeSheet(
+  MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: exampleTheme(Brightness.light),
+    darkTheme: exampleTheme(Brightness.dark),
+    home: const AssistantPage(),
+  ),
+);
+
+ThemeData exampleTheme(Brightness brightness) => ThemeData(colorSchemeSeed: Colors.indigo, brightness: brightness);
+
 class ExampleApp extends StatelessWidget {
   const ExampleApp({super.key});
 
@@ -38,8 +53,8 @@ class ExampleApp extends StatelessWidget {
     return MaterialApp(
       title: 'Veneer',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: Colors.indigo),
-      darkTheme: ThemeData(colorSchemeSeed: Colors.indigo, brightness: Brightness.dark),
+      theme: exampleTheme(Brightness.light),
+      darkTheme: exampleTheme(Brightness.dark),
       navigatorObservers: [VeneerNavigatorObserver()],
       home: const HomePage(),
     );
@@ -65,27 +80,20 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    // The assistant sheet's engine starts now, so the sheet opens with content.
+    NativeSheet.prewarm('assistantSheet');
     // Scripted measurement runs (tool/measure_sync.py) open the sync test directly.
     if (launchMeasureMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) => openSyncTest(context));
     }
   }
 
+  // The AI button: a gradient SVG in its own colours by default.
   static const _trailingIcons = {
-    TrailingIconKind.symbol: NativeIcon.symbol('plus'),
-    TrailingIconKind.iconData: NativeIcon.icon(Icons.add),
-    TrailingIconKind.svg: NativeIcon.svgAsset('assets/icons/plus_circle.svg'),
+    TrailingIconKind.symbol: NativeIcon.symbol('sparkles'),
+    TrailingIconKind.iconData: NativeIcon.icon(AppIcons.sparkleFill),
+    TrailingIconKind.svg: NativeIcon.svgAsset('assets/icons/ai_sparkle.svg', tinted: false),
   };
-
-  void _compose() {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (_) => const SizedBox(
-        height: 240,
-        child: Center(child: Text('Trailing action pressed', style: TextStyle(fontSize: 18))),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -97,19 +105,23 @@ class _HomePageState extends State<HomePage> {
         tabs: const [
           NativeTabItem(
             title: 'Chat',
-            icon: NativeIcon.symbol('bubble.left.and.bubble.right'),
-            selectedIcon: NativeIcon.symbol('bubble.left.and.bubble.right.fill'),
+            icon: NativeIcon.icon(AppIcons.chatsCircle),
+            selectedIcon: NativeIcon.icon(AppIcons.chatsCircleFill),
           ),
           NativeTabItem(
             title: 'Morph',
-            icon: NativeIcon.icon(Icons.water_drop_outlined),
-            selectedIcon: NativeIcon.icon(Icons.water_drop),
+            icon: NativeIcon.icon(AppIcons.drop),
+            selectedIcon: NativeIcon.icon(AppIcons.dropFill),
           ),
           NativeTabItem(title: 'Clip', icon: NativeIcon.svgAsset('assets/icons/scissors.svg')),
-          NativeTabItem(title: 'Lab', icon: NativeIcon.icon(CupertinoIcons.gauge), badge: '3'),
+          NativeTabItem(title: 'Lab', icon: NativeIcon.icon(AppIcons.gauge), badge: '3'),
         ],
         scrollEdgeEffect: NativeScrollEdgeEffect.soft,
-        trailingAction: NativeTabAction(icon: _trailingIcons[kind]!, title: 'New', onPressed: _compose),
+        trailingAction: NativeTabAction(
+          icon: _trailingIcons[kind]!,
+          title: 'Assistant',
+          onPressed: () => openAssistant(context),
+        ),
         selectedIndex: _index,
         onTabSelected: (i) => setState(() => _index = i),
         child: IndexedStack(index: _index, children: const [ChatPage(), MorphPage(), ClipPage(), DiagnosticsPage()]),

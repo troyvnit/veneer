@@ -1,22 +1,47 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/cupertino.dart' show CupertinoSheetRoute;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
+import '../core/fallback_scope.dart';
 import '../core/fallback_style.dart';
 import '../core/native_icon.dart';
+import '../core/native_menu.dart';
 import '../core/veneer_bridge.dart';
+import '../glass/glass_coordinator.dart';
 
-/// A button in the native composer.
+part 'native_prompt_composer.dart';
+
+/// A button in a native composer.
 @immutable
 class NativeComposerButton {
-  const NativeComposerButton({required this.icon, this.title, this.onPressed});
+  const NativeComposerButton({required this.icon, this.title, this.onPressed, this.menu, this.prominent = false});
 
   final NativeIcon icon;
 
   /// VoiceOver label.
   final String? title;
   final VoidCallback? onPressed;
+
+  /// Tapping opens this menu (a native `UIMenu`) instead of [onPressed].
+  final List<NativeMenuItem>? menu;
+
+  /// For side actions of a [NativePromptComposer]: glass tinted with the
+  /// label colour (white in dark mode), like an End button.
+  final bool prominent;
+
+  Map<String, Object?> _encode(String id, Map<String, VoidCallback?> handlers) {
+    handlers[id] = onPressed;
+    return {
+      'id': id,
+      'icon': icon.encode(),
+      'title': title,
+      'prominent': prominent,
+      'menu': encodeMenu(id, menu, handlers),
+    };
+  }
 }
 
 /// Where a controller's commands go: the native composer or the Flutter
@@ -40,8 +65,9 @@ class _NativeBackend implements _ComposerBackend {
   void unfocus() => VeneerBridge.instance.composerCommand('unfocus');
 }
 
-/// Reads and drives a [NativeComposer]: its text and keyboard focus. The same
-/// controller works with the native composer and the Flutter fallback.
+/// Reads and drives a composer ([NativeComposer], [NativePromptComposer]):
+/// its text and keyboard focus. The same controller works with the native
+/// composers and their Flutter fallbacks.
 class NativeComposerController extends ChangeNotifier {
   NativeComposerController({String text = ''}) : _text = text; // ignore: prefer_initializing_formals
 
@@ -80,6 +106,244 @@ class NativeComposerController extends ChangeNotifier {
   }
 }
 
+/// What both composers share on the native path: one native composer view
+/// at a time (the most recently visible composer's), its config sent only
+/// when it changes, events routed back, and [child] padded for the space the
+/// composer takes above the keyboard or tab bar — animated with the native
+/// morph — with the keyboard inset consumed so an inner `Scaffold` doesn't
+/// also resize.
+abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
+  static State? _active;
+  static String? _lastSent;
+
+  bool _visible = false;
+  bool _native = false;
+  double _height = 0;
+  Duration _duration = Duration.zero;
+  NativeComposerController? _ownController;
+
+  /// The native view class: `card` or `prompt`.
+  String get _style;
+  NativeComposerController? get _widgetController;
+  Widget get _child;
+  bool get _clearOnSend;
+  bool get _interactiveDismissal;
+  ValueChanged<String>? get _onSend;
+  ValueChanged<String>? get _onChanged;
+  ValueChanged<String>? get _onAttachmentRemoved => null;
+
+  /// Style-specific config; registers button callbacks in [handlers].
+  Map<String, Object?> _encode(Map<String, VoidCallback?> handlers);
+
+  Widget _buildFallback(NativeComposerController controller);
+
+  NativeComposerController get _controller => _widgetController ?? (_ownController ??= NativeComposerController());
+  VeneerBridge get _bridge => VeneerBridge.instance;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _refresh();
+  }
+
+  @override
+  void didUpdateWidget(covariant W oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _refresh(resend: true);
+  }
+
+  /// Visibility is checked against the live route, not a cached flag: a page
+  /// covered by a new route can rebuild before it hears it's no longer
+  /// current, and must not take the native view back.
+  void _refresh({bool resend = false}) {
+    _native = useNativeLayer(context);
+    if (!_native) return;
+    final visible = Visibility.of(context) && (ModalRoute.of(context)?.isCurrent ?? true);
+    if (visible != _visible) {
+      _visible = visible;
+      _push();
+    } else if (resend && _visible) {
+      _push();
+    }
+  }
+
+  void _push() {
+    if (!_native) return;
+    if (_visible) {
+      _active = this;
+    } else if (_active != this) {
+      return; // another composer owns the native view
+    }
+    final handlers = <String, VoidCallback?>{};
+    final config = <String, Object?>{
+      'style': _style,
+      'hidden': !_visible,
+      ..._encode(handlers),
+      'clearOnSend': _clearOnSend,
+      'interactiveDismissal': _interactiveDismissal,
+    };
+    final handlerSet = VeneerComposerHandlers(
+      onButton: (id) => handlers[id]?.call(),
+      onText: (text) {
+        _controller._nativeText(text);
+        _onChanged?.call(text);
+      },
+      onFocus: _controller._nativeFocus,
+      onSend: (text) {
+        if (_clearOnSend) _controller._nativeText('');
+        _onSend?.call(text);
+      },
+      onLayout: (height, duration) {
+        if (!mounted) return;
+        setState(() {
+          _height = height;
+          _duration = duration;
+        });
+      },
+      onAttachmentRemoved: (id) => _onAttachmentRemoved?.call(id),
+    );
+    // Pages rebuild every frame while the keyboard animates; only send real
+    // changes. Callbacks are refreshed locally either way.
+    final encoded = jsonEncode(config);
+    if (encoded == _lastSent) {
+      _bridge.updateComposerHandlers(handlerSet);
+      return;
+    }
+    final firstShow = _lastSent == null;
+    _lastSent = encoded;
+    _bridge.setComposer(config, handlerSet);
+    if (firstShow && _controller.text.isNotEmpty) _bridge.composerCommand('setText', text: _controller.text);
+  }
+
+  @override
+  void dispose() {
+    if (_active == this) {
+      _active = null;
+      _lastSent = null;
+      _bridge.removeComposer();
+    }
+    _ownController?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_native) return _buildFallback(_controller);
+    final mq = MediaQuery.of(context);
+    // The composer sits above whichever is higher: the keyboard (animated by
+    // Flutter from the same system notifications) or the tab bar.
+    final base = math.max(mq.viewInsets.bottom, mq.padding.bottom);
+    final padded = TweenAnimationBuilder<double>(
+      tween: Tween(end: _visible ? _height : 0),
+      duration: _duration,
+      curve: Curves.easeOutCubic,
+      builder: (context, height, child) => MediaQuery(
+        data: mq.copyWith(
+          padding: mq.padding.copyWith(bottom: base + height),
+          viewPadding: mq.viewPadding.copyWith(bottom: math.max(mq.viewPadding.bottom, base + height)),
+          viewInsets: mq.viewInsets.copyWith(bottom: 0),
+        ),
+        child: child!,
+      ),
+      child: _child,
+    );
+    // The native composer follows this widget's bottom edge frame by frame,
+    // so it moves with the page: a sheet sliding up or dragged away, a
+    // route sliding in.
+    return _ComposerHostAnchor(active: _visible, child: padded);
+  }
+}
+
+class _ComposerHostAnchor extends SingleChildRenderObjectWidget {
+  const _ComposerHostAnchor({required this.active, super.child});
+
+  final bool active;
+
+  @override
+  _RenderComposerHost createRenderObject(BuildContext context) => _RenderComposerHost(active, ModalRoute.of(context));
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderComposerHost renderObject) => renderObject
+    ..route = ModalRoute.of(context)
+    ..active = active;
+}
+
+/// Measures how far the composer's page has moved from where it rests, for
+/// the native composer to follow.
+///
+/// The rest position is recorded whenever the route is settled (not
+/// animating, not being dragged, not covered). Before the first time — while
+/// the route is still sliding in — it's estimated from layout, which ignores
+/// transition transforms, plus the resting top gap of an iOS sheet.
+class _RenderComposerHost extends RenderProxyBox {
+  _RenderComposerHost(this._active, this.route) : _activation = _active ? ++_activations : 0;
+
+  static int _activations = 0;
+
+  ModalRoute<Object?>? route;
+  Offset? _rest;
+
+  /// When this composer last became visible; the latest one wins.
+  int _activation;
+
+  bool _active;
+  set active(bool value) {
+    if (value == _active) return;
+    _active = value;
+    if (value) _activation = ++_activations;
+    _sync();
+  }
+
+  void _sync() {
+    final coordinator = GlassCoordinator.instance;
+    if (_active && attached) {
+      coordinator.setComposerHost(this, _activation, _offsetFromRest);
+    } else {
+      coordinator.clearComposerHost(this);
+    }
+  }
+
+  Offset _offsetFromRest() {
+    if (!attached || !hasSize) return Offset.zero;
+    final position = MatrixUtils.transformPoint(getTransformTo(null), Offset.zero);
+    final route = this.route;
+    final settled =
+        route == null ||
+        (route.animation?.status == AnimationStatus.completed &&
+            (route.secondaryAnimation?.status ?? AnimationStatus.dismissed) == AnimationStatus.dismissed &&
+            !(route.navigator?.userGestureInProgress ?? false));
+    if (settled) _rest = position;
+    return position - (_rest ?? _estimatedRest());
+  }
+
+  Offset _estimatedRest() {
+    var offset = Offset.zero;
+    RenderObject node = this;
+    for (var ancestor = parent; ancestor != null; ancestor = ancestor.parent) {
+      final data = node.parentData;
+      if (data is BoxParentData) offset += data.offset;
+      node = ancestor;
+    }
+    if (route case final CupertinoSheetRoute<Object?> sheet) {
+      final screen = node is RenderView ? node.size.height : size.height;
+      offset += Offset(0, sheet.topGap * screen);
+    }
+    return offset;
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _sync();
+  }
+
+  @override
+  void detach() {
+    GlassCoordinator.instance.clearComposerHost(this);
+    super.detach();
+  }
+}
+
 /// A message composer: native (UIKit) on iOS 26, a Flutter replica with the
 /// same layout elsewhere.
 ///
@@ -100,7 +364,8 @@ class NativeComposerController extends ChangeNotifier {
 /// morph, and the keyboard inset is consumed here so an inner `Scaffold`
 /// doesn't also resize.
 ///
-/// One composer is shown at a time, while its page is visible.
+/// One composer ([NativeComposer] or [NativePromptComposer]) is shown at a
+/// time, while its page is visible.
 class NativeComposer extends StatefulWidget {
   const NativeComposer({
     super.key,
@@ -157,124 +422,61 @@ class NativeComposer extends StatefulWidget {
   State<NativeComposer> createState() => _NativeComposerState();
 }
 
-class _NativeComposerState extends State<NativeComposer> {
-  static _NativeComposerState? _active;
-  static String? _lastSent;
-
-  bool _visible = false;
-  double _height = 0;
-  Duration _duration = Duration.zero;
-  NativeComposerController? _ownController;
-
-  NativeComposerController get _controller => widget.controller ?? (_ownController ??= NativeComposerController());
-  VeneerBridge get _bridge => VeneerBridge.instance;
+class _NativeComposerState extends _ComposerHostState<NativeComposer> {
+  @override
+  String get _style => 'card';
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_bridge.isSupported) return;
-    final visible = Visibility.of(context) && (ModalRoute.isCurrentOf(context) ?? true);
-    if (visible != _visible) {
-      _visible = visible;
-      _push();
-    }
-  }
+  NativeComposerController? get _widgetController => widget.controller;
 
   @override
-  void didUpdateWidget(NativeComposer old) {
-    super.didUpdateWidget(old);
-    if (_visible) _push();
-  }
-
-  void _push() {
-    if (!_bridge.isSupported) return;
-    if (_visible) {
-      _active = this;
-    } else if (_active != this) {
-      return;
-    }
-    final handlers = <String, VoidCallback?>{};
-    Map<String, Object?> button(String id, NativeComposerButton b) {
-      handlers[id] = b.onPressed;
-      return {'id': id, 'icon': b.icon.encode(), 'title': b.title};
-    }
-
-    final config = <String, Object?>{
-      'hidden': !_visible,
-      'placeholder': widget.placeholder,
-      'leading': widget.leading == null ? null : button('leading', widget.leading!),
-      'idle': widget.idleAction == null ? null : button('idle', widget.idleAction!),
-      'toolbar': [for (final (i, b) in widget.toolbar.indexed) button('toolbar$i', b)],
-      'sendIcon': widget.sendIcon?.encode(),
-      'tintColor': widget.tintColor?.toARGB32(),
-      'maxLines': widget.maxLines,
-      'clearOnSend': widget.clearOnSend,
-      'interactiveDismissal': widget.interactiveKeyboardDismissal,
-    };
-    final handlerSet = VeneerComposerHandlers(
-      onButton: (id) => handlers[id]?.call(),
-      onText: (text) {
-        _controller._nativeText(text);
-        widget.onChanged?.call(text);
-      },
-      onFocus: _controller._nativeFocus,
-      onSend: (text) {
-        if (widget.clearOnSend) _controller._nativeText('');
-        widget.onSend?.call(text);
-      },
-      onLayout: (height, duration) {
-        if (!mounted) return;
-        setState(() {
-          _height = height;
-          _duration = duration;
-        });
-      },
-    );
-    final encoded = jsonEncode(config);
-    if (encoded == _lastSent) {
-      _bridge.updateComposerHandlers(handlerSet);
-      return;
-    }
-    final firstShow = _lastSent == null;
-    _lastSent = encoded;
-    _bridge.setComposer(config, handlerSet);
-    if (firstShow && _controller.text.isNotEmpty) _bridge.composerCommand('setText', text: _controller.text);
-  }
+  Widget get _child => widget.child;
 
   @override
-  void dispose() {
-    if (_active == this) {
-      _active = null;
-      _lastSent = null;
-      _bridge.removeComposer();
-    }
-    _ownController?.dispose();
-    super.dispose();
-  }
+  bool get _clearOnSend => widget.clearOnSend;
 
   @override
-  Widget build(BuildContext context) {
-    if (!_bridge.isSupported) return _FallbackComposer(composer: widget, controller: _controller);
-    final mq = MediaQuery.of(context);
-    // The composer sits above whichever is higher: the keyboard (animated by
-    // Flutter from the same system notifications) or the tab bar.
-    final base = math.max(mq.viewInsets.bottom, mq.padding.bottom);
-    return TweenAnimationBuilder<double>(
-      tween: Tween(end: _visible ? _height : 0),
-      duration: _duration,
-      curve: Curves.easeOutCubic,
-      builder: (context, height, child) => MediaQuery(
-        data: mq.copyWith(
-          padding: mq.padding.copyWith(bottom: base + height),
-          viewPadding: mq.viewPadding.copyWith(bottom: math.max(mq.viewPadding.bottom, base + height)),
-          viewInsets: mq.viewInsets.copyWith(bottom: 0),
-        ),
-        child: child!,
-      ),
-      child: widget.child,
-    );
-  }
+  bool get _interactiveDismissal => widget.interactiveKeyboardDismissal;
+
+  @override
+  ValueChanged<String>? get _onSend => widget.onSend;
+
+  @override
+  ValueChanged<String>? get _onChanged => widget.onChanged;
+
+  @override
+  Map<String, Object?> _encode(Map<String, VoidCallback?> handlers) => {
+    'placeholder': widget.placeholder,
+    'leading': widget.leading?._encode('leading', handlers),
+    'idle': widget.idleAction?._encode('idle', handlers),
+    'toolbar': [for (final (i, b) in widget.toolbar.indexed) b._encode('toolbar$i', handlers)],
+    'sendIcon': widget.sendIcon?.encode(),
+    'tintColor': widget.tintColor?.toARGB32(),
+    'maxLines': widget.maxLines,
+  };
+
+  @override
+  Widget _buildFallback(NativeComposerController controller) =>
+      _FallbackComposer(composer: widget, controller: controller);
 }
+
+/// A fallback button: its menu, if any, opens the Flutter menu replica.
+Widget _fallbackTap(NativeComposerButton b, {required Widget child, bool enabled = true}) => Semantics(
+  button: true,
+  label: b.title,
+  excludeSemantics: true,
+  child: Builder(
+    builder: (context) => GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: !enabled
+          ? null
+          : (b.menu?.isNotEmpty ?? false)
+          ? () => showFallbackMenu(context, b.menu!)
+          : b.onPressed,
+      child: child,
+    ),
+  ),
+);
 
 /// Flutter replica of the native composer, for Android and iOS 15–25, with
 /// the same geometry — solid instead of glass:
@@ -389,18 +591,12 @@ class _FallbackComposerState extends State<_FallbackComposer> implements _Compos
     return 22.0 * lines + 22;
   }
 
-  Widget _iconButton(NativeComposerButton b, Color color) => Semantics(
-    button: true,
-    label: b.title,
-    excludeSemantics: true,
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: b.onPressed,
-      child: SizedBox(
-        width: _row,
-        height: _row,
-        child: Center(child: NativeIconView(b.icon, size: 22, color: color)),
-      ),
+  Widget _iconButton(NativeComposerButton b, Color color) => _fallbackTap(
+    b,
+    child: SizedBox(
+      width: _row,
+      height: _row,
+      child: Center(child: NativeIconView(b.icon, size: 22, color: color)),
     ),
   );
 
@@ -464,20 +660,15 @@ class _FallbackComposerState extends State<_FallbackComposer> implements _Compos
                   top: expanded ? rowTop + (_row - _circle) / 2 : (_idleHeight - _circle) / 2,
                   width: _circle,
                   height: _circle,
-                  child: Semantics(
-                    button: true,
-                    label: leading.title,
-                    excludeSemantics: true,
-                    child: GestureDetector(
-                      onTap: leading.onPressed,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: style.innerSurface,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: style.border, width: 0.5),
-                        ),
-                        child: Center(child: NativeIconView(leading.icon, size: 20, color: style.label)),
+                  child: _fallbackTap(
+                    leading,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: style.innerSurface,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: style.border, width: 0.5),
                       ),
+                      child: Center(child: NativeIconView(leading.icon, size: 20, color: style.label)),
                     ),
                   ),
                 ),

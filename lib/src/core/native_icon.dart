@@ -13,6 +13,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 /// NativeIcon.svgAsset('assets/icons/star.svg')       // SVG asset
 /// NativeIcon.svgFile('/path/to/downloaded.svg')      // SVG file on disk
 /// NativeIcon.svg('<svg …>…</svg>')                    // SVG markup
+/// NativeIcon.image('assets/photos/trail.jpg')        // PNG/JPEG asset, own colours
+/// NativeIcon.imageFile('/path/to/photo.heic')        // image file on disk
 /// ```
 ///
 /// **IconData** is drawn from the app's own copy of the icon font, laid out
@@ -54,6 +56,13 @@ sealed class NativeIcon {
 
   /// SVG markup.
   const factory NativeIcon.svg(String svg, {bool tinted}) = _SvgStringIcon;
+
+  /// A raster image (PNG, JPEG, HEIC…) from the app's assets, drawn in its
+  /// own colours — for photos, thumbnails and avatars rather than glyphs.
+  const factory NativeIcon.image(String asset, {String? package}) = _ImageAssetIcon;
+
+  /// A raster image file on disk, e.g. a photo the user picked.
+  const factory NativeIcon.imageFile(String path) = _ImageFileIcon;
 
   /// Wire format for the native side (`NativeIconDescriptor`).
   Map<String, Object?> encode();
@@ -169,15 +178,54 @@ final class _SvgStringIcon extends NativeIcon {
   int get hashCode => Object.hash(svg, tinted);
 }
 
+final class _ImageAssetIcon extends NativeIcon {
+  const _ImageAssetIcon(this.asset, {this.package});
+  final String asset;
+  final String? package;
+
+  @override
+  Map<String, Object?> encode() => {'type': 'imageAsset', 'asset': asset, 'package': package};
+
+  @override
+  bool operator ==(Object other) => other is _ImageAssetIcon && other.asset == asset && other.package == package;
+
+  @override
+  int get hashCode => Object.hash(asset, package);
+}
+
+final class _ImageFileIcon extends NativeIcon {
+  const _ImageFileIcon(this.path);
+  final String path;
+
+  @override
+  Map<String, Object?> encode() => {'type': 'imageFile', 'path': path};
+
+  @override
+  bool operator ==(Object other) => other is _ImageFileIcon && other.path == path;
+
+  @override
+  int get hashCode => path.hashCode;
+}
+
 /// Renders a [NativeIcon] with Flutter, for the fallback UI where the native
 /// layer isn't available (Android, iOS 15–25). Sizes and colours follow the
 /// ambient [IconTheme] unless given.
 class NativeIconView extends StatelessWidget {
-  const NativeIconView(this.icon, {super.key, this.size, this.color});
+  const NativeIconView(this.icon, {super.key, this.size, this.color, this.fit = BoxFit.contain});
 
   final NativeIcon icon;
   final double? size;
   final Color? color;
+
+  /// How raster images and colour SVGs fill the box (thumbnails use cover).
+  final BoxFit fit;
+
+  /// Whether the icon keeps its own colours (raster images, untinted SVGs).
+  static bool keepsColors(NativeIcon icon) => switch (icon) {
+    _ImageAssetIcon() || _ImageFileIcon() => true,
+    _SvgAssetIcon(:final tinted) || _SvgFileIcon(:final tinted) || _SvgStringIcon(:final tinted) => !tinted,
+    _ => false,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -201,10 +249,25 @@ class NativeIconView extends StatelessWidget {
         package: i.package,
         width: size,
         height: size,
+        fit: fit,
         colorFilter: tint(i.tinted),
       ),
-      final _SvgFileIcon i => SvgPicture.file(File(i.path), width: size, height: size, colorFilter: tint(i.tinted)),
-      final _SvgStringIcon i => SvgPicture.string(i.svg, width: size, height: size, colorFilter: tint(i.tinted)),
+      final _SvgFileIcon i => SvgPicture.file(
+        File(i.path),
+        width: size,
+        height: size,
+        fit: fit,
+        colorFilter: tint(i.tinted),
+      ),
+      final _SvgStringIcon i => SvgPicture.string(
+        i.svg,
+        width: size,
+        height: size,
+        fit: fit,
+        colorFilter: tint(i.tinted),
+      ),
+      final _ImageAssetIcon i => Image.asset(i.asset, package: i.package, width: size, height: size, fit: fit),
+      final _ImageFileIcon i => Image.file(File(i.path), width: size, height: size, fit: fit),
     };
   }
 }
@@ -284,4 +347,23 @@ const Map<String, IconData> sfSymbolFallbacks = {
   'pencil': Icons.edit_outlined,
   'folder': Icons.folder_outlined,
   'doc': Icons.description_outlined,
+  'doc.fill': Icons.description,
+  'waveform': Icons.graphic_eq,
+  'mic.slash': Icons.mic_off_outlined,
+  'mic.slash.fill': Icons.mic_off,
+  'arrow.up': Icons.arrow_upward,
+  'square.and.pencil': Icons.edit_square,
+  'slider.horizontal.3': Icons.tune,
+  'line.3.horizontal': Icons.menu,
+  'photo.on.rectangle': Icons.photo_library_outlined,
+  'camera.fill': Icons.photo_camera,
+  'paperclip': Icons.attach_file,
+  'globe': Icons.language,
+  'lightbulb': Icons.lightbulb_outline,
+  'square.and.arrow.down': Icons.download_outlined,
+  'arrow.clockwise': Icons.refresh,
+  'doc.on.doc': Icons.content_copy,
+  'hand.thumbsup': Icons.thumb_up_outlined,
+  'hand.thumbsdown': Icons.thumb_down_outlined,
+  'speaker.wave.2': Icons.volume_up_outlined,
 };

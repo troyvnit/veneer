@@ -1,7 +1,8 @@
 import Flutter
 import UIKit
 
-/// Plugin entry point.
+/// Plugin entry point, one instance per Flutter engine (the app's, and one
+/// per native sheet).
 ///
 /// Two transports reach the native side:
 ///   * `veneer` method channel — config, chrome, events (async).
@@ -16,17 +17,23 @@ import UIKit
 /// (Liquid Glass, `UITab`, scroll edge effects). Below that, `attach` answers
 /// `unsupported` and the Dart widgets render their Flutter fallbacks.
 public class VeneerPlugin: NSObject, FlutterPlugin {
-  static var shared: VeneerPlugin?
+  /// Live instances by id, for the FFI entry point to route each engine's
+  /// frames to its own overlay.
+  private static var instances: [Int: WeakPlugin] = [:]
+  private static var nextId = 1
 
-  /// Geometry buffer shared with Dart, which writes into it through an
-  /// `asTypedList` view and then calls `veneer_apply_frame` — no copy, no
-  /// allocation per frame. Lives for the process lifetime.
+  static func instance(_ id: Int) -> VeneerPlugin? { instances[id]?.plugin }
+
+  /// Geometry buffer shared with this engine's Dart isolate, which writes into
+  /// it through an `asTypedList` view and then calls `veneer_apply_frame` —
+  /// no copy, no allocation per frame.
   static let frameBufferCapacity = 2 + FrameLayout.stride * 512
-  static let frameBuffer: UnsafeMutablePointer<Double> = {
-    let p = UnsafeMutablePointer<Double>.allocate(capacity: frameBufferCapacity)
-    p.initialize(repeating: 0, count: frameBufferCapacity)
+  let frameBuffer: UnsafeMutablePointer<Double> = {
+    let p = UnsafeMutablePointer<Double>.allocate(capacity: VeneerPlugin.frameBufferCapacity)
+    p.initialize(repeating: 0, count: VeneerPlugin.frameBufferCapacity)
     return p
   }()
+  let id: Int
 
   private let registrar: FlutterPluginRegistrar
   private let channel: FlutterMethodChannel
@@ -40,13 +47,21 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
   init(registrar: FlutterPluginRegistrar, channel: FlutterMethodChannel) {
     self.registrar = registrar
     self.channel = channel
+    id = Self.nextId
+    Self.nextId += 1
+    super.init()
+    Self.instances[id] = WeakPlugin(plugin: self)
+  }
+
+  deinit {
+    Self.instances[id] = nil
+    frameBuffer.deallocate()
   }
 
   public static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(name: "veneer", binaryMessenger: registrar.messenger())
     let instance = VeneerPlugin(registrar: registrar, channel: channel)
     registrar.addMethodCallDelegate(instance, channel: channel)
-    shared = instance
     guard #available(iOS 26.0, *) else { return }
     NativeIconRenderer.shared.assetPath = { [weak registrar] asset, package in
       guard let registrar else { return nil }
@@ -71,11 +86,12 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
         return
       }
       overlay.glassLayer.defaultSpacing = CGFloat((args["spacing"] as? NSNumber)?.doubleValue ?? 16)
-      let fn: @convention(c) (UnsafePointer<Double>?, Int32) -> Void = veneer_apply_frame
+      let fn: @convention(c) (UnsafePointer<Double>?, Int32, Int32) -> Void = veneer_apply_frame
       result([
         "applyFrameAddress": Int(bitPattern: unsafeBitCast(fn, to: UnsafeRawPointer.self)),
-        "bufferAddress": Int(bitPattern: UnsafeRawPointer(Self.frameBuffer)),
+        "bufferAddress": Int(bitPattern: UnsafeRawPointer(frameBuffer)),
         "bufferCapacity": Self.frameBufferCapacity,
+        "pluginId": id,
       ])
 
     case "applyFrame":
@@ -139,6 +155,29 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
       overlay?.setChromeHidden((args["hidden"] as? Bool) ?? false)
       result(nil)
 
+    case "prewarmSheet":
+      if let entrypoint = args["entrypoint"] as? String {
+        NativeSheetPresenter.shared.prewarm(entrypoint: entrypoint, libraryURI: args["libraryUri"] as? String)
+      }
+      result(nil)
+
+    case "presentSheet":
+      let presented = NativeSheetPresenter.shared.present(args, from: registrar.viewController) { [weak self] method, payload in
+        self?.channel.invokeMethod(method, arguments: payload)
+      }
+      result(presented)
+
+    case "sheetContentAtTop":
+      overlay?.setSheetContentAtTop((args["atTop"] as? Bool) ?? true)
+      result(nil)
+
+    case "dismissSheet":
+      // From inside a sheet: dismiss the sheet showing this engine.
+      let session = (args["id"] as? NSNumber).flatMap { NativeSheetPresenter.shared.session(id: $0.intValue) }
+        ?? NativeSheetPresenter.shared.session(showing: registrar.viewController)
+      session?.dismiss(result: args["result"])
+      result(session != nil)
+
     case "getStats":
       var snapshot = stats.snapshot()
       overlay?.glassLayer.diagnostics.forEach { snapshot[$0.key] = $0.value }
@@ -179,7 +218,9 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
   func applyFrame(_ ptr: UnsafePointer<Double>?, count: Int, transport: Transport) {
     guard let ptr, count >= 2, let overlay else { return }
     let start = CACurrentMediaTime()
-    overlay.glassLayer.apply(UnsafeBufferPointer(start: ptr, count: count))
+    let buffer = UnsafeBufferPointer(start: ptr, count: count)
+    overlay.glassLayer.apply(buffer)
+    overlay.setComposerOffset(FrameLayout.composerOffset(in: buffer))
     // Reordering subviews can trigger layout; never do it inside the frame.
     DispatchQueue.main.async { overlay.keepOnTop() }
     stats.record(
@@ -197,8 +238,8 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
 /// `GlassLayerView.apply` still avoids forcing layout, to keep the Flutter
 /// frame from being re-entered.
 @_cdecl("veneer_apply_frame")
-func veneer_apply_frame(_ ptr: UnsafePointer<Double>?, _ count: Int32) {
-  guard #available(iOS 26.0, *), let plugin = VeneerPlugin.shared else { return }
+func veneer_apply_frame(_ ptr: UnsafePointer<Double>?, _ count: Int32, _ pluginId: Int32) {
+  guard #available(iOS 26.0, *), let plugin = VeneerPlugin.instance(Int(pluginId)) else { return }
   if Thread.isMainThread {
     MainActor.assumeIsolated {
       plugin.applyFrame(ptr, count: Int(count), transport: .ffi)
@@ -213,10 +254,28 @@ func veneer_apply_frame(_ ptr: UnsafePointer<Double>?, _ count: Int32) {
   }
 }
 
+private struct WeakPlugin {
+  weak var plugin: VeneerPlugin?
+}
+
 /// Per-shape layout of the frame buffer, shared by Dart's `GlassCoordinator`
 /// and `GlassLayerView.apply`.
 enum FrameLayout {
   static let stride = 20
+  /// Entry id carrying the active composer's page displacement (dx, dy)
+  /// instead of a shape.
+  static let composerHostId = -1
+
+  static func composerOffset(in buf: UnsafeBufferPointer<Double>) -> CGPoint {
+    guard buf.count >= 2 else { return .zero }
+    let count = Int(buf[1])
+    guard buf.count >= 2 + count * stride else { return .zero }
+    for i in 0..<count {
+      let o = 2 + i * stride
+      if Int(buf[o]) == composerHostId { return CGPoint(x: buf[o + 1], y: buf[o + 2]) }
+    }
+    return .zero
+  }
 }
 
 /// Counters exposed to the example app's diagnostics panel.

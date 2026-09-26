@@ -4,10 +4,11 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'veneer'
-  s.version          = '0.0.1'
-  s.summary          = 'A thin layer of real native iOS UI over Flutter (prototype).'
+  s.version          = '0.1.0'
+  s.summary          = 'Real native iOS 26 UI for Flutter: Liquid Glass, UIKit bars, composers and sheets.'
   s.description      = <<-DESC
-UIKit chrome and a shared UIGlassContainerEffect layer above the Flutter surface.
+One native overlay above the Flutter surface, driven by Flutter layout every frame: UIKit tab
+and navigation bars, native composers and sheets, and Liquid Glass that refracts Flutter content.
                        DESC
   s.homepage         = 'https://github.com/troyvnit/veneer'
   s.license          = { :file => '../LICENSE' }

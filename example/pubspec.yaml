@@ -1,5 +1,5 @@
 name: veneer_example
-description: "Demonstrates how to use the veneer plugin."
+description: "A messaging app that exercises every Veneer component."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -55,6 +55,14 @@ flutter:
 
   assets:
     - assets/icons/
+    - assets/images/
+
+  # The example's icon font, built from Phosphor Icons (MIT) by
+  # tool/icon_font/build_icon_font.py.
+  fonts:
+    - family: AppIcons
+      fonts:
+        - asset: assets/fonts/AppIcons.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:

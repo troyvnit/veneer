@@ -7,6 +7,7 @@ import UIKit
 final class GlassShapeView: UIVisualEffectView {
   let id: Int
   var onTap: ((Int) -> Void)?
+  var onMenu: ((Int, Int) -> Void)?
   private(set) var isInteractive = false
   private(set) var isShown = false
   /// Latest visibility requested by Flutter; `isShown` catches up async.
@@ -21,6 +22,9 @@ final class GlassShapeView: UIVisualEffectView {
   private let imageView = UIImageView()
   private let label = UILabel()
   private lazy var tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+  /// Covers the shape when it has a menu, so a tap opens the `UIMenu`
+  /// growing out of the glass.
+  private var menuButton: UIButton?
 
   /// Default for glyphs and SVGs: matches an SF Symbol at the body text style.
   private static let iconSize: CGFloat = 22
@@ -57,8 +61,28 @@ final class GlassShapeView: UIVisualEffectView {
     glass = g
     if isShown { effect = g }
 
-    isInteractive = c.interactive
-    if c.interactive { addGestureRecognizer(tap) } else { removeGestureRecognizer(tap) }
+    let menu = NativeMenu.make(c.menu, id: "\(id)") { [weak self] item in
+      guard let self, let index = Int(item.components(separatedBy: ".menu").last ?? "") else { return }
+      self.onMenu?(self.id, index)
+    }
+    isInteractive = c.interactive || menu != nil
+    if c.interactive && menu == nil { addGestureRecognizer(tap) } else { removeGestureRecognizer(tap) }
+    if let menu {
+      let button = menuButton ?? {
+        let b = UIButton(type: .custom)
+        b.showsMenuAsPrimaryAction = true
+        b.frame = contentView.bounds
+        b.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        contentView.addSubview(b)
+        menuButton = b
+        return b
+      }()
+      button.menu = menu
+      button.accessibilityLabel = c.label
+    } else {
+      menuButton?.removeFromSuperview()
+      menuButton = nil
+    }
 
     if let r = c.cornerRadius {
       cornerConfiguration = .corners(radius: .fixed(r))
@@ -79,7 +103,7 @@ final class GlassShapeView: UIVisualEffectView {
     imageView.tintColor = c.foreground ?? .label
     label.textColor = c.foreground ?? .label
     accessibilityLabel = c.label
-    isAccessibilityElement = c.interactive
+    isAccessibilityElement = c.interactive && menu == nil
     accessibilityTraits = c.interactive ? .button : .none
   }
 

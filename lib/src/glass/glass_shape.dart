@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../core/fallback_scope.dart';
 import '../core/fallback_style.dart';
 import '../core/native_icon.dart';
+import '../core/native_menu.dart';
 import '../core/veneer_bridge.dart';
 import 'glass_coordinator.dart';
 import 'glass_group.dart';
@@ -24,6 +27,10 @@ enum GlassStyle { regular, clear }
 /// When [onTap] is set the shape is interactive: touches go to UIKit, which
 /// runs the real `UIGlassEffect.isInteractive` response, and the tap comes
 /// back to Dart. Touches on non-interactive shapes pass through to Flutter.
+///
+/// With a [menu], tapping opens a native `UIMenu` that grows out of the
+/// glass (a Flutter replica off iOS 26) — e.g. a "more" button in a sheet
+/// header.
 class GlassShape extends StatefulWidget {
   const GlassShape({
     super.key,
@@ -37,6 +44,7 @@ class GlassShape extends StatefulWidget {
     this.label,
     this.foreground,
     this.onTap,
+    this.menu,
   });
 
   /// Null fills the incoming constraints on that axis.
@@ -58,6 +66,9 @@ class GlassShape extends StatefulWidget {
   final Color? foreground;
   final VoidCallback? onTap;
 
+  /// Tapping opens this menu instead of calling [onTap].
+  final List<NativeMenuItem>? menu;
+
   @override
   State<GlassShape> createState() => _GlassShapeState();
 }
@@ -67,10 +78,12 @@ class _GlassShapeState extends State<GlassShape> {
   final int _id = _nextId++;
 
   int? _group;
+  bool _native = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _native = useNativeLayer(context);
     // Runs after initState and whenever the enclosing GlassGroup changes;
     // moving to another group reparents the native view.
     final group = GlassGroup.groupIdOf(context);
@@ -90,25 +103,38 @@ class _GlassShapeState extends State<GlassShape> {
         old.iconSize != widget.iconSize ||
         old.label != widget.label ||
         old.foreground != widget.foreground ||
-        (old.onTap == null) != (widget.onTap == null)) {
+        (old.onTap == null) != (widget.onTap == null) ||
+        _menuKey(old.menu) != _menuKey(widget.menu)) {
       _configure();
     }
   }
 
+  static String _menuKey(List<NativeMenuItem>? menu) =>
+      jsonEncode([for (final item in menu ?? const <NativeMenuItem>[]) item.encode()]);
+
   void _configure() {
+    if (!_native) return;
     VeneerBridge.instance
-        .configureShape({
-          'id': _id,
-          'group': _group,
-          'style': widget.style.name,
-          'tint': widget.tint?.toARGB32(),
-          'interactive': widget.onTap != null,
-          'cornerRadius': widget.cornerRadius,
-          'icon': widget.icon?.encode(),
-          'iconSize': widget.iconSize,
-          'label': widget.label,
-          'foreground': widget.foreground?.toARGB32(),
-        }, widget.onTap == null ? null : () => widget.onTap?.call())
+        .configureShape(
+          {
+            'id': _id,
+            'group': _group,
+            'style': widget.style.name,
+            'tint': widget.tint?.toARGB32(),
+            'interactive': widget.onTap != null,
+            'cornerRadius': widget.cornerRadius,
+            'icon': widget.icon?.encode(),
+            'iconSize': widget.iconSize,
+            'label': widget.label,
+            'foreground': widget.foreground?.toARGB32(),
+            'menu': encodeMenu('$_id', widget.menu, {}),
+          },
+          widget.onTap == null ? null : () => widget.onTap?.call(),
+          onMenu: (index) {
+            final menu = widget.menu;
+            if (menu != null && index < menu.length) menu[index].onSelected?.call();
+          },
+        )
         // The native view may be created after geometry for this id was
         // already sent; resend on the next frame.
         .then((_) => GlassCoordinator.instance.markDirty());
@@ -116,19 +142,19 @@ class _GlassShapeState extends State<GlassShape> {
 
   @override
   void dispose() {
-    VeneerBridge.instance.removeShape(_id);
+    if (_native) VeneerBridge.instance.removeShape(_id);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!VeneerBridge.instance.isSupported) return _FallbackGlassShape(widget);
+    if (!_native) return _FallbackGlassShape(widget);
     // Hide when another route covers ours or an IndexedStack/Visibility
     // hides us: native glass would otherwise float above that content.
     // Offstage and zero opacity are caught by the coordinator's paint walk.
     final visible = Visibility.of(context) && (ModalRoute.isCurrentOf(context) ?? true);
     return Semantics(
-      button: widget.onTap != null,
+      button: widget.onTap != null || widget.menu != null,
       label: widget.label,
       onTap: widget.onTap,
       child: _GlassAnchor(
@@ -207,11 +233,13 @@ class _FallbackGlassShapeState extends State<_FallbackGlassShape> {
         child: LayoutBuilder(
           builder: (context, c) {
             final radius = shape.cornerRadius ?? math.min(c.maxWidth, c.maxHeight) / 2;
+            final hasMenu = shape.menu?.isNotEmpty ?? false;
+            final onTap = hasMenu ? () => showFallbackMenu(context, shape.menu!) : shape.onTap;
             return GestureDetector(
-              onTapDown: shape.onTap == null ? null : (_) => setState(() => _pressed = true),
-              onTapUp: shape.onTap == null ? null : (_) => setState(() => _pressed = false),
-              onTapCancel: shape.onTap == null ? null : () => setState(() => _pressed = false),
-              onTap: shape.onTap,
+              onTapDown: onTap == null ? null : (_) => setState(() => _pressed = true),
+              onTapUp: onTap == null ? null : (_) => setState(() => _pressed = false),
+              onTapCancel: onTap == null ? null : () => setState(() => _pressed = false),
+              onTap: onTap,
               child: AnimatedScale(
                 // Mirrors the native interactive glass's slight swell on press.
                 scale: _pressed ? 1.04 : 1,

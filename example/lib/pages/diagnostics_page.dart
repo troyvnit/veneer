@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:veneer/veneer.dart';
 
 import '../main.dart' show TrailingIconKind, openSyncTest, trailingIconKind;
+import '../app_icons.dart';
 
 /// Transport A/B switch, native apply stats, and overlay edge cases
 /// (Flutter dialog over native chrome, pushed route over glass).
@@ -49,7 +50,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
         children: [
           FilledButton.icon(
             onPressed: () => openSyncTest(context),
-            icon: const Icon(Icons.swap_vert),
+            icon: const Icon(AppIcons.arrowsDownUp),
             label: const Text('Open sync lag test'),
           ),
           const SizedBox(height: 24),
@@ -101,6 +102,8 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
               GlassShape(width: 64, height: 64, iconSize: 30, icon: NativeIcon.icon(Icons.rocket_launch)),
               GlassShape(width: 64, height: 64, iconSize: 30, icon: NativeIcon.icon(CupertinoIcons.heart_fill)),
               GlassShape(width: 64, height: 64, iconSize: 30, icon: NativeIcon.icon(Icons.arrow_forward)),
+              // A custom icon font bundled with the app.
+              GlassShape(width: 64, height: 64, iconSize: 30, icon: NativeIcon.icon(AppIcons.rocketLaunch)),
               GlassShape(width: 64, height: 64, iconSize: 30, icon: NativeIcon.svg(_inlineSvg)),
             ],
           ),
@@ -151,7 +154,7 @@ class _DiagnosticsPageState extends State<DiagnosticsPage> {
                     child: GlassShape(
                       width: 220,
                       height: 56,
-                      icon: NativeIcon.symbol('checkmark'),
+                      icon: NativeIcon.icon(AppIcons.check),
                       label: 'Glass on route 2',
                     ),
                   ),

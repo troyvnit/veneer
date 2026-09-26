@@ -2,8 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../core/fallback_scope.dart';
 import '../core/fallback_style.dart';
 import '../core/native_icon.dart';
+import '../core/native_menu.dart';
 import '../core/veneer_bridge.dart';
 
 /// How content fades under native chrome: iOS 26's scroll edge effect.
@@ -24,13 +26,16 @@ enum NativeScrollEdgeEffect {
 /// capsule by UIKit.
 @immutable
 class NativeBarButton {
-  const NativeBarButton({required this.icon, this.title, this.onPressed});
+  const NativeBarButton({required this.icon, this.title, this.onPressed, this.menu});
 
   final NativeIcon icon;
 
   /// VoiceOver label (shown instead of the icon only if the icon fails).
   final String? title;
   final VoidCallback? onPressed;
+
+  /// Tapping opens this menu (a native `UIMenu`) instead of [onPressed].
+  final List<NativeMenuItem>? menu;
 }
 
 /// The bar's title. By default the system's centred title and subtitle; with
@@ -88,27 +93,38 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
   static _NativeNavigationBarState? _active;
   static String? _lastSent;
   bool _visible = false;
+  bool _native = false;
 
   VeneerBridge get _bridge => VeneerBridge.instance;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final visible = Visibility.of(context) && (ModalRoute.isCurrentOf(context) ?? true);
-    if (visible != _visible) {
-      _visible = visible;
-      _push();
-    }
+    _refresh();
   }
 
   @override
   void didUpdateWidget(NativeNavigationBar old) {
     super.didUpdateWidget(old);
-    if (_visible) _push();
+    _refresh(resend: true);
+  }
+
+  /// Checked against the live route: a covered page can rebuild before it
+  /// hears it's no longer current, and must not take the bar back.
+  void _refresh({bool resend = false}) {
+    _native = useNativeLayer(context);
+    if (!_native) return;
+    final visible = Visibility.of(context) && (ModalRoute.of(context)?.isCurrent ?? true);
+    if (visible != _visible) {
+      _visible = visible;
+      _push();
+    } else if (resend && _visible) {
+      _push();
+    }
   }
 
   void _push() {
-    if (!_bridge.isSupported) return;
+    if (!_native) return;
     if (_visible) {
       _active = this;
     } else if (_active != this) {
@@ -117,7 +133,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
     final handlers = <String, VoidCallback?>{};
     Map<String, Object?> button(String id, NativeBarButton b) {
       handlers[id] = b.onPressed;
-      return {'id': id, 'icon': b.icon.encode(), 'title': b.title};
+      return {'id': id, 'icon': b.icon.encode(), 'title': b.title, 'menu': encodeMenu(id, b.menu, handlers)};
     }
 
     final title = widget.title;
@@ -160,7 +176,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
   }
 
   @override
-  Widget build(BuildContext context) => _bridge.isSupported ? widget.child : _FallbackNavigationBar(widget);
+  Widget build(BuildContext context) => _native ? widget.child : _FallbackNavigationBar(widget);
 }
 
 /// Flutter replica of the native bar, for Android and iOS 15–25: the same
@@ -191,13 +207,15 @@ class _FallbackNavigationBar extends StatelessWidget {
       button: true,
       label: b.title,
       excludeSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: b.onPressed,
-        child: SizedBox(
-          width: width,
-          height: item,
-          child: Center(child: NativeIconView(b.icon, size: 24, color: foreground)),
+      child: Builder(
+        builder: (context) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: b.menu?.isNotEmpty ?? false ? () => showFallbackMenu(context, b.menu!) : b.onPressed,
+          child: SizedBox(
+            width: width,
+            height: item,
+            child: Center(child: NativeIconView(b.icon, size: 24, color: foreground)),
+          ),
         ),
       ),
     );
@@ -263,7 +281,13 @@ class _FallbackNavigationBar extends StatelessWidget {
           const SizedBox(width: spacing),
         ] else
           const Spacer(),
-        if (bar.trailing.isNotEmpty)
+        // One button is a 44 pt circle, like the leading one; several share a capsule.
+        if (bar.trailing.length == 1)
+          DecoratedBox(
+            decoration: style.surfaceDecoration(shape: BoxShape.circle),
+            child: iconButton(bar.trailing.single),
+          )
+        else if (bar.trailing.isNotEmpty)
           Container(
             height: item,
             padding: const EdgeInsets.symmetric(horizontal: 3),

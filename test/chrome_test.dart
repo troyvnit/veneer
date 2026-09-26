@@ -147,6 +147,112 @@ void main() {
     expect((calls.last.arguments as Map)['command'], 'unfocus');
   });
 
+  testWidgets('prompt composer: config, menus, side actions and attachment removal', variant: ios, (tester) async {
+    final events = <String>[];
+    var removed = 0;
+    Widget page({bool voice = false, bool attached = true}) => MaterialApp(
+      home: NativePromptComposer(
+        placeholder: 'Ask anything',
+        leading: NativeComposerButton(
+          icon: const NativeIcon.symbol('plus'),
+          title: 'Add',
+          menu: [NativeMenuItem(title: 'Photos', onSelected: () => events.add('photos'))],
+        ),
+        actions: [NativeComposerButton(icon: const NativeIcon.symbol('mic'), onPressed: () => events.add('dictate'))],
+        primaryAction: NativeComposerButton(
+          icon: const NativeIcon.symbol('waveform'),
+          onPressed: () => events.add('voice'),
+        ),
+        sideActions: [
+          NativeComposerButton(icon: const NativeIcon.symbol('mic.slash'), onPressed: () => events.add('mute')),
+          NativeComposerButton(icon: const NativeIcon.symbol('xmark'), prominent: true, onPressed: () {}),
+        ],
+        showSideActions: voice,
+        attachments: [
+          if (attached)
+            NativeComposerAttachment(
+              id: 'p1',
+              thumbnail: const NativeIcon.image('assets/lake.jpg'),
+              onRemove: () => removed++,
+            ),
+        ],
+        child: const SizedBox(),
+      ),
+    );
+
+    await tester.pumpWidget(page());
+    await tester.pump();
+    final config = sent('setComposer').single;
+    expect(config['style'], 'prompt');
+    expect(config['sideShown'], isFalse);
+    expect((config['leading']! as Map)['menu'], [
+      {'title': 'Photos', 'icon': null, 'destructive': false},
+    ]);
+    expect((config['side']! as List).last, containsPair('prominent', true));
+    expect(
+      (config['attachments']! as List).single,
+      containsPair('thumbnail', {'type': 'imageAsset', 'asset': 'assets/lake.jpg', 'package': null}),
+    );
+
+    for (final id in ['leading.menu0', 'action0', 'primary', 'side0']) {
+      await nativeEvent('composerButton', {'id': id});
+    }
+    expect(events, ['photos', 'dictate', 'voice', 'mute']);
+
+    await nativeEvent('composerAttachmentRemoved', {'id': 'p1'});
+    expect(removed, 1);
+
+    await tester.pumpWidget(page(voice: true));
+    await tester.pump();
+    expect(sent('setComposer').last['sideShown'], isTrue, reason: 'side actions split off');
+  });
+
+  testWidgets('a route pushed over the tab bar page hides the bar, popping shows it', variant: ios, (tester) async {
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        home: NativeChromeScope(
+          tabs: const [NativeTabItem(title: 'Home', icon: NativeIcon.symbol('house'))],
+          selectedIndex: 0,
+          onTabSelected: (_) {},
+          child: const SizedBox(),
+        ),
+      ),
+    );
+    await tester.pump();
+    navigator.currentState!.push(MaterialPageRoute<void>(builder: (_) => const SizedBox()));
+    await tester.pumpAndSettle();
+    expect(sent('setChromeHidden').last['hidden'], isTrue);
+    navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+    expect(sent('setChromeHidden').last['hidden'], isFalse);
+  });
+
+  testWidgets('glass shape menus are sent natively and picks come back', (tester) async {
+    var picked = -1;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: GlassShape(
+            width: 44,
+            height: 44,
+            icon: const NativeIcon.symbol('ellipsis'),
+            menu: [
+              NativeMenuItem(title: 'Share', onSelected: () => picked = 0),
+              NativeMenuItem(title: 'Delete', destructive: true, onSelected: () => picked = 1),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final config = sent('configureShape').last;
+    expect((config['menu']! as List).last, {'title': 'Delete', 'icon': null, 'destructive': true});
+    await nativeEvent('shapeMenu', {'id': config['id'], 'index': 1});
+    expect(picked, 1);
+  });
+
   test('tab bar rejects more items than UIKit shows without a More tab', () {
     expect(
       () => NativeChromeScope(

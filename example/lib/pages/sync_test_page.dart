@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:veneer/veneer.dart';
 
 import '../main.dart' show launchMeasureMode;
+import '../app_icons.dart';
 
 /// Measures how far native glass trails Flutter during scrolling.
 ///
@@ -97,7 +98,7 @@ class _SyncTestPageState extends State<SyncTestPage> with SingleTickerProviderSt
                   GlassShape(
                     width: 170,
                     height: 48,
-                    icon: NativeIcon.symbol(_autoScrolling ? 'pause.fill' : 'play.fill'),
+                    icon: NativeIcon.icon(_autoScrolling ? AppIcons.pauseFill : AppIcons.playFill),
                     label: _autoScrolling ? 'Stop' : 'Auto-scroll',
                     onTap: _toggleAutoScroll,
                   ),
@@ -105,7 +106,7 @@ class _SyncTestPageState extends State<SyncTestPage> with SingleTickerProviderSt
                   GlassShape(
                     width: 48,
                     height: 48,
-                    icon: NativeIcon.symbol(_measureMode ? 'ruler.fill' : 'ruler'),
+                    icon: NativeIcon.icon(AppIcons.ruler),
                     onTap: () => setState(() => _measureMode = !_measureMode),
                   ),
                 ],
@@ -154,7 +155,7 @@ class _Row extends StatelessWidget {
                 child: GlassShape(
                   width: 200,
                   height: 52,
-                  icon: NativeIcon.symbol('sparkles'),
+                  icon: NativeIcon.icon(AppIcons.sparkleFill),
                   label: 'Row $index',
                   tint: measureMode ? const Color(0xE600C800) : null,
                 ),

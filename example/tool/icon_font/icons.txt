@@ -1,0 +1,66 @@
+# Icons compiled into example/assets/fonts/AppIcons.ttf from Phosphor Icons
+# (https://phosphoricons.com, MIT). One per line:
+#   <phosphor-name>[:fill] [dartName]
+# Weight defaults to regular. The Dart name defaults to the camel-cased
+# Phosphor name, plus "Fill" for the fill weight.
+
+# Navigation and bars
+caret-left
+x close
+dots-three
+note-pencil
+sliders-horizontal
+export share
+check
+lock:fill
+headphones
+
+# Tabs
+chats-circle
+chats-circle:fill
+drop
+drop:fill
+scissors
+gauge
+
+# Composers and menus
+plus
+microphone
+microphone-slash
+waveform
+paper-plane-tilt:fill
+text-aa
+smiley
+at
+images
+camera
+file-text
+file-text:fill
+pencil-simple
+trash
+sparkle
+sparkle:fill
+
+# Assistant replies
+copy
+thumbs-up
+thumbs-down
+speaker-high
+
+# Glass demos
+heart:fill
+lightning:fill
+tag:fill
+circle-half
+hand-grabbing
+squares-four
+arrows-left-right
+stack
+stack:fill
+rocket-launch
+arrow-right
+play:fill
+pause:fill
+ruler
+arrows-down-up
+circle:fill

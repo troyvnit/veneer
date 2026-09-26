@@ -19,6 +19,11 @@ import '../core/veneer_bridge.dart';
 /// Buffer layout — `[frameNumber, count, shape * count]`, each shape:
 ///   0 id · 1–4 rect LTWH · 5 visible · 6 clip id · 7 clip flags (1 rect, 2 rrect)
 ///   8–11 clip rect LTWH · 12–15 clip rrect LTWH · 16–19 radii TL TR BR BL
+///
+/// One extra entry, id [composerHostId], carries how far the active
+/// composer's page has moved from where it rests (entry fields 1–2: dx, dy),
+/// so the native composer rides its page — a sheet sliding up or dragged
+/// down, a route sliding in — in the same frame.
 class GlassCoordinator {
   GlassCoordinator._() {
     SchedulerBinding.instance.addPersistentFrameCallback(_onFrame);
@@ -28,6 +33,30 @@ class GlassCoordinator {
   static final GlassCoordinator instance = GlassCoordinator._();
 
   static const int stride = 20;
+  static const int composerHostId = -1;
+
+  final Map<Object, (int, Offset Function())> _composerHosts = {};
+
+  /// Registers a composer widget that's showing; [offset] reports its page's
+  /// displacement from rest each frame. The most recently shown one
+  /// ([activation] is higher) drives the native composer, so a covered page
+  /// that re-attaches mid-transition can't take it back.
+  void setComposerHost(Object host, int activation, Offset Function() offset) {
+    _composerHosts[host] = (activation, offset);
+    markDirty();
+  }
+
+  void clearComposerHost(Object host) {
+    if (_composerHosts.remove(host) != null) markDirty();
+  }
+
+  Offset Function()? get _composerOffset {
+    (int, Offset Function())? best;
+    for (final entry in _composerHosts.values) {
+      if (best == null || entry.$1 > best.$1) best = entry;
+    }
+    return best?.$2;
+  }
 
   final Map<int, RenderGlassAnchor> _anchors = {};
   Float64List _last = Float64List(0);
@@ -52,13 +81,21 @@ class GlassCoordinator {
   }
 
   void _onFrame(Duration _) {
-    if (_anchors.isEmpty && _last.isEmpty) return;
+    final hostOffset = _composerOffset?.call();
+    if (_anchors.isEmpty && hostOffset == null && _last.isEmpty) return;
     _frameNumber++;
 
-    final frame = Float64List(2 + _anchors.length * stride)
+    final entries = _anchors.length + (hostOffset == null ? 0 : 1);
+    final frame = Float64List(2 + entries * stride)
       ..[0] = _frameNumber.toDouble()
-      ..[1] = _anchors.length.toDouble();
+      ..[1] = entries.toDouble();
     var o = 2;
+    if (hostOffset != null) {
+      frame[o] = composerHostId.toDouble();
+      frame[o + 1] = hostOffset.dx;
+      frame[o + 2] = hostOffset.dy;
+      o += stride;
+    }
     for (final anchor in _anchors.values) {
       frame[o] = anchor.shapeId.toDouble();
       if (anchor.attached && anchor.hasSize) {

@@ -374,3 +374,88 @@ struct Pixels {
     XCTAssertEqual(c.b, b, accuracy: 0.06, "blue \(message)", file: file, line: line)
   }
 }
+
+/// The prompt composer's geometry: placement for each context, the switch
+/// to the multi-line layout, and side actions narrowing the capsule.
+@available(iOS 26.0, *)
+@MainActor
+final class PromptComposerTests: XCTestCase {
+  private let bounds = CGRect(x: 0, y: 0, width: 420, height: 912)
+
+  private func composer(_ extra: [String: Any] = [:]) -> NativePromptComposerView {
+    let view = NativePromptComposerView(frame: .zero)
+    var args: [String: Any] = [
+      "style": "prompt", "placeholder": "Ask anything",
+      "leading": ["id": "leading", "icon": ["type": "symbol", "name": "plus"]],
+      "actions": [["id": "action0", "icon": ["type": "symbol", "name": "mic"]]],
+      "primary": ["id": "primary", "icon": ["type": "symbol", "name": "waveform"]],
+      "side": [
+        ["id": "side0", "icon": ["type": "symbol", "name": "mic.slash"]],
+        ["id": "side1", "icon": ["type": "symbol", "name": "xmark"], "prominent": true],
+      ],
+    ]
+    extra.forEach { args[$0.key] = $0.value }
+    view.update(args)
+    return view
+  }
+
+  private func placement(tabBarTop: CGFloat? = nil, keyboardTop: CGFloat? = nil) -> ComposerPlacement {
+    ComposerPlacement(bounds: bounds, safeAreaBottom: 34, tabBarTop: tabBarTop, keyboardTop: keyboardTop)
+  }
+
+  func testIdleSitsConcentricWithTheDisplayCorners() {
+    let view = composer()
+    let frame = view.frame(for: placement())
+    XCTAssertEqual(frame.minX, 38)
+    XCTAssertEqual(frame.width, 420 - 76)
+    XCTAssertEqual(frame.height, 48)
+    XCTAssertEqual(frame.maxY, 912 - 38)
+    XCTAssertEqual(view.occupiedHeight(for: placement()), 52, "4 pt past the safe area + 48 pt")
+  }
+
+  func testAboveATabBarAndAboveTheKeyboard() {
+    let view = composer()
+    let overTabBar = view.frame(for: placement(tabBarTop: 830))
+    XCTAssertEqual(overTabBar.minX, 20)
+    XCTAssertEqual(overTabBar.maxY, 830 - 9)
+
+    view.setKeyboardActive(true)
+    let focused = view.frame(for: placement(keyboardTop: 560))
+    XCTAssertEqual(focused.minX, 12)
+    XCTAssertEqual(focused.maxY, 560 - 12)
+    XCTAssertEqual(view.occupiedHeight(for: placement(keyboardTop: 560)), 60)
+  }
+
+  func testWrappingLineBreaksAndAttachmentsSwitchToMultiline() {
+    let view = composer()
+    let width: CGFloat = 344
+    view.setText("Short prompt")
+    XCTAssertEqual(view.preferredHeight(width: width), 48)
+    XCTAssertFalse(view.isMultiline(capsuleWidth: width))
+
+    view.setText("Plan a relaxed weekend near the coast with good food")
+    XCTAssertTrue(view.isMultiline(capsuleWidth: width), "wraps at the inline width")
+    let wrapped = view.preferredHeight(width: width)
+    XCTAssertGreaterThan(wrapped, 48)
+
+    view.setText("one\ntwo")
+    XCTAssertTrue(view.isMultiline(capsuleWidth: width))
+
+    view.setText("")
+    let attached = composer(["attachments": [["id": "a", "thumbnail": ["type": "symbol", "name": "doc"]]]])
+    XCTAssertTrue(attached.isMultiline(capsuleWidth: width))
+    // Attachments (12 + 60) + one line of text + the button row (32 below it).
+    let textBlock = attached.preferredHeight(width: width) - (12 + 60 + 32)
+    XCTAssertGreaterThanOrEqual(textBlock, 48)
+    XCTAssertLessThan(textBlock, 60, "one line of text")
+    XCTAssertTrue(attached.canSend, "attachments alone can be sent")
+  }
+
+  func testSideActionsNarrowTheCapsule() {
+    let hidden = composer()
+    XCTAssertEqual(hidden.capsuleWidth(for: 344), 344)
+    let shown = composer(["sideShown": true])
+    XCTAssertTrue(shown.sideShown)
+    XCTAssertEqual(shown.capsuleWidth(for: 344), 344 - 2 * (48 + 10), "two 48 pt circles, 10 pt apart")
+  }
+}

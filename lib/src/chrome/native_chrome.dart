@@ -76,7 +76,8 @@ class NativeTabAction {
 /// VoiceOver and the large content viewer are all UIKit's.
 ///
 /// Place below `MaterialApp`/`CupertinoApp` and above the `Scaffold`s that
-/// should respect the bar.
+/// should respect the bar. While another route covers the page holding the
+/// scope (a pushed screen, a dialog), the bar slides away.
 class NativeChromeScope extends StatefulWidget {
   const NativeChromeScope({
     super.key,
@@ -154,10 +155,25 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
 
   void _onInset() => setState(() {});
 
+  bool _covered = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // A route pushed over this page hides the bar, as UIKit's
+    // hidesBottomBarWhenPushed does; it slides back as the route pops.
+    final covered = !(ModalRoute.isCurrentOf(context) ?? true);
+    if (covered != _covered && _bridge.isSupported) {
+      _covered = covered;
+      _bridge.setTabBarCovered(covered);
+    }
+  }
+
   @override
   void dispose() {
     _bridge.chromeBottomInset.removeListener(_onInset);
     _bridge.chromeTopInset.removeListener(_onInset);
+    if (_covered) _bridge.setTabBarCovered(false);
     _bridge.removeTabBar();
     super.dispose();
   }

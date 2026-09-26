@@ -1,15 +1,20 @@
-/// Veneer: a thin layer of real native iOS UI over Flutter.
+/// Veneer: real native iOS 26 UI for Flutter apps.
 ///
-/// Instead of embedding a platform view per widget, Veneer keeps one native
-/// overlay above the Flutter surface and lets Flutter layout drive it:
-///   * chrome ([NativeChromeScope]) — a real `UITabBarController`, with the
-///     split layout's trailing button ([NativeTabAction]);
-///   * Liquid Glass ([GlassShape], [GlassGroup]) — native glass positioned by
-///     Flutter layout every frame, merging within groups and honouring
-///     Flutter clips.
+/// One native overlay sits above the Flutter surface and follows Flutter
+/// layout every frame, so UIKit components behave like Flutter widgets:
+///   * [NativeChromeScope] — a real `UITabBarController` with the split
+///     layout's trailing button ([NativeTabAction]);
+///   * [NativeNavigationBar] — a real `UINavigationBar`, with native menus
+///     ([NativeMenuItem]) and iOS 26's scroll edge effect;
+///   * [NativeComposer] and [NativePromptComposer] — native messaging and
+///     assistant-style composers that ride the keyboard;
+///   * [showNativeSheet] — real UIKit sheets hosting Flutter content;
+///   * [GlassShape] and [GlassGroup] — Liquid Glass positioned by Flutter
+///     layout, merging within groups and honouring Flutter clips.
 ///
-/// Icons everywhere are [NativeIcon]s — SF Symbols, IconData or SVG, all
-/// rendered by UIKit.
+/// Icons everywhere are [NativeIcon]s — SF Symbols, IconData, SVG or images,
+/// all rendered by UIKit. On Android and iOS 15–25 every widget renders a
+/// Flutter replica with the same layout.
 library;
 
 import 'src/core/veneer_bridge.dart';
@@ -18,7 +23,10 @@ import 'src/glass/glass_group.dart';
 export 'src/chrome/native_chrome.dart';
 export 'src/chrome/native_composer.dart';
 export 'src/chrome/native_navigation_bar.dart';
+export 'src/chrome/native_sheet.dart';
+export 'src/core/fallback_scope.dart' show VeneerFallbackScope;
 export 'src/core/native_icon.dart';
+export 'src/core/native_menu.dart' show NativeMenuItem;
 export 'src/core/veneer_bridge.dart' show VeneerBridge, VeneerTransport;
 export 'src/glass/glass_group.dart';
 export 'src/glass/glass_shape.dart';

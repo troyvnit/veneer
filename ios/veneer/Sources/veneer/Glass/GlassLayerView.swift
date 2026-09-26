@@ -13,6 +13,8 @@ struct GlassShapeConfig {
   var iconSize: CGFloat?
   var label: String?
   var foreground: UIColor?
+  /// Dart menu items (`NativeMenu`); tapping opens a `UIMenu`.
+  var menu: Any?
 
   init(_ args: [String: Any]) {
     id = (args["id"] as? NSNumber)?.intValue ?? -1
@@ -25,6 +27,7 @@ struct GlassShapeConfig {
     iconSize = (args["iconSize"] as? NSNumber).map { CGFloat($0.doubleValue) }
     label = args["label"] as? String
     foreground = (args["foreground"] as? NSNumber).map(UIColor.init(argb:))
+    menu = args["menu"]
   }
 }
 
@@ -66,6 +69,8 @@ struct GlassGroupConfig {
 @available(iOS 26.0, *)
 final class GlassLayerView: UIView {
   var onShapeTapped: ((Int) -> Void)?
+  /// A shape's menu item was picked: shape id, item index.
+  var onShapeMenu: ((Int, Int) -> Void)?
 
   private var shapes: [Int: GlassShapeView] = [:]
   private var groups: [Int: GlassGroupView] = [:]
@@ -136,6 +141,7 @@ final class GlassLayerView: UIView {
     let shape = shapes[config.id] ?? {
       let view = GlassShapeView(id: config.id)
       view.onTap = { [weak self] id in self?.onShapeTapped?(id) }
+      view.onMenu = { [weak self] id, index in self?.onShapeMenu?(id, index) }
       shapes[config.id] = view
       return view
     }()
