@@ -56,26 +56,45 @@ NativeChromeScope(
 
 ## Native icons
 
-Everywhere an icon goes (tabs, the trailing button, `GlassShape`) takes a `NativeIcon`,
-and all of them are rendered by UIKit, never rasterized by Flutter:
+Everywhere an icon goes (tabs and their selected icons, the trailing button, `GlassShape`)
+takes a `NativeIcon`. All of them are rendered by UIKit, CoreText and CoreGraphics,
+never rasterized by Flutter:
 
-| | Rendered by |
+| | |
 |---|---|
-| `NativeIcon.symbol('heart.fill')` | `UIImage(systemName:)`; tab bars apply their own symbol metrics |
-| `NativeIcon.icon(Icons.add)`, `NativeIcon.icon(CupertinoIcons.gauge)` | CoreText, from the app's own copy of the icon font (found through `FontManifest.json`, package fonts included), laid out like Flutter's `Icon` |
-| `NativeIcon.svgAsset('assets/x.svg')`, `NativeIcon.svg('<svg…>')` | Veneer's CoreGraphics SVG renderer |
+| `NativeIcon.symbol('heart.fill')` | SF Symbol. Tab bars apply their own symbol metrics; glass follows Dynamic Type unless `iconSize` is set |
+| `NativeIcon.icon(Icons.add)` | Any `IconData`: Material, Cupertino, package or custom icon fonts, read from the app's own copy of the font via `FontManifest.json` and laid out like Flutter's `Icon` |
+| `NativeIcon.icon(Symbols.home, fill: 1, weight: 600, grade: 0, opticalSize: 24)` | Variable icon fonts (Material Symbols) through CoreText font variations |
+| `NativeIcon.svgAsset('assets/x.svg')`, `.svgFile(path)`, `.svg('<svg…>')` | Veneer's native SVG renderer, from an asset (packages too), a file on disk, or markup |
 
-Glyphs and SVGs come back as **template images**, so they tint like SF Symbols (tab
-selection colour, glass vibrancy). Pass `tinted: false` to keep an SVG's own colours.
+**IconData:** `fontFamilyFallback` is tried in order, and `matchTextDirection` icons are
+mirrored by UIKit in right-to-left layouts. Release builds tree-shake icon fonts down to
+glyphs used by *const* `IconData`, exactly as for `Icon`; build with `--no-tree-shake-icons`
+if you create `IconData` at runtime.
 
-- **SVG coverage:** `path` (full grammar, arcs, compact numbers), `rect` (rx/ry),
-  `circle`, `ellipse`, `line`, `polyline`, `polygon`, `g`; `transform`; fill, stroke, caps,
-  joins, fill-rule and opacities, as attributes or in `style`, inherited through groups.
-  Gradients, masks, `use`/`defs`, text and CSS stylesheets are skipped, so ship those as
-  image assets instead.
-- **Release builds** tree-shake icon fonts down to glyphs used by *const* `IconData`,
-  exactly as for Flutter's `Icon`. Build with `--no-tree-shake-icons` if you create
-  `IconData` at runtime.
+**SVG** covers:
+- **Structure:** nested `svg` viewports, `g`, `a`, `switch`, `defs`, `symbol`, `use`
+  (`href`/`xlink:href`).
+- **Shapes:** `path` (full grammar including arcs), `rect`, `circle`, `ellipse`, `line`,
+  `polyline`, `polygon`; `text`/`tspan` via CoreText (font family, weight, style, size,
+  anchor, dx/dy); `image` from `data:` URIs (PNG, JPEG or nested SVG).
+- **Paint:** hex, `rgb()`, `hsl()`, the 148 CSS colour names, `currentColor`; linear and radial
+  gradients with units, `gradientTransform`, `href` inheritance and pad/reflect/repeat; fill
+  and stroke opacity, rules, caps, joins, miter limit, dashes.
+- **Compositing:** group `opacity` (flattened, like browsers), `clip-path`, luminance `mask`,
+  `display`, `visibility`, `overflow`.
+- **Styling:** presentation attributes, `<style>` CSS (type, class, id and universal
+  selectors, compound and descendant selectors, specificity, `@media` bodies), inline
+  `style`, inheritance, `inherit`.
+- **Layout:** `viewBox`, `preserveAspectRatio` (all alignments; meet, slice or none), and
+  units px, pt, pc, in, cm, mm, em, ex and %.
+
+Filters, patterns (their fallback colour is used), markers, `textPath`, `foreignObject`,
+animation and external `href`s aren't rendered.
+
+**Tinting:** glyphs and SVGs are template images by default, so they tint like SF Symbols
+(tab selection colour, glass vibrancy, dark mode). `tinted: false` keeps an SVG's own
+colours; it gets light and dark variants, so `currentColor` follows the interface style.
 
 ## Glass groups
 
@@ -124,7 +143,8 @@ lib/src/glass/    glass_shape.dart, glass_group.dart, glass_coordinator.dart
 lib/src/chrome/   native_chrome.dart
 ios/veneer/Sources/veneer/
   VeneerPlugin.swift
-  Core/           VeneerOverlayView.swift, NativeIcon.swift, SVGIcon.swift
+  Core/           VeneerOverlayView.swift, NativeIcon.swift, SVGIcon.swift (document + renderer),
+                  SVGPathParser.swift, SVGValues.swift
   Glass/          GlassLayerView.swift, GlassShapeView.swift, ShapeClip.swift
   Chrome/         NativeTabBarHost.swift
 ```
@@ -171,7 +191,7 @@ ios/veneer/Sources/veneer/
 | Native tab bar over scrolling Flutter content; hides natively under a Flutter dialog or sheet | works |
 | Split tab bar: detached trailing button, action fires without changing selection | works |
 | Tab icons: SF Symbol, Material IconData + selected variant, SVG asset, Cupertino IconData + badge | all native and crisp; icon swaps update in place |
-| Native XCTests (SVG grammar, arcs, transforms, styles, glyphs from bundled fonts) | 14 / 14 pass |
+| Native XCTests: SVG rendering (CSS, use/symbol, gradients, clip/mask, group opacity, dashes, viewports, text, images); IconData fonts, fallbacks, mirroring, variable axes; dark-mode SVG | 28 / 28 pass |
 | Clipping: rounded card + scrolling list, capsule + horizontal list, `ClipOval` | clipped, and follows scrolling |
 | Clipping: toggle clips off and on | shapes spill out and merge, then move back into their scopes |
 

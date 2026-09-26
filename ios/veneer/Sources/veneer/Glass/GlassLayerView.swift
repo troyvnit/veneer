@@ -9,6 +9,7 @@ struct GlassShapeConfig {
   /// `nil` means capsule.
   var cornerRadius: CGFloat?
   var icon: NativeIconDescriptor?
+  var iconSize: CGFloat?
   var label: String?
   var foreground: UIColor?
 
@@ -20,6 +21,7 @@ struct GlassShapeConfig {
     interactive = (args["interactive"] as? Bool) ?? false
     cornerRadius = (args["cornerRadius"] as? NSNumber).map { CGFloat($0.doubleValue) }
     icon = NativeIconDescriptor(args["icon"])
+    iconSize = (args["iconSize"] as? NSNumber).map { CGFloat($0.doubleValue) }
     label = args["label"] as? String
     foreground = (args["foreground"] as? NSNumber).map(UIColor.init(argb:))
   }

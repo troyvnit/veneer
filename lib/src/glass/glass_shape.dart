@@ -30,6 +30,7 @@ class GlassShape extends StatefulWidget {
     this.tint,
     this.cornerRadius,
     this.icon,
+    this.iconSize,
     this.label,
     this.foreground,
     this.onTap,
@@ -46,6 +47,10 @@ class GlassShape extends StatefulWidget {
 
   /// SF Symbol, IconData or SVG — see [NativeIcon].
   final NativeIcon? icon;
+
+  /// Icon size in points. Null: SF Symbols follow the body text style
+  /// (Dynamic Type); IconData and SVGs use 22.
+  final double? iconSize;
   final String? label;
   final Color? foreground;
   final VoidCallback? onTap;
@@ -79,6 +84,7 @@ class _GlassShapeState extends State<GlassShape> {
         old.tint != widget.tint ||
         old.cornerRadius != widget.cornerRadius ||
         old.icon != widget.icon ||
+        old.iconSize != widget.iconSize ||
         old.label != widget.label ||
         old.foreground != widget.foreground ||
         (old.onTap == null) != (widget.onTap == null)) {
@@ -96,6 +102,7 @@ class _GlassShapeState extends State<GlassShape> {
           'interactive': widget.onTap != null,
           'cornerRadius': widget.cornerRadius,
           'icon': widget.icon?.encode(),
+          'iconSize': widget.iconSize,
           'label': widget.label,
           'foreground': widget.foreground?.toARGB32(),
         }, widget.onTap == null ? null : () => widget.onTap?.call())

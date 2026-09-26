@@ -3,20 +3,26 @@ import 'package:flutter/widgets.dart';
 /// An icon rendered natively by UIKit — never rasterized by Flutter.
 ///
 /// ```dart
-/// NativeIcon.symbol('house.fill')              // SF Symbol
-/// NativeIcon.icon(Icons.favorite)              // IconData (Material, Cupertino, any icon font)
-/// NativeIcon.svgAsset('assets/icons/star.svg') // SVG asset, drawn with CoreGraphics
-/// NativeIcon.svg('<svg …>…</svg>')              // SVG markup
+/// NativeIcon.symbol('house.fill')                    // SF Symbol
+/// NativeIcon.icon(Icons.favorite)                    // IconData: Material, Cupertino, any icon font
+/// NativeIcon.icon(Symbols.home, fill: 1, weight: 600) // variable icon fonts (Material Symbols)
+/// NativeIcon.svgAsset('assets/icons/star.svg')       // SVG asset
+/// NativeIcon.svgFile('/path/to/downloaded.svg')      // SVG file on disk
+/// NativeIcon.svg('<svg …>…</svg>')                    // SVG markup
 /// ```
 ///
-/// IconData is drawn from the app's own copy of the icon font, so it matches
-/// Flutter's `Icon` exactly. Pass `const` IconData values: release builds
-/// tree-shake icon fonts down to the glyphs referenced by constants.
+/// **IconData** is drawn from the app's own copy of the icon font, laid out
+/// like Flutter's `Icon`, with `fontFamilyFallback` and `matchTextDirection`
+/// honoured (mirrored by UIKit in right-to-left layouts). Pass `const`
+/// IconData: release builds tree-shake icon fonts down to glyphs referenced
+/// by constants, as for `Icon`; build with `--no-tree-shake-icons` otherwise.
 ///
-/// SVGs cover what icon sets use: paths (arcs included), basic shapes,
-/// groups, transforms, fill and stroke. Gradients, masks, `use` and text are
-/// skipped. By default SVGs render as template images, tinted like SF
-/// Symbols; pass `tinted: false` to keep their own colours.
+/// **SVG** is rendered natively with CSS styling, `use`/`defs`/`symbol`,
+/// gradients, clip paths, masks, group opacity, dashes, text, embedded
+/// images, nested viewports and `preserveAspectRatio`. Filters, patterns,
+/// markers and animation aren't. By default SVGs render as template images,
+/// tinted like SF Symbols; pass `tinted: false` to keep their own colours
+/// (`currentColor` then follows light/dark mode).
 @immutable
 sealed class NativeIcon {
   const NativeIcon();
@@ -25,10 +31,18 @@ sealed class NativeIcon {
   const factory NativeIcon.symbol(String name) = _SymbolIcon;
 
   /// A Flutter [IconData] from any icon font bundled with the app.
-  const factory NativeIcon.icon(IconData data) = _GlyphIcon;
+  ///
+  /// [fill], [weight], [grade] and [opticalSize] set the axes of variable icon
+  /// fonts such as Material Symbols, like the same parameters on `Icon`;
+  /// they're ignored for fonts without those axes.
+  const factory NativeIcon.icon(IconData data, {double? fill, double? weight, double? grade, double? opticalSize}) =
+      _GlyphIcon;
 
   /// An SVG from the app's assets (declared in pubspec `flutter: assets:`).
   const factory NativeIcon.svgAsset(String asset, {String? package, bool tinted}) = _SvgAssetIcon;
+
+  /// An SVG file on disk, e.g. one downloaded at runtime.
+  const factory NativeIcon.svgFile(String path, {bool tinted}) = _SvgFileIcon;
 
   /// SVG markup.
   const factory NativeIcon.svg(String svg, {bool tinted}) = _SvgStringIcon;
@@ -52,24 +66,38 @@ final class _SymbolIcon extends NativeIcon {
 }
 
 final class _GlyphIcon extends NativeIcon {
-  const _GlyphIcon(this.data);
+  const _GlyphIcon(this.data, {this.fill, this.weight, this.grade, this.opticalSize});
   final IconData data;
+  final double? fill;
+  final double? weight;
+  final double? grade;
+  final double? opticalSize;
 
-  /// The FontManifest family key: package fonts are `packages/<pkg>/<family>`.
-  String? get _family {
-    final family = data.fontFamily;
-    if (family == null) return null;
-    return data.fontPackage == null ? family : 'packages/${data.fontPackage}/$family';
-  }
-
-  @override
-  Map<String, Object?> encode() => {'type': 'glyph', 'codePoint': data.codePoint, 'family': _family};
+  /// FontManifest family key: package fonts are `packages/<pkg>/<family>`
+  /// (fallbacks too, as `TextStyle` resolves them).
+  String _key(String family) => data.fontPackage == null ? family : 'packages/${data.fontPackage}/$family';
 
   @override
-  bool operator ==(Object other) => other is _GlyphIcon && other.data == data;
+  Map<String, Object?> encode() => {
+    'type': 'glyph',
+    'codePoint': data.codePoint,
+    'family': data.fontFamily == null ? null : _key(data.fontFamily!),
+    'fallback': [for (final f in data.fontFamilyFallback ?? const <String>[]) _key(f)],
+    'mirror': data.matchTextDirection,
+    'axes': {'FILL': ?fill, 'wght': ?weight, 'GRAD': ?grade, 'opsz': ?opticalSize},
+  };
 
   @override
-  int get hashCode => data.hashCode;
+  bool operator ==(Object other) =>
+      other is _GlyphIcon &&
+      other.data == data &&
+      other.fill == fill &&
+      other.weight == weight &&
+      other.grade == grade &&
+      other.opticalSize == opticalSize;
+
+  @override
+  int get hashCode => Object.hash(data, fill, weight, grade, opticalSize);
 }
 
 final class _SvgAssetIcon extends NativeIcon {
@@ -87,6 +115,21 @@ final class _SvgAssetIcon extends NativeIcon {
 
   @override
   int get hashCode => Object.hash(asset, package, tinted);
+}
+
+final class _SvgFileIcon extends NativeIcon {
+  const _SvgFileIcon(this.path, {this.tinted = true});
+  final String path;
+  final bool tinted;
+
+  @override
+  Map<String, Object?> encode() => {'type': 'svgFile', 'path': path, 'tinted': tinted};
+
+  @override
+  bool operator ==(Object other) => other is _SvgFileIcon && other.path == path && other.tinted == tinted;
+
+  @override
+  int get hashCode => Object.hash(path, tinted);
 }
 
 final class _SvgStringIcon extends NativeIcon {

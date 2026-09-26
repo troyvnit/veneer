@@ -7,40 +7,54 @@ import UIKit
 ///   * `.symbol` — an SF Symbol, via `UIImage(systemName:)`.
 ///   * `.glyph`  — a Flutter `IconData`: the icon font is read from the app's
 ///     Flutter assets (the same subset font Flutter uses) and the glyph is
-///     drawn with CoreText.
-///   * `.svg`    — parsed and drawn with CoreGraphics (`SVGIcon`).
+///     drawn with CoreText. Font fallbacks, variable-font axes (Material
+///     Symbols fill/weight/grade/optical size) and `matchTextDirection`
+///     (mirrored in right-to-left layouts, by UIKit) are honoured.
+///   * `.svg…`   — parsed and drawn natively (`SVGIcon`), from an asset, a
+///     file or markup.
 ///
 /// Glyphs and tinted SVGs come back as template images, so they tint like SF
-/// Symbols: tab bar selection colours, glass vibrancy, `tintColor`.
+/// Symbols: tab bar selection colours, glass vibrancy, `tintColor`. SVGs that
+/// keep their colours get light and dark variants, so `currentColor`
+/// follows the interface style.
 struct NativeIconDescriptor: Hashable {
   enum Source: Hashable {
     case symbol(String)
-    /// `family` is the FontManifest key: `MaterialIcons`,
-    /// `packages/cupertino_icons/CupertinoIcons`, …
-    case glyph(codePoint: Int, family: String)
+    /// `families` are FontManifest keys, primary first then fallbacks:
+    /// `MaterialIcons`, `packages/cupertino_icons/CupertinoIcons`, …
+    /// `axes` are variable-font settings keyed by 4-letter tag (`FILL`, `wght`, …).
+    case glyph(codePoint: Int, families: [String], axes: [String: Double])
     case svgAsset(asset: String, package: String?)
+    case svgFile(path: String)
     case svg(String)
   }
 
   var source: Source
   /// Keep SVG colours instead of rendering as a template.
   var original = false
+  /// Mirror in right-to-left layouts (`IconData.matchTextDirection`).
+  var mirrored = false
 
   init?(_ value: Any?) {
     guard let map = value as? [String: Any], let type = map["type"] as? String else { return nil }
     original = (map["tinted"] as? Bool) == false
+    mirrored = (map["mirror"] as? Bool) ?? false
     switch type {
     case "symbol":
       guard let name = map["name"] as? String else { return nil }
       source = .symbol(name)
     case "glyph":
-      guard let codePoint = (map["codePoint"] as? NSNumber)?.intValue, let family = map["family"] as? String else {
-        return nil
-      }
-      source = .glyph(codePoint: codePoint, family: family)
+      guard let codePoint = (map["codePoint"] as? NSNumber)?.intValue else { return nil }
+      let families = [map["family"] as? String].compactMap { $0 } + (map["fallback"] as? [String] ?? [])
+      guard !families.isEmpty else { return nil }
+      let axes = (map["axes"] as? [String: NSNumber] ?? [:]).mapValues(\.doubleValue)
+      source = .glyph(codePoint: codePoint, families: families, axes: axes)
     case "svgAsset":
       guard let asset = map["asset"] as? String else { return nil }
       source = .svgAsset(asset: asset, package: map["package"] as? String)
+    case "svgFile":
+      guard let path = map["path"] as? String else { return nil }
+      source = .svgFile(path: path)
     case "svg":
       guard let data = map["data"] as? String else { return nil }
       source = .svg(data)
@@ -77,24 +91,50 @@ final class NativeIconRenderer {
   ///   applies its own system symbol metrics.
   func image(for icon: NativeIconDescriptor, pointSize: CGFloat?) -> UIImage? {
     if case .symbol(let name) = icon.source {
-      guard let pointSize else { return UIImage(systemName: name) }
-      return UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: pointSize))
+      let image =
+        pointSize.map { UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: $0)) }
+        ?? UIImage(systemName: name)
+      return icon.mirrored ? image?.imageFlippedForRightToLeftLayoutDirection() : image
     }
     let size = pointSize ?? 25
     let key = CacheKey(icon: icon, size: size)
     if let cached = cache[key] { return cached }
 
-    let image: UIImage?
+    var image: UIImage?
     switch icon.source {
     case .symbol:
       image = nil
-    case let .glyph(codePoint, family):
-      image = glyphImage(codePoint: codePoint, family: family, size: size)
-    case .svgAsset, .svg:
-      image = svg(for: icon.source)?.image(size: size, template: !icon.original)
+    case let .glyph(codePoint, families, axes):
+      image = families.lazy.compactMap { self.glyphImage(codePoint: codePoint, family: $0, axes: axes, size: size) }.first
+    case .svgAsset, .svgFile, .svg:
+      guard let svg = svg(for: icon.source) else { break }
+      image = icon.original ? dynamicImage(svg, size: size) : svg.image(size: size, template: true)
     }
+    // UIKit flips it only when the view's layout direction is right-to-left.
+    if icon.mirrored { image = image?.imageFlippedForRightToLeftLayoutDirection() }
     if let image { cache[key] = image }
     return image
+  }
+
+  /// Colour-preserving SVG as a dynamic image: light and dark variants with
+  /// `currentColor` resolved to `.label` in each, so it follows dark mode.
+  private func dynamicImage(_ svg: SVGIcon, size: CGFloat) -> UIImage {
+    let asset = UIImageAsset()
+    var result: UIImage?
+    for style in [UIUserInterfaceStyle.light, .dark] {
+      let image = svg.image(
+        size: size, template: false,
+        currentColor: UIColor.label.resolvedColor(with: UITraitCollection(userInterfaceStyle: style)))
+      // The display scale must be part of the traits, or UIKit returns the
+      // bitmap at scale 1 (three times too large on a 3× screen).
+      let traits = UITraitCollection(traitsFrom: [
+        UITraitCollection(userInterfaceStyle: style), UITraitCollection(displayScale: image.scale),
+      ])
+      asset.register(image, with: traits)
+      if style == .light { result = image }
+    }
+    // The light variant carries the asset; UIKit swaps to dark as traits change.
+    return result ?? UIImage()
   }
 
   // MARK: - IconData glyphs
@@ -102,9 +142,9 @@ final class NativeIconRenderer {
   /// Draws a glyph the way Flutter's `Icon` lays it out: a `size`×`size`
   /// box, font size `size`, line height 1.0 (baseline at size·ascent/(ascent+descent)),
   /// horizontally centred on the glyph's advance.
-  private func glyphImage(codePoint: Int, family: String, size: CGFloat) -> UIImage? {
-    guard let cgFont = font(family: family), let scalar = UnicodeScalar(codePoint) else { return nil }
-    let font = CTFontCreateWithGraphicsFont(cgFont, size, nil, nil)
+  private func glyphImage(codePoint: Int, family: String, axes: [String: Double], size: CGFloat) -> UIImage? {
+    guard let base = font(family: family), let scalar = UnicodeScalar(codePoint) else { return nil }
+    let font = CTFontCreateWithGraphicsFont(Self.applying(axes, to: base), size, nil, nil)
     var chars = Array(String(Character(scalar)).utf16)
     var glyphs = [CGGlyph](repeating: 0, count: chars.count)
     guard CTFontGetGlyphsForCharacters(font, &chars, &glyphs, chars.count), glyphs[0] != 0,
@@ -126,6 +166,27 @@ final class NativeIconRenderer {
       cg.fillPath()
     }
     return image.withRenderingMode(.alwaysTemplate)
+  }
+
+  /// Variable-font instance: axis tags (`FILL`, `wght`, `GRAD`, `opsz`) are
+  /// mapped to the font's axis names, which `CGFont` variations are keyed by.
+  /// Unknown axes and non-variable fonts are left untouched.
+  static func applying(_ axes: [String: Double], to font: CGFont) -> CGFont {
+    guard !axes.isEmpty, let axisInfo = CTFontCopyVariationAxes(CTFontCreateWithGraphicsFont(font, 12, nil, nil)) as? [[String: Any]]
+    else { return font }
+    var variations: [String: Double] = [:]
+    for axis in axisInfo {
+      guard let id = (axis[kCTFontVariationAxisIdentifierKey as String] as? NSNumber)?.uint32Value,
+        let name = axis[kCTFontVariationAxisNameKey as String] as? String
+      else { continue }
+      let tag = String(bytes: [24, 16, 8, 0].map { UInt8((id >> $0) & 0xFF) }, encoding: .ascii) ?? ""
+      guard let value = axes[tag] else { continue }
+      let lo = (axis[kCTFontVariationAxisMinimumValueKey as String] as? NSNumber)?.doubleValue ?? value
+      let hi = (axis[kCTFontVariationAxisMaximumValueKey as String] as? NSNumber)?.doubleValue ?? value
+      variations[name] = min(max(value, lo), hi)
+    }
+    guard !variations.isEmpty else { return font }
+    return font.copy(withVariations: variations as CFDictionary) ?? font
   }
 
   private func font(family: String) -> CGFont? {
@@ -167,6 +228,8 @@ final class NativeIconRenderer {
     switch source {
     case let .svgAsset(asset, package):
       data = assetPath?(asset, package).flatMap { FileManager.default.contents(atPath: $0) }
+    case let .svgFile(path):
+      data = FileManager.default.contents(atPath: path)
     case let .svg(string):
       data = string.data(using: .utf8)
     default:

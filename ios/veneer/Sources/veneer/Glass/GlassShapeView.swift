@@ -21,7 +21,7 @@ final class GlassShapeView: UIVisualEffectView {
   private let label = UILabel()
   private lazy var tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
 
-  /// Matches an SF Symbol at the body text style.
+  /// Default for glyphs and SVGs: matches an SF Symbol at the body text style.
   private static let iconSize: CGFloat = 22
 
   init(id: Int) {
@@ -67,8 +67,10 @@ final class GlassShapeView: UIVisualEffectView {
 
     // Symbols take the body text style via preferredSymbolConfiguration;
     // glyphs and SVGs render at the matching size as template images.
+    imageView.preferredSymbolConfiguration =
+      c.iconSize.map { UIImage.SymbolConfiguration(pointSize: $0) } ?? .init(textStyle: .body, scale: .medium)
     imageView.image = c.icon.flatMap {
-      NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : Self.iconSize)
+      NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? c.iconSize : c.iconSize ?? Self.iconSize)
     }
     imageView.isHidden = imageView.image == nil
     label.text = c.label
