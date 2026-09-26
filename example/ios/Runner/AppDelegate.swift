@@ -23,6 +23,7 @@ import UIKit
         result([
           "transport": defaults.string(forKey: "VENEER_TRANSPORT"),
           "measure": defaults.string(forKey: "VENEER_MEASURE"),
+          "fallback": defaults.string(forKey: "VENEER_FALLBACK"),
         ])
       }
     }

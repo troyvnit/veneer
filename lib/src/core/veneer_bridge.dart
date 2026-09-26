@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import 'platform/os_version_stub.dart' if (dart.library.io) 'platform/os_version_io.dart';
+
 /// How per-frame glass geometry reaches the native layer.
 enum VeneerTransport {
   /// Synchronous `dart:ffi` call. With merged UI/platform threads this
@@ -76,7 +78,27 @@ class VeneerBridge {
     _composerHandlers = null;
   }
 
-  bool get isSupported => defaultTargetPlatform == TargetPlatform.iOS && !kIsWeb;
+  /// The native layer needs iOS 26 (Liquid Glass, `UITab`, scroll edge
+  /// effects). Elsewhere — Android, iOS 15–25, web — widgets render their
+  /// Flutter fallbacks.
+  bool get isSupported {
+    if (debugForceFallback) return false;
+    if (debugIsSupportedOverride case final value?) return value;
+    return !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS && (_iosMajor ?? 0) >= minimumIOSVersion;
+  }
+
+  static const int minimumIOSVersion = 26;
+  static final int? _iosMajor = iosMajorVersion();
+
+  /// Render the Flutter fallbacks even where the native layer is available,
+  /// e.g. to preview the Android/older-iOS UI on an iOS 26 device. Set it
+  /// before the first frame.
+  bool debugForceFallback = false;
+
+  /// Tests: pretend the native layer is (or isn't) available, regardless of
+  /// the host platform.
+  @visibleForTesting
+  bool? debugIsSupportedOverride;
   bool get isAttached => _attached;
 
   /// Installs the native overlay above the FlutterView. Retries across

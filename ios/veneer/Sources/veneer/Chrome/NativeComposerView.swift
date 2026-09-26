@@ -10,6 +10,7 @@ import UIKit
 /// The morph runs inside the keyboard's own animation (its duration and
 /// curve from the keyboard notification), so the card, the keyboard and the
 /// text move as one. Metrics follow Slack's iOS composer.
+@available(iOS 26.0, *)
 final class NativeComposerView: UIView, UITextViewDelegate {
   var onEvent: ((String, Any?) -> Void)?
   /// Asks the host to recompute this view's frame (text grew, config changed).

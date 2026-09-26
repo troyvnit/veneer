@@ -12,6 +12,7 @@ void main() {
   setUp(() {
     calls.clear();
     VeneerBridge.instance.debugReset();
+    VeneerBridge.instance.debugIsSupportedOverride = true; // the test host isn't iOS 26
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
       calls.add(call);
       return call.method == 'attach' ? <String, Object?>{} : null;
@@ -43,6 +44,7 @@ void main() {
               const NativeBarButton(icon: NativeIcon.symbol('square.grid.2x2'), title: 'Apps'),
               NativeBarButton(icon: const NativeIcon.symbol('headphones'), title: 'Huddle', onPressed: () => huddle++),
             ],
+            child: const SizedBox(),
           ),
         ],
       ),
@@ -71,7 +73,10 @@ void main() {
           index: 0,
           children: [
             SizedBox(),
-            NativeNavigationBar(title: NativeBarTitle(title: 'hidden')),
+            NativeNavigationBar(
+              title: NativeBarTitle(title: 'hidden'),
+              child: SizedBox(),
+            ),
           ],
         ),
       ),
@@ -104,6 +109,7 @@ void main() {
     await tester.pumpWidget(app(keyboard: 0));
     await tester.pumpAndSettle();
     expect(sent('setComposer').single['placeholder'], 'Message launch-crew');
+    expect(sent('setComposer').single['interactiveDismissal'], isTrue, reason: 'on by default');
 
     await nativeEvent('composerLayout', {'height': 53.0, 'duration': 0.0});
     await tester.pumpAndSettle();

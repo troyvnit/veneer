@@ -2,6 +2,7 @@ import UIKit
 
 /// A Flutter clip in global coordinates (== the overlay's), as sent per
 /// shape in the frame buffer: flags, rect, rrect, four corner radii.
+@available(iOS 26.0, *)
 struct ShapeClip: Equatable {
   var rect: CGRect?
   var rrect: CGRect?
@@ -54,6 +55,7 @@ struct ShapeClip: Equatable {
 }
 
 /// Mask view whose backing layer is the clip path.
+@available(iOS 26.0, *)
 final class ClipMaskView: UIView {
   override class var layerClass: AnyClass { CAShapeLayer.self }
   var shapeLayer: CAShapeLayer { layer as! CAShapeLayer }

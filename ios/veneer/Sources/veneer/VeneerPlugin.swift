@@ -11,13 +11,17 @@ import UIKit
 ///     thread inside the same run-loop turn as the Flutter frame. The
 ///     function address is handed to Dart by `attach`, so no `dlsym` lookup
 ///     and no dead-stripping concerns.
+///
+/// The package installs on iOS 15+, but the native layer needs iOS 26
+/// (Liquid Glass, `UITab`, scroll edge effects). Below that, `attach` answers
+/// `unsupported` and the Dart widgets render their Flutter fallbacks.
 public class VeneerPlugin: NSObject, FlutterPlugin {
   static var shared: VeneerPlugin?
 
   /// Geometry buffer shared with Dart, which writes into it through an
   /// `asTypedList` view and then calls `veneer_apply_frame` — no copy, no
   /// allocation per frame. Lives for the process lifetime.
-  static let frameBufferCapacity = 2 + GlassLayerView.stride * 512
+  static let frameBufferCapacity = 2 + FrameLayout.stride * 512
   static let frameBuffer: UnsafeMutablePointer<Double> = {
     let p = UnsafeMutablePointer<Double>.allocate(capacity: frameBufferCapacity)
     p.initialize(repeating: 0, count: frameBufferCapacity)
@@ -26,8 +30,12 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
 
   private let registrar: FlutterPluginRegistrar
   private let channel: FlutterMethodChannel
-  private(set) var overlay: VeneerOverlayView?
+  /// Type-erased: `VeneerOverlayView` exists only on iOS 26+.
+  private var overlayRef: AnyObject?
   let stats = GlassStats()
+
+  @available(iOS 26.0, *)
+  var overlay: VeneerOverlayView? { overlayRef as? VeneerOverlayView }
 
   init(registrar: FlutterPluginRegistrar, channel: FlutterMethodChannel) {
     self.registrar = registrar
@@ -39,6 +47,7 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
     let instance = VeneerPlugin(registrar: registrar, channel: channel)
     registrar.addMethodCallDelegate(instance, channel: channel)
     shared = instance
+    guard #available(iOS 26.0, *) else { return }
     NativeIconRenderer.shared.assetPath = { [weak registrar] asset, package in
       guard let registrar else { return nil }
       let key = package.map { registrar.lookupKey(forAsset: asset, fromPackage: $0) } ?? registrar.lookupKey(forAsset: asset)
@@ -47,6 +56,13 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
   }
 
   public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
+    guard #available(iOS 26.0, *) else {
+      // Dart checks the OS version itself; this is the backstop.
+      result(
+        call.method == "attach"
+          ? FlutterError(code: "unsupported", message: "The native layer needs iOS 26", details: nil) : nil)
+      return
+    }
     let args = call.arguments as? [String: Any] ?? [:]
     switch call.method {
     case "attach":
@@ -140,6 +156,7 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
 
   // MARK: - Overlay
 
+  @available(iOS 26.0, *)
   private func ensureOverlay() -> VeneerOverlayView? {
     if let overlay, overlay.superview != nil { return overlay }
     guard let flutterView = registrar.viewController?.view else { return nil }
@@ -150,7 +167,7 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
       self?.channel.invokeMethod(method, arguments: payload)
     }
     flutterView.addSubview(overlay)
-    self.overlay = overlay
+    overlayRef = overlay
     return overlay
   }
 
@@ -158,6 +175,7 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
 
   enum Transport { case ffi, channel }
 
+  @available(iOS 26.0, *)
   func applyFrame(_ ptr: UnsafePointer<Double>?, count: Int, transport: Transport) {
     guard let ptr, count >= 2, let overlay else { return }
     let start = CACurrentMediaTime()
@@ -180,7 +198,7 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
 /// frame from being re-entered.
 @_cdecl("veneer_apply_frame")
 func veneer_apply_frame(_ ptr: UnsafePointer<Double>?, _ count: Int32) {
-  guard let plugin = VeneerPlugin.shared else { return }
+  guard #available(iOS 26.0, *), let plugin = VeneerPlugin.shared else { return }
   if Thread.isMainThread {
     MainActor.assumeIsolated {
       plugin.applyFrame(ptr, count: Int(count), transport: .ffi)
@@ -193,6 +211,12 @@ func veneer_apply_frame(_ ptr: UnsafePointer<Double>?, _ count: Int32) {
       copy.withUnsafeBufferPointer { plugin.applyFrame($0.baseAddress, count: $0.count, transport: .ffi) }
     }
   }
+}
+
+/// Per-shape layout of the frame buffer, shared by Dart's `GlassCoordinator`
+/// and `GlassLayerView.apply`.
+enum FrameLayout {
+  static let stride = 20
 }
 
 /// Counters exposed to the example app's diagnostics panel.

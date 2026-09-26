@@ -15,7 +15,7 @@ UIKit chrome and a shared UIGlassContainerEffect layer above the Flutter surface
   s.source           = { :path => '.' }
   s.source_files = 'veneer/Sources/veneer/**/*'
   s.dependency 'Flutter'
-  s.platform = :ios, '26.0'
+  s.platform = :ios, '15.0'
 
   # Flutter.framework does not contain a i386 slice.
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }

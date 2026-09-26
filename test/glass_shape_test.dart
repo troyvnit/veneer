@@ -12,6 +12,7 @@ void main() {
   setUp(() {
     calls.clear();
     VeneerBridge.instance.debugReset();
+    VeneerBridge.instance.debugIsSupportedOverride = true; // the test host isn't iOS 26
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('veneer'),
       (call) async {

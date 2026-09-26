@@ -29,6 +29,35 @@ Glass samples whatever is composited beneath it, so it refracts Flutter
 pixels. Shapes in the same group share one container, so separate widgets **merge and
 morph** into each other. That can't happen when each widget is its own platform view.
 
+## Platform support
+
+| | What renders |
+|---|---|
+| **iOS 26+** | The native layer: UIKit chrome, Liquid Glass, scroll edge effects, the native composer |
+| **Android, iOS 15–25** | **Flutter replicas** of the same UI, with the same layout, sizes, positions, colours and corner radii as the iOS 26 chrome, on solid surfaces instead of glass |
+
+- **One widget tree for every platform.** The package installs on **iOS 15+** and Android;
+  `Veneer.isSupported` is true only on iOS 26+, and every widget picks its path itself.
+  There's no `if (Platform.isIOS)` in app code.
+- **Replica geometry** comes from the native metrics:
+  - **Tab bar:** a floating 61 pt capsule with 20 pt margins, a pill behind the selected item,
+    and a 61 pt trailing circle 8 pt away. Off iOS the trailing button behaves as a create-style
+    action.
+  - **Top bar:** a 44 pt back circle 16 pt from the edge, then the title capsule, then the trailing
+    group sharing one capsule. A fade stands in for the edge blur.
+  - **Composer:** the 44 pt capsule 9 pt above the tab bar, morphing into the 104 pt card 9 pt above
+    the keyboard. Its bottom follows Flutter's keyboard inset, and it expands only while the
+    keyboard is up, so Android's back key collapses it.
+  - **Glass shapes:** solid surfaces in the same shape, with a press swell. They don't merge.
+- **Colours** are iOS system values (`label`, `secondaryLabel`, `placeholderText`, `systemBlue`,
+  `systemRed`), with white or #2C2C2E surfaces, a hairline border and a soft shadow. They follow
+  light and dark mode.
+- **Icons:** IconData renders with `Icon`, SVGs with `flutter_svg`, and common SF Symbol names map
+  to Material icons (`NativeIcon.symbol(name, fallback: …)` covers the rest).
+- **Preview the replicas on iOS 26** with `Veneer.debugForceFallback = true` before `runApp`
+  (the example: `-VENEER_FALLBACK 1`).
+- **Web isn't supported** (the bridge uses `dart:ffi`).
+
 ## Native tab bar (with split layout)
 
 ```dart
@@ -70,6 +99,7 @@ NativeNavigationBar(
     NativeBarButton(icon: NativeIcon.svgAsset('assets/icons/app_mark.svg', tinted: false), title: 'Apps'),
     NativeBarButton(icon: NativeIcon.symbol('headphones'), title: 'Huddle'),
   ],
+  child: pageBody,
 )
 ```
 
@@ -77,9 +107,9 @@ NativeNavigationBar(
   metrics: 44 pt circles and capsules, and adjacent trailing items sharing one capsule. With
   `capsule: true` the title is a tappable glass capsule holding an icon, title and subtitle,
   like a chat app's channel header; otherwise it's the system's title and subtitle.
-- Put it anywhere in a page under a `NativeChromeScope`. It shows while that page is
-  visible (hidden on other `IndexedStack` tabs and under pushed routes), and its height
-  goes into `MediaQuery` top padding.
+- It **wraps the page** (`child`), under a `NativeChromeScope`. It shows while that page is
+  visible (hidden on other `IndexedStack` tabs and under pushed routes), and its height goes
+  into `MediaQuery` top padding, so content starts below it and scrolls under it.
 - **Scroll edge effect:** content scrolling under the bar dissolves into iOS 26's *own*
   soft edge effect, not an imitation. A transparent, non-interactive `UIScrollView` in the
   overlay hosts it, and the bar registers through `UIScrollEdgeElementContainerInteraction`,
@@ -107,6 +137,9 @@ NativeComposer(
 )
 ```
 
+Put it in a `Scaffold(resizeToAvoidBottomInset: false)`: it handles the keyboard itself, on
+both the native and the replica path.
+
 - **Everything is UIKit**, including the text view, the glass (`UIGlassEffect`, and
   `UIButton.Configuration.glass()` for the + circle) and the toolbar buttons.
 - **Idle:** a 44 pt glass capsule 9 pt above the tab bar, aligned with its edges:
@@ -120,8 +153,15 @@ NativeComposer(
 - **Flutter content:** `child` gets bottom padding for the space the composer takes above the
   keyboard or tab bar (animated with the morph), and the keyboard inset is consumed so an
   inner `Scaffold` doesn't also resize.
+- **Interactive keyboard dismissal** (`interactiveKeyboardDismissal`, on by default): dragging
+  the Flutter content down pulls the keyboard with the finger, with the composer riding on
+  it, and releasing dismisses it or snaps it back. It's UIKit's own mechanism. An invisible
+  `UIScrollView` with `keyboardDismissMode = .interactive` has its pan gesture attached to the
+  `FlutterView` (`cancelsTouchesInView = false`, so Flutter still scrolls), and the composer
+  follows `keyboardLayoutGuide`, which UIKit updates frame by frame during the drag. Only
+  vertical drags that start on Flutter content count.
 - **Controller:** `NativeComposerController` exposes the text and focus, plus
-  `focus()`/`unfocus()`/`clear()`; call `unfocus()` from list taps or drags to dismiss the keyboard.
+  `focus()`/`unfocus()`/`clear()`; call `unfocus()` from taps on the content to dismiss the keyboard.
 - **Metrics** were measured from Slack's iOS composer: 36 pt + circle, toolbar glyphs about
   19 pt spaced 41 pt apart, send 25 pt from the trailing edge, and a 28 pt maximum corner radius.
 
@@ -221,7 +261,7 @@ ios/veneer/Sources/veneer/
                   SVGPathParser.swift, SVGValues.swift
   Glass/          GlassLayerView.swift, GlassShapeView.swift, ShapeClip.swift
   Chrome/         NativeTabBarHost.swift, NativeNavigationBarHost.swift, NativeComposerView.swift,
-                  ScrollEdgeEffectHost.swift
+                  ScrollEdgeEffectHost.swift, KeyboardDismissProxy.swift
 ```
 
 ## Pieces
@@ -269,7 +309,8 @@ ios/veneer/Sources/veneer/
 | Native navigation bar: glass back button, title capsule, grouped trailing capsule | matches Slack's layout |
 | Scroll edge effect over Flutter content (system `UIScrollEdgeEffect`) | content blurs progressively under the bar |
 | Composer: idle capsule → focused card over the keyboard → idle | about 0.4 s each way, continuous and keyboard-synced (checked frame by frame in a recording) |
-| Composer typing, growth, send, clear; list taps and drags dismiss the keyboard | works |
+| Composer typing, growth, send, clear; list taps dismiss the keyboard | works |
+| Interactive dismissal: keyboard and composer follow the finger, then dismiss or snap back | works (checked frame by frame, with Flutter scrolling the same drag) |
 | Native XCTests: SVG rendering (CSS, use/symbol, gradients, clip/mask, group opacity, dashes, viewports, text, images); IconData fonts, fallbacks, mirroring, variable axes; dark-mode SVG | 28 / 28 pass |
 | Clipping: rounded card + scrolling list, capsule + horizontal list, `ClipOval` | clipped, and follows scrolling |
 | Clipping: toggle clips off and on | shapes spill out and merge, then move back into their scopes |
@@ -327,9 +368,8 @@ representative.
   can't start a Flutter scroll.
 - **Accessibility:** glass is announced through Flutter `Semantics`, the tab bar through UIKit.
   Neither has been audited with VoiceOver.
-- **Pre-iOS 26 fallback and non-iOS platforms:** not built.
-- **Composer:** no interactive (finger-tracking) keyboard dismissal yet; drags dismiss it
-  with the standard animation. No attachment previews or rich text.
+- **Composer:** no attachment previews or rich text. During an interactive drag, Flutter
+  content keeps the keyboard-up padding until release (then it animates normally).
 - **Tab bar:** no sidebar/iPad adaptation or tab groups yet; the trailing button's search
   role isn't wired to real search UI.
 - Not yet native: nav bar, toolbar, search, sheets and menus (present these natively),
@@ -340,6 +380,9 @@ representative.
 ```bash
 cd example && flutter run
 ```
+
+It runs on iOS 26 (native), on Android and iOS 15–25 (replicas), and on iOS 26 with
+`-VENEER_FALLBACK 1` to compare the two on one device.
 
 Tabs: **Chat** (Slack-style channel: native bar, edge effect, composer), **Morph**
 (drag the loose drop into the cluster, Split/Join, Shared/Own group), **Clip** (Flutter

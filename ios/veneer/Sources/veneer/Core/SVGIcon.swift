@@ -22,6 +22,7 @@ import UIKit
 ///
 /// Not rendered: filters, patterns (their fallback colour is used), markers,
 /// `textPath`, `foreignObject`, animation, external `href`s.
+@available(iOS 26.0, *)
 final class SVGIcon {
   let root: SVGNode
   let viewBox: CGRect
@@ -100,6 +101,7 @@ final class SVGIcon {
 
 // MARK: - Document tree
 
+@available(iOS 26.0, *)
 final class SVGNode {
   /// Local element name, or `#text` for character data.
   let name: String
@@ -123,6 +125,7 @@ final class SVGNode {
   }
 }
 
+@available(iOS 26.0, *)
 private final class SVGTreeBuilder: NSObject, XMLParserDelegate {
   let document = SVGNode(name: "#document", attributes: [:])
   var styleSheets: [String] = []
@@ -166,12 +169,14 @@ private final class SVGTreeBuilder: NSObject, XMLParserDelegate {
 
 // MARK: - CSS
 
+@available(iOS 26.0, *)
 struct CSSRule {
   let selector: CSSSelector
   let declarations: [String: String]
   let order: Int
 }
 
+@available(iOS 26.0, *)
 struct CSSSelector {
   struct Compound {
     var tag: String?
@@ -211,6 +216,7 @@ struct CSSSelector {
   }
 }
 
+@available(iOS 26.0, *)
 enum CSSParser {
   static func rules(from sheet: String) -> [CSSRule] {
     var order = 0
@@ -312,6 +318,7 @@ enum CSSParser {
 
 // MARK: - Style
 
+@available(iOS 26.0, *)
 indirect enum SVGPaint {
   case none
   case currentColor
@@ -335,6 +342,7 @@ indirect enum SVGPaint {
   }
 }
 
+@available(iOS 26.0, *)
 struct SVGStyle {
   var fill: SVGPaint = .color(.black)
   var fillOpacity: CGFloat = 1
@@ -408,6 +416,7 @@ struct SVGStyle {
   }
 }
 
+@available(iOS 26.0, *)
 struct SVGAspectRatio {
   /// nil = `none` (stretch).
   var align: CGPoint? = CGPoint(x: 0.5, y: 0.5)
@@ -441,6 +450,7 @@ struct SVGAspectRatio {
 
 // MARK: - Rendering
 
+@available(iOS 26.0, *)
 private struct SVGRenderer {
   let icon: SVGIcon
   let ctx: CGContext
@@ -773,6 +783,7 @@ private struct SVGRenderer {
 
 // MARK: - Gradients
 
+@available(iOS 26.0, *)
 struct SVGGradient {
   let linear: Bool
   let objectBoundingBox: Bool
@@ -875,6 +886,7 @@ struct SVGGradient {
 
 // MARK: - Geometry
 
+@available(iOS 26.0, *)
 enum SVGGeometry {
   static func path(of node: SVGNode, viewport: CGSize, fontSize: CGFloat) -> CGPath? {
     let a = node.attributes
@@ -950,6 +962,7 @@ enum SVGGeometry {
 
 // MARK: - Text
 
+@available(iOS 26.0, *)
 enum SVGText {
   struct Run {
     let text: String

@@ -17,6 +17,7 @@ import UIKit
 /// Symbols: tab bar selection colours, glass vibrancy, `tintColor`. SVGs that
 /// keep their colours get light and dark variants, so `currentColor`
 /// follows the interface style.
+@available(iOS 26.0, *)
 struct NativeIconDescriptor: Hashable {
   enum Source: Hashable {
     case symbol(String)
@@ -69,6 +70,7 @@ struct NativeIconDescriptor: Hashable {
   }
 }
 
+@available(iOS 26.0, *)
 final class NativeIconRenderer {
   static let shared = NativeIconRenderer()
 

@@ -8,6 +8,7 @@ import UIKit
 /// Supports a leading button (e.g. back), a title — either the system's
 /// plain title/subtitle or a tappable capsule with icon, title and subtitle,
 /// like a channel header — and trailing buttons.
+@available(iOS 26.0, *)
 final class NativeNavigationBarHost: NSObject {
   var onEvent: ((String, Any?) -> Void)?
 
@@ -110,6 +111,7 @@ final class NativeNavigationBarHost: NSObject {
 
 /// Channel-header style title: an icon beside a bold title and a secondary
 /// subtitle, as the custom view of a glass bar button item.
+@available(iOS 26.0, *)
 final class TitleCapsuleControl: UIControl {
   private let iconView = UIImageView()
   private let titleLabel = UILabel()

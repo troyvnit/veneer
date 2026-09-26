@@ -22,6 +22,8 @@ Future<void> main() async {
     final transport = config?['transport'];
     if (transport != null) VeneerBridge.instance.transport = VeneerTransport.values.byName(transport);
     launchMeasureMode = config?['measure'] == '1';
+    // -VENEER_FALLBACK 1: preview the Android / iOS 15–25 UI on iOS 26.
+    Veneer.debugForceFallback = config?['fallback'] == '1';
   } on MissingPluginException {
     // Not running the example's iOS runner.
   }

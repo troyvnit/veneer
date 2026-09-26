@@ -9,6 +9,7 @@ import UIKit
 /// active, and the chrome registers with it through
 /// `UIScrollEdgeElementContainerInteraction`, which shapes the effect
 /// around the bars' controls exactly as for a UIKit screen.
+@available(iOS 26.0, *)
 final class ScrollEdgeEffectHost {
   let scrollView = UIScrollView()
   /// Keyed by `UIRectEdge.rawValue` (the option set isn't Hashable).

@@ -24,8 +24,15 @@ export 'src/glass/glass_group.dart';
 export 'src/glass/glass_shape.dart';
 
 abstract final class Veneer {
-  /// Whether the native layer is available on this platform (iOS 26+).
+  /// Whether the native layer is available: iOS 26 or later. Elsewhere
+  /// (Android, iOS 15–25) every widget renders a Flutter fallback, so one
+  /// widget tree serves all platforms.
   static bool get isSupported => VeneerBridge.instance.isSupported;
+
+  /// Render the Flutter fallbacks even on iOS 26, to preview what Android and
+  /// older iOS users see. Set before the first frame.
+  static bool get debugForceFallback => VeneerBridge.instance.debugForceFallback;
+  static set debugForceFallback(bool value) => VeneerBridge.instance.debugForceFallback = value;
 
   /// Default distance within which glass shapes in the same group merge,
   /// for groups that don't set [GlassGroup.spacing].

@@ -3,6 +3,7 @@ import UIKit
 /// One glass shape. Content (SF Symbol / label) is native so it gets the
 /// system's vibrant treatment on glass — Flutter pixels can only ever sit
 /// *under* this layer, never inside it.
+@available(iOS 26.0, *)
 final class GlassShapeView: UIVisualEffectView {
   let id: Int
   var onTap: ((Int) -> Void)?

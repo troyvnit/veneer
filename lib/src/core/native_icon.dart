@@ -1,4 +1,8 @@
+import 'dart:io' show File;
+
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 /// An icon rendered natively by UIKit — never rasterized by Flutter.
 ///
@@ -28,7 +32,11 @@ sealed class NativeIcon {
   const NativeIcon();
 
   /// An SF Symbol by name, e.g. `'heart.fill'`.
-  const factory NativeIcon.symbol(String name) = _SymbolIcon;
+  ///
+  /// Where SF Symbols don't exist (Android, the Flutter fallbacks on older
+  /// iOS), common names map to Material icons automatically; pass [fallback]
+  /// for anything else.
+  const factory NativeIcon.symbol(String name, {IconData? fallback}) = _SymbolIcon;
 
   /// A Flutter [IconData] from any icon font bundled with the app.
   ///
@@ -52,17 +60,31 @@ sealed class NativeIcon {
 }
 
 final class _SymbolIcon extends NativeIcon {
-  const _SymbolIcon(this.name);
+  const _SymbolIcon(this.name, {this.fallback});
   final String name;
+  final IconData? fallback;
 
   @override
   Map<String, Object?> encode() => {'type': 'symbol', 'name': name};
 
-  @override
-  bool operator ==(Object other) => other is _SymbolIcon && other.name == name;
+  /// The Material stand-in: explicit fallback, the mapping table, the name
+  /// without `.fill`/`.circle` suffixes, then a neutral dot.
+  IconData get materialIcon {
+    if (fallback case final f?) return f;
+    if (sfSymbolFallbacks[name] case final m?) return m;
+    for (final suffix in const ['.fill', '.circle', '.square']) {
+      if (name.endsWith(suffix)) {
+        if (sfSymbolFallbacks[name.substring(0, name.length - suffix.length)] case final m?) return m;
+      }
+    }
+    return Icons.circle_outlined;
+  }
 
   @override
-  int get hashCode => name.hashCode;
+  bool operator ==(Object other) => other is _SymbolIcon && other.name == name && other.fallback == fallback;
+
+  @override
+  int get hashCode => Object.hash(name, fallback);
 }
 
 final class _GlyphIcon extends NativeIcon {
@@ -146,3 +168,120 @@ final class _SvgStringIcon extends NativeIcon {
   @override
   int get hashCode => Object.hash(svg, tinted);
 }
+
+/// Renders a [NativeIcon] with Flutter, for the fallback UI where the native
+/// layer isn't available (Android, iOS 15–25). Sizes and colours follow the
+/// ambient [IconTheme] unless given.
+class NativeIconView extends StatelessWidget {
+  const NativeIconView(this.icon, {super.key, this.size, this.color});
+
+  final NativeIcon icon;
+  final double? size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = IconTheme.of(context);
+    final size = this.size ?? theme.size ?? 24;
+    final color = this.color ?? theme.color;
+    ColorFilter? tint(bool tinted) => tinted && color != null ? ColorFilter.mode(color, BlendMode.srcIn) : null;
+    return switch (icon) {
+      final _SymbolIcon i => Icon(i.materialIcon, size: size, color: color),
+      final _GlyphIcon i => Icon(
+        i.data,
+        size: size,
+        color: color,
+        fill: i.fill,
+        weight: i.weight,
+        grade: i.grade,
+        opticalSize: i.opticalSize,
+      ),
+      final _SvgAssetIcon i => SvgPicture.asset(
+        i.asset,
+        package: i.package,
+        width: size,
+        height: size,
+        colorFilter: tint(i.tinted),
+      ),
+      final _SvgFileIcon i => SvgPicture.file(File(i.path), width: size, height: size, colorFilter: tint(i.tinted)),
+      final _SvgStringIcon i => SvgPicture.string(i.svg, width: size, height: size, colorFilter: tint(i.tinted)),
+    };
+  }
+}
+
+/// Common SF Symbol names and their closest Material icons.
+const Map<String, IconData> sfSymbolFallbacks = {
+  'house': Icons.home_outlined,
+  'house.fill': Icons.home,
+  'magnifyingglass': Icons.search,
+  'gear': Icons.settings_outlined,
+  'gearshape': Icons.settings_outlined,
+  'gearshape.fill': Icons.settings,
+  'bell': Icons.notifications_none,
+  'bell.fill': Icons.notifications,
+  'person': Icons.person_outline,
+  'person.fill': Icons.person,
+  'person.2': Icons.people_outline,
+  'plus': Icons.add,
+  'plus.circle': Icons.add_circle_outline,
+  'plus.circle.fill': Icons.add_circle,
+  'minus': Icons.remove,
+  'xmark': Icons.close,
+  'checkmark': Icons.check,
+  'chevron.left': Icons.arrow_back_ios_new,
+  'chevron.right': Icons.arrow_forward_ios,
+  'chevron.down': Icons.expand_more,
+  'chevron.up': Icons.expand_less,
+  'arrow.left': Icons.arrow_back,
+  'arrow.right': Icons.arrow_forward,
+  'arrow.up.arrow.down': Icons.swap_vert,
+  'arrow.left.and.right': Icons.swap_horiz,
+  'heart': Icons.favorite_border,
+  'heart.fill': Icons.favorite,
+  'star': Icons.star_border,
+  'star.fill': Icons.star,
+  'bolt': Icons.bolt_outlined,
+  'bolt.fill': Icons.bolt,
+  'trash': Icons.delete_outline,
+  'trash.fill': Icons.delete,
+  'square.and.arrow.up': Icons.ios_share,
+  'paperplane': Icons.send_outlined,
+  'paperplane.fill': Icons.send,
+  'mic': Icons.mic_none,
+  'mic.fill': Icons.mic,
+  'headphones': Icons.headphones,
+  'lock': Icons.lock_outline,
+  'lock.fill': Icons.lock,
+  'ellipsis': Icons.more_horiz,
+  'bubble.left': Icons.chat_bubble_outline,
+  'bubble.left.fill': Icons.chat_bubble,
+  'bubble.left.and.bubble.right': Icons.forum_outlined,
+  'bubble.left.and.bubble.right.fill': Icons.forum,
+  'face.smiling': Icons.emoji_emotions_outlined,
+  'at': Icons.alternate_email,
+  'textformat': Icons.text_format,
+  'photo': Icons.photo_outlined,
+  'camera': Icons.photo_camera_outlined,
+  'drop': Icons.water_drop_outlined,
+  'drop.fill': Icons.water_drop,
+  'sparkles': Icons.auto_awesome,
+  'scissors': Icons.content_cut,
+  'play.fill': Icons.play_arrow,
+  'pause.fill': Icons.pause,
+  'ruler': Icons.straighten,
+  'tag': Icons.sell_outlined,
+  'tag.fill': Icons.sell,
+  'hand.draw': Icons.gesture,
+  'square.stack.3d.up': Icons.layers_outlined,
+  'square.stack.3d.up.fill': Icons.layers,
+  'square.grid.2x2': Icons.grid_view,
+  'circle.grid.cross': Icons.apps,
+  'circle.lefthalf.filled': Icons.contrast,
+  'gauge.with.dots.needle.33percent': Icons.speed,
+  'calendar': Icons.calendar_today_outlined,
+  'clock': Icons.schedule,
+  'link': Icons.link,
+  'pencil': Icons.edit_outlined,
+  'folder': Icons.folder_outlined,
+  'doc': Icons.description_outlined,
+};

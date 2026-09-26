@@ -15,6 +15,7 @@ import UIKit
 /// `prominentTabIdentifier` for the same layout. It acts either as a button
 /// (selection vetoed in `shouldSelectTab`, press sent to Dart) or as a real
 /// selectable tab.
+@available(iOS 26.0, *)
 final class NativeTabBarHost: NSObject, UITabBarControllerDelegate {
   var onEvent: ((String, Any?) -> Void)?
   /// Called when the bar's frame may have changed.
@@ -207,6 +208,7 @@ final class NativeTabBarHost: NSObject, UITabBarControllerDelegate {
 }
 
 /// Reports layout so the overlay can forward the bar's height to Flutter.
+@available(iOS 26.0, *)
 final class ChromeTabBarController: UITabBarController {
   var onLayout: (() -> Void)?
 
@@ -218,6 +220,7 @@ final class ChromeTabBarController: UITabBarController {
 
 /// Empty tab content: clear, and invisible to hit testing, so Flutter
 /// underneath keeps receiving every touch outside the bar.
+@available(iOS 26.0, *)
 final class PassthroughTabContentController: UIViewController {
   override func loadView() {
     let view = UIView()

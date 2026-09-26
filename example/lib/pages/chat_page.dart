@@ -35,97 +35,93 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
+    // One tree for every platform: native bar + composer on iOS 26, AppBar +
+    // Flutter composer on Android and older iOS.
     return Scaffold(
-      body: NativeComposer(
-        controller: _composer,
-        placeholder: 'Message launch-crew',
-        leading: NativeComposerButton(
-          icon: const NativeIcon.symbol('plus'),
-          title: 'Attach',
-          onPressed: () => _toast('Attach'),
+      // NativeComposer handles the keyboard itself.
+      resizeToAvoidBottomInset: false,
+      body: NativeNavigationBar(
+        leading: NativeBarButton(
+          icon: const NativeIcon.symbol('chevron.left'),
+          title: 'Back',
+          onPressed: () => _toast('Back'),
         ),
-        idleAction: NativeComposerButton(
-          icon: const NativeIcon.symbol('mic'),
-          title: 'Record voice clip',
-          onPressed: () => _toast('Voice clip'),
+        title: NativeBarTitle(
+          title: 'launch-crew',
+          subtitle: '6 members • 3 tabs',
+          icon: const NativeIcon.symbol('lock.fill'),
+          capsule: true,
+          onPressed: () => _toast('Channel details'),
         ),
-        toolbar: [
-          NativeComposerButton(
-            icon: const NativeIcon.symbol('textformat'),
-            title: 'Formatting',
-            onPressed: () => _toast('Formatting'),
+        trailing: [
+          NativeBarButton(
+            icon: const NativeIcon.svgAsset('assets/icons/app_mark.svg', tinted: false),
+            title: 'Apps',
+            onPressed: () => _toast('Apps'),
           ),
-          NativeComposerButton(
-            icon: const NativeIcon.symbol('face.smiling'),
-            title: 'Emoji',
-            onPressed: () => _toast('Emoji'),
-          ),
-          NativeComposerButton(
-            icon: const NativeIcon.symbol('at'),
-            title: 'Mention',
-            onPressed: () => _toast('Mention'),
-          ),
-          NativeComposerButton(
-            icon: const NativeIcon.svgAsset('assets/icons/slash_command.svg'),
-            title: 'Shortcuts',
-            onPressed: () => _toast('Shortcuts'),
+          NativeBarButton(
+            icon: const NativeIcon.symbol('headphones'),
+            title: 'Huddle',
+            onPressed: () => _toast('Huddle'),
           ),
         ],
-        sendIcon: const NativeIcon.symbol('paperplane.fill'),
-        tintColor: const Color(0xFF2BAC76),
-        onSend: _send,
-        child: Builder(
-          builder: (context) {
-            // Padding already includes the nav bar (top) and composer + keyboard/tab bar (bottom).
-            final padding = MediaQuery.paddingOf(context);
-            return Stack(
-              children: [
-                NotificationListener<ScrollStartNotification>(
-                  // Like Slack: dragging the conversation puts the keyboard away.
-                  onNotification: (n) {
-                    if (n.dragDetails != null) _composer.unfocus();
-                    return false;
-                  },
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.translucent,
-                    onTap: _composer.unfocus,
-                    child: ListView.builder(
-                      reverse: true,
-                      padding: EdgeInsets.only(top: padding.top + 8, bottom: padding.bottom + 8),
-                      itemCount: _messages.length,
-                      itemBuilder: (context, i) => _MessageTile(_messages[_messages.length - 1 - i]),
-                    ),
-                  ),
+        child: NativeComposer(
+          controller: _composer,
+          placeholder: 'Message launch-crew',
+          leading: NativeComposerButton(
+            icon: const NativeIcon.symbol('plus'),
+            title: 'Attach',
+            onPressed: () => _toast('Attach'),
+          ),
+          idleAction: NativeComposerButton(
+            icon: const NativeIcon.symbol('mic'),
+            title: 'Record voice clip',
+            onPressed: () => _toast('Voice clip'),
+          ),
+          toolbar: [
+            NativeComposerButton(
+              icon: const NativeIcon.symbol('textformat'),
+              title: 'Formatting',
+              onPressed: () => _toast('Formatting'),
+            ),
+            NativeComposerButton(
+              icon: const NativeIcon.symbol('face.smiling'),
+              title: 'Emoji',
+              onPressed: () => _toast('Emoji'),
+            ),
+            NativeComposerButton(
+              icon: const NativeIcon.symbol('at'),
+              title: 'Mention',
+              onPressed: () => _toast('Mention'),
+            ),
+            NativeComposerButton(
+              icon: const NativeIcon.svgAsset('assets/icons/slash_command.svg'),
+              title: 'Shortcuts',
+              onPressed: () => _toast('Shortcuts'),
+            ),
+          ],
+          sendIcon: const NativeIcon.symbol('paperplane.fill'),
+          tintColor: const Color(0xFF2BAC76),
+          onSend: _send,
+          child: Builder(
+            builder: (context) {
+              // Native: padding includes the nav bar (top) and composer + keyboard/tab bar
+              // (bottom). Fallback: the AppBar and composer take their own space.
+              final padding = MediaQuery.paddingOf(context);
+              // Taps put the keyboard away; on iOS 26 drags pull it down interactively.
+              return GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: _composer.unfocus,
+                child: ListView.builder(
+                  reverse: true,
+                  keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: EdgeInsets.only(top: padding.top + 8, bottom: padding.bottom + 8),
+                  itemCount: _messages.length,
+                  itemBuilder: (context, i) => _MessageTile(_messages[_messages.length - 1 - i]),
                 ),
-                NativeNavigationBar(
-                  leading: NativeBarButton(
-                    icon: const NativeIcon.symbol('chevron.left'),
-                    title: 'Back',
-                    onPressed: () => _toast('Back'),
-                  ),
-                  title: NativeBarTitle(
-                    title: 'launch-crew',
-                    subtitle: '6 members • 3 tabs',
-                    icon: const NativeIcon.symbol('lock.fill'),
-                    capsule: true,
-                    onPressed: () => _toast('Channel details'),
-                  ),
-                  trailing: [
-                    NativeBarButton(
-                      icon: const NativeIcon.svgAsset('assets/icons/app_mark.svg', tinted: false),
-                      title: 'Apps',
-                      onPressed: () => _toast('Apps'),
-                    ),
-                    NativeBarButton(
-                      icon: const NativeIcon.symbol('headphones'),
-                      title: 'Huddle',
-                      onPressed: () => _toast('Huddle'),
-                    ),
-                  ],
-                ),
-              ],
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );

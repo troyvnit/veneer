@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
+import '../core/fallback_style.dart';
 import '../core/native_icon.dart';
 import '../core/veneer_bridge.dart';
 import 'glass_coordinator.dart';
@@ -119,6 +122,7 @@ class _GlassShapeState extends State<GlassShape> {
 
   @override
   Widget build(BuildContext context) {
+    if (!VeneerBridge.instance.isSupported) return _FallbackGlassShape(widget);
     // Hide when another route covers ours or an IndexedStack/Visibility
     // hides us: native glass would otherwise float above that content.
     // Offstage and zero opacity are caught by the coordinator's paint walk.
@@ -149,5 +153,82 @@ class _GlassAnchor extends SingleChildRenderObjectWidget {
   @override
   void updateRenderObject(BuildContext context, RenderGlassAnchor renderObject) {
     renderObject.shouldShow = shouldShow;
+  }
+}
+
+/// Flutter replica where native glass isn't available (Android, iOS 15–25):
+/// the same shape, size and content on a solid surface — the fallback
+/// palette's white/#2C2C2E with a hairline border and soft shadow, or the
+/// tint — and a press highlight when tappable. It doesn't merge with
+/// neighbours.
+class _FallbackGlassShape extends StatefulWidget {
+  const _FallbackGlassShape(this.shape);
+
+  final GlassShape shape;
+
+  @override
+  State<_FallbackGlassShape> createState() => _FallbackGlassShapeState();
+}
+
+class _FallbackGlassShapeState extends State<_FallbackGlassShape> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final shape = widget.shape;
+    final style = VeneerFallbackStyle.of(context);
+    final clear = shape.style == GlassStyle.clear;
+    final fill = shape.tint ?? (clear ? style.surface.withValues(alpha: 0.6) : style.surface);
+    final foreground = shape.foreground ?? style.label;
+
+    final content = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (shape.icon case final icon?) NativeIconView(icon, size: shape.iconSize ?? 22, color: foreground),
+        if (shape.icon != null && (shape.label ?? '').isNotEmpty) const SizedBox(width: 6),
+        if ((shape.label ?? '').isNotEmpty)
+          Flexible(
+            child: Text(
+              shape.label!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: foreground, fontSize: 17, fontWeight: FontWeight.w600),
+            ),
+          ),
+      ],
+    );
+
+    return Semantics(
+      button: shape.onTap != null,
+      label: shape.label,
+      child: SizedBox(
+        width: shape.width ?? double.infinity,
+        height: shape.height ?? double.infinity,
+        child: LayoutBuilder(
+          builder: (context, c) {
+            final radius = shape.cornerRadius ?? math.min(c.maxWidth, c.maxHeight) / 2;
+            return GestureDetector(
+              onTapDown: shape.onTap == null ? null : (_) => setState(() => _pressed = true),
+              onTapUp: shape.onTap == null ? null : (_) => setState(() => _pressed = false),
+              onTapCancel: shape.onTap == null ? null : () => setState(() => _pressed = false),
+              onTap: shape.onTap,
+              child: AnimatedScale(
+                // Mirrors the native interactive glass's slight swell on press.
+                scale: _pressed ? 1.04 : 1,
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOutBack,
+                child: DecoratedBox(
+                  decoration: style.surfaceDecoration(radius: BorderRadius.circular(radius), color: fill),
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: Center(child: content),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 }

@@ -16,6 +16,7 @@ import UIKit
 ///
 /// Touches pass straight through to Flutter unless they land on chrome or
 /// on an interactive glass shape.
+@available(iOS 26.0, *)
 final class VeneerOverlayView: UIView {
   let glassLayer = GlassLayerView()
   var onEvent: ((String, Any?) -> Void)? {
@@ -32,6 +33,12 @@ final class VeneerOverlayView: UIView {
   /// Top of the software keyboard in overlay coordinates; nil when hidden.
   private var keyboardTop: CGFloat?
   private var focusAnimationPending = false
+  /// Drives UIKit's interactive keyboard dismissal from drags on Flutter content.
+  private let keyboardDismissProxy = KeyboardDismissProxy()
+  private var interactiveDismissal = true
+  /// Pinned to `keyboardLayoutGuide.top`, which UIKit updates frame by frame
+  /// while the keyboard follows a finger (no notifications are posted then).
+  private let keyboardTracker = UIView()
   private var lastReportedInsets = UIEdgeInsets(top: -1, left: 0, bottom: -1, right: 0)
 
   override init(frame: CGRect) {
@@ -44,6 +51,25 @@ final class VeneerOverlayView: UIView {
     }
     addSubview(glassLayer)
     edgeEffects.attach(to: self, at: 1)
+
+    keyboardDismissProxy.frame = bounds
+    keyboardDismissProxy.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    keyboardDismissProxy.isFlutterTouch = { [weak self] point in
+      guard let self else { return false }
+      return self.hitTest(point, with: nil) == nil
+    }
+    insertSubview(keyboardDismissProxy, at: 0)
+
+    keyboardLayoutGuide.usesBottomSafeArea = false
+    keyboardTracker.isUserInteractionEnabled = false
+    keyboardTracker.translatesAutoresizingMaskIntoConstraints = false
+    addSubview(keyboardTracker)
+    NSLayoutConstraint.activate([
+      keyboardTracker.leadingAnchor.constraint(equalTo: leadingAnchor),
+      keyboardTracker.widthAnchor.constraint(equalToConstant: 1),
+      keyboardTracker.heightAnchor.constraint(equalToConstant: 1),
+      keyboardTracker.topAnchor.constraint(equalTo: keyboardLayoutGuide.topAnchor),
+    ])
     NotificationCenter.default.addObserver(
       self, selector: #selector(keyboardWillChangeFrame(_:)),
       name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
@@ -151,6 +177,7 @@ final class VeneerOverlayView: UIView {
       composer?.unfocus()
       composer?.removeFromSuperview()
       composer = nil
+      keyboardDismissProxy.stopDriving()
       updateBottomEdgeEffect()
       return
     }
@@ -170,6 +197,8 @@ final class VeneerOverlayView: UIView {
     }()
     view.update(args)
     view.setShown(!((args["hidden"] as? Bool) ?? false))
+    interactiveDismissal = (args["interactiveDismissal"] as? Bool) ?? true
+    updateKeyboardDismissal()
     layoutComposer()
     reportComposer(duration: 0)
     updateBottomEdgeEffect()
@@ -221,6 +250,27 @@ final class VeneerOverlayView: UIView {
     reportComposer(duration: duration)
   }
 
+  private func updateKeyboardDismissal() {
+    if let host = superview, interactiveDismissal, composer?.isShown == true {
+      keyboardDismissProxy.drive(from: host)
+    } else {
+      keyboardDismissProxy.stopDriving()
+    }
+  }
+
+  override func didMoveToSuperview() {
+    super.didMoveToSuperview()
+    updateKeyboardDismissal()
+  }
+
+  /// The keyboard's current top: from the last notification normally, from
+  /// the layout guide while a finger is dragging it (interactive dismissal).
+  private var liveKeyboardTop: CGFloat? {
+    guard keyboardDismissProxy.isTracking, keyboardTop != nil else { return keyboardTop }
+    let top = keyboardTracker.frame.minY
+    return top < bounds.height - 1 ? top : nil
+  }
+
   /// 9 pt above the keyboard or the tab bar, whichever is higher; 44 pt
   /// capsule aligned with the tab bar when idle, 8 pt margins when expanded.
   private func layoutComposer() {
@@ -228,7 +278,7 @@ final class VeneerOverlayView: UIView {
     let M = NativeComposerView.Metrics.self
     let tabTop = tabBarHost.flatMap { $0.isHidden ? nil : $0.tabBar.convert($0.tabBar.bounds, to: self).minY }
       ?? bounds.height - safeAreaInsets.bottom
-    let limit = min(keyboardTop ?? .greatestFiniteMagnitude, tabTop)
+    let limit = min(liveKeyboardTop ?? .greatestFiniteMagnitude, tabTop)
     let margin = composer.isExpanded ? M.expandedMargin : M.idleMargin
     let width = bounds.width - 2 * margin
     let height = composer.preferredHeight(width: width)

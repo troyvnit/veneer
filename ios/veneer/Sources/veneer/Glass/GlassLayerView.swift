@@ -1,5 +1,6 @@
 import UIKit
 
+@available(iOS 26.0, *)
 struct GlassShapeConfig {
   var id: Int
   var group: Int
@@ -27,6 +28,7 @@ struct GlassShapeConfig {
   }
 }
 
+@available(iOS 26.0, *)
 struct GlassGroupConfig {
   var id: Int
   /// `nil` follows the layer's default spacing.
@@ -61,6 +63,7 @@ struct GlassGroupConfig {
 ///
 /// Groups are either explicit (removed by Dart) or automatic (created on
 /// first reference, dropped once empty). Scopes are always automatic.
+@available(iOS 26.0, *)
 final class GlassLayerView: UIView {
   var onShapeTapped: ((Int) -> Void)?
 
@@ -184,7 +187,7 @@ final class GlassLayerView: UIView {
   /// UIView-backed layers never implicitly animate outside an animation
   /// block, and they commit with the run loop's implicit transaction.
   /// Visibility changes animate, so they are deferred to the next turn.
-  static let stride = 20
+  static let stride = FrameLayout.stride
 
   func apply(_ buf: UnsafeBufferPointer<Double>) {
     let count = Int(buf[1])
@@ -247,6 +250,7 @@ final class GlassLayerView: UIView {
 
 /// One glass group: a merge boundary holding one clip scope per distinct
 /// Flutter clip among its shapes (scope 0 = unclipped).
+@available(iOS 26.0, *)
 final class GlassGroupView: UIView {
   var config: GlassGroupConfig
   let sequence: Int
@@ -295,6 +299,7 @@ final class GlassGroupView: UIView {
 /// clip mask. Masking the visual-effect view itself (per shape or on the
 /// container) is ignored by glass rendering; an ordinary ancestor's mask
 /// is not.
+@available(iOS 26.0, *)
 final class GlassClipScopeView: UIView {
   let clipId: Int
   private let container = UIVisualEffectView(effect: nil)

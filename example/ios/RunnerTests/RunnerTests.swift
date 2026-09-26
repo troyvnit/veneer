@@ -6,6 +6,7 @@ import XCTest
 /// Native icon rendering: the SVG parser (path grammar, arcs, transforms,
 /// styles) and IconData glyphs drawn from the app's bundled icon fonts.
 /// Runs hosted in the example app, so Flutter assets and the plugin are live.
+@available(iOS 26.0, *)
 final class NativeIconTests: XCTestCase {
 
   // MARK: Path grammar
