@@ -1,0 +1,26 @@
+# Publishes to pub.dev when a version tag (v1.2.3) is pushed.
+#
+# One-time setup, after the first release is published by hand: on pub.dev,
+# open the package's Admin tab, enable "Automated publishing" from GitHub
+# Actions for troyvnit/veneer with the tag pattern `v{{version}}`.
+name: Publish to pub.dev
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+*']
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pub.dev
+    permissions:
+      id-token: write # OIDC token for pub.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1 # configures the pub.dev OIDC credentials
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - run: flutter pub get
+      - run: flutter test
+      - run: flutter pub publish --force

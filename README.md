@@ -1,5 +1,9 @@
 # Veneer
 
+[![pub package](https://img.shields.io/pub/v/veneer.svg)](https://pub.dev/packages/veneer)
+[![CI](https://github.com/troyvnit/veneer/actions/workflows/ci.yml/badge.svg)](https://github.com/troyvnit/veneer/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 **Real native iOS 26 UI for Flutter apps — Liquid Glass, UIKit bars, native composers and
 sheets — driven by your Flutter widget tree, with matching Flutter UI on Android and older iOS.**
 
@@ -67,14 +71,18 @@ its own path, so app code needs no `Platform.isIOS` checks.
 
 ## Installation
 
-Veneer isn't on pub.dev yet. Add it from GitHub, pinned to a release tag:
+```bash
+flutter pub add veneer
+```
+
+Or track the repository directly:
 
 ```yaml
 dependencies:
   veneer:
     git:
       url: https://github.com/troyvnit/veneer.git
-      ref: v0.1.0
+      ref: main
 ```
 
 Requirements:
@@ -435,7 +443,8 @@ results and the rules learned along the way.
 
 ## Contributing
 
-Issues and pull requests are welcome. Before sending a change:
+Issues and pull requests are welcome. CI runs format, analysis and tests on every pull
+request. Before sending a change:
 
 ```bash
 flutter analyze && flutter test

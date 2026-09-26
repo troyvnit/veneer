@@ -1,12 +1,22 @@
 name: veneer
 description: >-
-  Real native iOS 26 UI for Flutter: Liquid Glass, UIKit tab and navigation bars, native
-  composers and sheets driven by Flutter layout, with matching Flutter UI on Android and older iOS.
+  Real native iOS 26 UI for Flutter: Liquid Glass, UIKit tab and navigation bars, composers and
+  sheets driven by Flutter layout, with matching Flutter UI on Android.
 version: 0.1.0
-publish_to: none
 homepage: https://github.com/troyvnit/veneer
 repository: https://github.com/troyvnit/veneer
 issue_tracker: https://github.com/troyvnit/veneer/issues
+screenshots:
+  - description: Native tab bar, navigation bar and composer over Flutter content.
+    path: doc/images/chat.jpg
+  - description: An assistant in a native UIKit sheet with the native prompt composer.
+    path: doc/images/assistant.jpg
+  - description: The sheet at its medium detent, in Liquid Glass.
+    path: doc/images/medium.jpg
+  - description: Voice mode, with glass buttons split off the composer.
+    path: doc/images/voice.jpg
+  - description: Flutter replicas of the same UI on Android and iOS 15-25.
+    path: doc/images/fallback_chat.jpg
 topics:
   - ios
   - liquid-glass
@@ -33,3 +43,7 @@ flutter:
     platforms:
       ios:
         pluginClass: VeneerPlugin
+      # No native code on Android: widgets render their Flutter replicas.
+      android:
+        dartPluginClass: VeneerAndroid
+        dartFileName: src/platform/veneer_android.dart
