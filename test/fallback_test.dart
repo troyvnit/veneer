@@ -507,6 +507,98 @@ void main() {
     expect(surfaces(), isNot(contains(dark)));
   });
 
+  testWidgets('a content-sized sheet follows its content as it grows', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 852);
+    addTearDown(tester.view.reset);
+
+    var extent = 120.0;
+    late StateSetter grow;
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Text('page'))));
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .push(
+          NativeSheetRoute<void>(
+            detents: const [NativeSheetDetent.content()],
+            builder: (context) => StatefulBuilder(
+              builder: (context, setState) {
+                grow = setState;
+                return SizedBox(key: const Key('content'), height: extent);
+              },
+            ),
+          ),
+        );
+    await tester.pumpAndSettle();
+    double top() => tester.getTopLeft(find.byKey(const Key('content'))).dy;
+    final before = top();
+
+    grow(() => extent = 320);
+    await tester.pumpAndSettle();
+    expect(top(), lessThan(before - 150));
+  });
+
+  testWidgets('a sheet under another sheet steps back behind it and returns', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.padding = const FakeViewPadding(top: 59, bottom: 34);
+    tester.view.viewPadding = const FakeViewPadding(top: 59, bottom: 34);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Text('page'))));
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    navigator.push(
+      NativeSheetRoute<void>(showGrabber: true, builder: (context) => const SizedBox.expand(key: Key('back'))),
+    );
+    await tester.pumpAndSettle();
+    final alone = tester.getRect(find.byKey(const Key('back')));
+    double grabberOpacity() => tester.widgetList<Opacity>(find.byType(Opacity)).first.opacity;
+    expect(grabberOpacity(), 1);
+
+    navigator.push(
+      NativeSheetRoute<void>(
+        detents: const [NativeSheetDetent.content()],
+        builder: (context) => const SizedBox(key: Key('front'), height: 700),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final behind = tester.getRect(find.byKey(const Key('back')));
+    expect(behind.top, lessThan(alone.top - 5));
+    expect(behind.width, lessThan(alone.width - 10));
+    expect(grabberOpacity(), 0);
+
+    navigator.pop();
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byKey(const Key('back'))), alone);
+    expect(grabberOpacity(), 1);
+  });
+
+  testWidgets('the replica bar fades its content only once scrolled under it', (tester) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeNavigationBar(
+          title: const NativeBarTitle(title: 'Page'),
+          child: ListView(
+            controller: controller,
+            children: [for (var i = 0; i < 40; i++) SizedBox(height: 60, child: Text('row $i'))],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    double fade() => tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity)).opacity;
+    expect(fade(), 0);
+
+    controller.jumpTo(200);
+    await tester.pumpAndSettle();
+    expect(fade(), 1);
+
+    controller.jumpTo(0);
+    await tester.pumpAndSettle();
+    expect(fade(), 0);
+  });
+
   testWidgets('a style\'s shadows replace the default under fallback surfaces', (tester) async {
     const shadows = [BoxShadow(color: Color(0x14000000), offset: Offset(0, 8), blurRadius: 16, spreadRadius: -4)];
     final style = VeneerFallbackStyle.iosLight.copyWith(shadows: shadows);

@@ -338,6 +338,10 @@ NativeSheet.close(context, result);
   with `NativeSheet.close`. `arguments` reach the entrypoint instead, but bypass pre-warming.
 - Sheet engines never restyle the app's status bar, and each engine is torn down when its
   sheet is dismissed.
+- A sheet's engine can call `showNativeSheet` itself: the new sheet is presented natively over
+  it, and goes away with it.
+- For a `NativeSheetDetent.content()` detent, wrap the sheet's content in `NativeSheetContent`:
+  UIKit sizes the sheet to it.
 - Inside, a `NativeNavigationBar` is a real `UINavigationBar` placed per Apple's sheet
   templates (16 pt from the sheet's edges), and composers ride the sheet natively. Pulling down
   drags the sheet when the content under the finger is at its top edge; otherwise the content

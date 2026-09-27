@@ -139,6 +139,10 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
       overlay?.setNavigationBar(args)
       result(nil)
 
+    case "navigationBarScrolled":
+      overlay?.setNavigationBarScrolled((args["scrolled"] as? Bool) ?? false)
+      result(nil)
+
     case "removeNavigationBar":
       overlay?.setNavigationBar(nil)
       result(nil)
@@ -166,13 +170,20 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
       result(nil)
 
     case "presentSheet":
-      let presented = NativeSheetPresenter.shared.present(args, from: registrar.viewController) { [weak self] method, payload in
+      let presented = NativeSheetPresenter.shared.present(args, owner: id, from: registrar.viewController) {
+        [weak self] method, payload in
         self?.channel.invokeMethod(method, arguments: payload)
       }
       result(presented)
 
     case "sheetContentAtTop":
       overlay?.setSheetContentAtTop((args["atTop"] as? Bool) ?? true)
+      result(nil)
+
+    case "sheetContentHeight":
+      if let height = (args["height"] as? NSNumber).map({ CGFloat($0.doubleValue) }) {
+        NativeSheetPresenter.shared.session(showing: registrar.viewController)?.setContentHeight(height)
+      }
       result(nil)
 
     case "sheetPayload":
@@ -185,7 +196,7 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
 
     case "dismissSheet":
       // From inside a sheet: dismiss the sheet showing this engine.
-      let session = (args["id"] as? NSNumber).flatMap { NativeSheetPresenter.shared.session(id: $0.intValue) }
+      let session = (args["id"] as? NSNumber).flatMap { NativeSheetPresenter.shared.session(owner: id, id: $0.intValue) }
         ?? NativeSheetPresenter.shared.session(showing: registrar.viewController)
       session?.dismiss(result: args["result"])
       result(session != nil)
@@ -218,6 +229,12 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
 
   /// Answers a sheet engine that asked for its payload before [controller]
   /// was presented.
+  static func deliverSheetMaximumHeight(to controller: UIViewController, _ height: CGFloat) {
+    for plugin in instances.values.compactMap({ $0.plugin }) where plugin.registrar.viewController === controller {
+      plugin.channel.invokeMethod("sheetMaximumHeight", arguments: ["height": Double(height)])
+    }
+  }
+
   static func deliverSheetPayload(to controller: UIViewController, _ payload: Any?) {
     for plugin in instances.values.compactMap({ $0.plugin }) where plugin.registrar.viewController === controller {
       plugin.pendingPayload?(payload)

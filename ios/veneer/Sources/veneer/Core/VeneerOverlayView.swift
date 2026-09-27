@@ -181,8 +181,13 @@ final class VeneerOverlayView: UIView {
     if isInSheet { host.setSideInset(NativeSheetSession.edgeInset) }
     host.update(args)
     host.setHidden((args["hidden"] as? Bool) ?? false)
+    edgeEffects.setTopScrolled((args["scrolled"] as? Bool) ?? false)
     edgeEffects.set(.top, style: host.isHidden ? nil : (args["edgeEffect"] as? String), elements: host.isHidden ? [] : [host.bar])
     setNeedsLayout()
+  }
+
+  func setNavigationBarScrolled(_ scrolled: Bool) {
+    edgeEffects.setTopScrolled(scrolled)
   }
 
   func setChromeHidden(_ hidden: Bool) {
@@ -362,6 +367,14 @@ final class VeneerOverlayView: UIView {
   override func didMoveToSuperview() {
     super.didMoveToSuperview()
     updateKeyboardDismissal()
+  }
+
+  /// A sheet's view can be laid out before UIKit presents it (to measure
+  /// content-sized sheets), when it isn't in a sheet yet: whether its drags
+  /// belong to the sheet or the content is settled once it's on screen.
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    if window != nil { updateKeyboardDismissal() }
   }
 
   /// The keyboard's current top: from the last notification normally, from

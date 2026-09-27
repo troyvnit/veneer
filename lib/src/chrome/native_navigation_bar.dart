@@ -160,6 +160,28 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
   bool _visible = false;
   bool _native = false;
 
+  /// Whether the page's content has scrolled under the bar: its scroll edge
+  /// effect shows only then, as UIKit's does.
+  bool _scrolled = false;
+
+  bool _onScroll(Notification notification) {
+    final (metrics, depth) = switch (notification) {
+      final ScrollNotification n => (n.metrics, n.depth),
+      final ScrollMetricsNotification n => (n.metrics, n.depth),
+      _ => (null, 0),
+    };
+    if (metrics == null || depth != 0 || metrics.axis != Axis.vertical) return false;
+    final scrolled = metrics.pixels > metrics.minScrollExtent + 0.5;
+    if (scrolled == _scrolled) return false;
+    _scrolled = scrolled;
+    if (_native) {
+      if (_visible && _active == this) _bridge.setNavigationBarScrolled(scrolled);
+    } else {
+      setState(() {});
+    }
+    return false;
+  }
+
   VeneerBridge get _bridge => VeneerBridge.instance;
   late final RouteChainWatcher _routes = RouteChainWatcher(() {
     if (mounted) _refresh();
@@ -244,7 +266,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
       return;
     }
     _lastSent = encoded;
-    _bridge.setNavigationBar(config, (id) => handlers[id]?.call());
+    _bridge.setNavigationBar({...config, 'scrolled': _scrolled}, (id) => handlers[id]?.call());
   }
 
   @override
@@ -260,7 +282,8 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_native) return _FallbackNavigationBar(widget);
+    final child = NotificationListener<Notification>(onNotification: _onScroll, child: widget.child);
+    if (!_native) return _FallbackNavigationBar(widget, scrolled: _scrolled, child: child);
     // Content starts below the bar and scrolls under it. Inside a
     // NativeChromeScope this is already applied; elsewhere (a pushed page,
     // a native sheet) the bar supplies it.
@@ -279,7 +302,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
           child: child!,
         );
       },
-      child: widget.child,
+      child: child,
     );
   }
 }
@@ -290,7 +313,10 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
 /// instead of glass, floating over the content with a fade standing in for
 /// the scroll edge effect. Content gets top padding for it, as natively.
 class _FallbackNavigationBar extends StatelessWidget {
-  const _FallbackNavigationBar(this.bar);
+  const _FallbackNavigationBar(this.bar, {required this.scrolled, required this.child});
+
+  final bool scrolled;
+  final Widget child;
 
   /// Adjacent buttons with the same [NativeBarButton.group].
   static List<List<NativeBarButton>> _groups(List<NativeBarButton> buttons) {
@@ -452,7 +478,7 @@ class _FallbackNavigationBar extends StatelessWidget {
               padding: mq.padding.copyWith(top: barBottom),
               viewPadding: mq.viewPadding.copyWith(top: barBottom),
             ),
-            child: bar.child,
+            child: child,
           ),
           if (bar.scrollEdgeEffect != NativeScrollEdgeEffect.none)
             Positioned(
@@ -461,21 +487,25 @@ class _FallbackNavigationBar extends StatelessWidget {
               top: 0,
               height: barBottom + 24,
               child: IgnorePointer(
-                child: DecoratedBox(
-                  // Opaque through the status bar, then fading out below the bar.
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      // Opaque behind the controls' row (where iOS blurs
-                      // the content most), easing out below the bar.
-                      colors: [
-                        background,
-                        background,
-                        background.withValues(alpha: 0.9),
-                        background.withValues(alpha: 0),
-                      ],
-                      stops: [0, (top + item) / (barBottom + 24), barBottom / (barBottom + 24), 1],
+                child: AnimatedOpacity(
+                  opacity: scrolled ? 1 : 0,
+                  duration: const Duration(milliseconds: 200),
+                  child: DecoratedBox(
+                    // Opaque through the status bar, then fading out below the bar.
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        // Opaque behind the controls' row (where iOS blurs
+                        // the content most), easing out below the bar.
+                        colors: [
+                          background,
+                          background,
+                          background.withValues(alpha: 0.9),
+                          background.withValues(alpha: 0),
+                        ],
+                        stops: [0, (top + item) / (barBottom + 24), barBottom / (barBottom + 24), 1],
+                      ),
                     ),
                   ),
                 ),

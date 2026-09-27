@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -242,6 +244,153 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(sent('setChromeHidden').map((a) => a['hidden']), [false]);
+  });
+
+  testWidgets('a native sheet sends content-sized detents as their own type', variant: ios, (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    final context = tester.element(find.byType(SizedBox));
+    unawaited(
+      showNativeSheet<void>(
+        context: context,
+        entrypoint: 'sheet',
+        detents: const [NativeSheetDetent.content(), NativeSheetDetent.large],
+        initialDetent: NativeSheetDetent.large,
+        builder: (_) => const SizedBox(),
+      ),
+    );
+    await tester.pump();
+    final args = sent('presentSheet').single;
+    expect(args['detents'], [
+      {'type': 'content'},
+      {'type': 'large'},
+    ]);
+    expect(args['initialDetent'], 1);
+  });
+
+  testWidgets('in a sheet engine, NativeSheetContent reports its height above the home indicator', variant: ios, (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.viewPadding = const FakeViewPadding(bottom: 34);
+    tester.view.padding = const FakeViewPadding(bottom: 34);
+    addTearDown(tester.view.reset);
+    VeneerBridge.instance.isSheetEngine = true;
+    addTearDown(() => VeneerBridge.instance.isSheetEngine = false);
+
+    var extent = 200.0;
+    late StateSetter grow;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeSheetContent(
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              grow = setState;
+              return Padding(
+                padding: EdgeInsets.only(bottom: MediaQuery.paddingOf(context).bottom),
+                child: SizedBox(height: extent),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(sent('sheetContentHeight').last['height'], 200);
+
+    grow(() => extent = 260);
+    await tester.pump();
+    await tester.pump();
+    expect(sent('sheetContentHeight').last['height'], 260);
+  });
+
+  testWidgets('NativeSheetContent measures past a sheet that is still too short for it', variant: ios, (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 300);
+    tester.view.display.size = const Size(393, 852);
+    addTearDown(tester.view.reset);
+    addTearDown(tester.view.display.reset);
+    VeneerBridge.instance.isSheetEngine = true;
+    addTearDown(() => VeneerBridge.instance.isSheetEngine = false);
+
+    await tester.pumpWidget(const MaterialApp(home: NativeSheetContent(child: SizedBox(height: 520))));
+    await tester.pump();
+    expect(sent('sheetContentHeight').last['height'], 520);
+  });
+
+  testWidgets('NativeSheetContent taller than its sheet scrolls within the sheet', variant: ios, (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 790);
+    tester.view.display.size = const Size(393, 852);
+    addTearDown(tester.view.reset);
+    addTearDown(tester.view.display.reset);
+    VeneerBridge.instance.isSheetEngine = true;
+    addTearDown(() => VeneerBridge.instance.isSheetEngine = false);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeSheetContent(
+          child: ListView(children: [for (var i = 0; i < 30; i++) SizedBox(height: 60, child: Text('row $i'))]),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(tester.getSize(find.byType(ListView)).height, moreOrLessEquals(790, epsilon: 0.1));
+
+    await tester.dragUntilVisible(find.text('row 29'), find.byType(ListView), const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(tester.getBottomLeft(find.text('row 29')).dy, lessThanOrEqualTo(790.1));
+  });
+
+  testWidgets('the bar edge effect follows content scrolled under it', variant: ios, (tester) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeNavigationBar(
+          title: const NativeBarTitle(title: 'Page'),
+          child: ListView(
+            controller: controller,
+            children: [for (var i = 0; i < 40; i++) SizedBox(height: 60, child: Text('row $i'))],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(sent('setNavigationBar').last['scrolled'], isFalse);
+
+    controller.jumpTo(200);
+    await tester.pump();
+    expect(sent('navigationBarScrolled').last['scrolled'], isTrue);
+
+    controller.jumpTo(0);
+    await tester.pump();
+    expect(sent('navigationBarScrolled').last['scrolled'], isFalse);
+    expect(sent('navigationBarScrolled').length, 2);
+  });
+
+  testWidgets('NativeSheetContent keeps its height while the sheet grows to it', variant: ios, (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 466);
+    tester.view.display.size = const Size(393, 852);
+    addTearDown(tester.view.reset);
+    addTearDown(tester.view.display.reset);
+    VeneerBridge.instance.isSheetEngine = true;
+    addTearDown(() => VeneerBridge.instance.isSheetEngine = false);
+    VeneerBridge.instance.sheetMaximumHeight.value = 780;
+    addTearDown(() => VeneerBridge.instance.sheetMaximumHeight.value = null);
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: NativeSheetContent(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [SizedBox(height: 520)]),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(tester.getSize(find.byType(Column)).height, 520);
+    expect(sent('sheetContentHeight').last['height'], 520);
   });
 
   testWidgets('glass shape menus are sent natively and picks come back', (tester) async {

@@ -12,6 +12,10 @@ import UIKit
 @available(iOS 26.0, *)
 final class ScrollEdgeEffectHost {
   let scrollView = UIScrollView()
+  /// Whether content has scrolled under the top bar: a UIKit screen shows
+  /// the top effect only then, and the parked scroll view can't tell.
+  private var topScrolled = false
+  private var topShown = false
   /// Keyed by `UIRectEdge.rawValue` (the option set isn't Hashable).
   private var interactions: [UInt: [UIScrollEdgeElementContainerInteraction]] = [:]
 
@@ -44,15 +48,26 @@ final class ScrollEdgeEffectHost {
     scrollView.contentOffset = CGPoint(x: 0, y: 1)
   }
 
+  func setTopScrolled(_ scrolled: Bool) {
+    guard scrolled != topScrolled else { return }
+    topScrolled = scrolled
+    guard topShown else { return }
+    UIView.transition(with: scrollView, duration: 0.2, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+      self.scrollView.topEdgeEffect.isHidden = !scrolled
+    }
+  }
+
   /// Shows the effect at `edge`, shaped around the controls inside `elements`.
   func set(_ edge: UIRectEdge, style: String?, elements: [UIView]) {
     let effect: UIScrollEdgeEffect = edge == .top ? scrollView.topEdgeEffect : scrollView.bottomEdgeEffect
     for old in interactions.removeValue(forKey: edge.rawValue) ?? [] { old.view?.removeInteraction(old) }
-    guard let style, style != "none", !elements.isEmpty else {
+    let shown = style != nil && style != "none" && !elements.isEmpty
+    if edge == .top { topShown = shown }
+    guard shown, let style else {
       effect.isHidden = true
       return
     }
-    effect.isHidden = false
+    effect.isHidden = edge == .top && !topScrolled
     effect.style = style == "hard" ? .hard : style == "soft" ? .soft : .automatic
     interactions[edge.rawValue] = elements.map { element in
       let interaction = UIScrollEdgeElementContainerInteraction()

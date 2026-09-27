@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.3.0
+
+- **Native sheets can present native sheets.** A sheet opened from inside a sheet's engine
+  is a real UIKit sheet over it. Sessions are keyed per presenting engine, so a nested sheet no
+  longer replaces its parent's session (which left the parent unable to close or report its
+  result). Dismissing a sheet finishes the sheets above it too.
+- **Content-sized native sheets:** `NativeSheetDetent.content()` now works natively. Wrap the
+  sheet's content in `NativeSheetContent`; the sheet lays out off screen, reports its height and
+  slides up at it, then follows the content as it changes.
+- **Faster sheets:** the next engine for an entrypoint starts as soon as one is used, so a
+  sheet opened from a sheet, or the next one, is warm too.
+- **Content-sized sheets, sizing:** content taller than the sheet is laid out at the sheet's
+  height, so its scroll views end at the sheet's bottom instead of below it; content the sheet
+  is still growing to keeps its height rather than being squeezed for a frame.
+- **Stacked sheets:** a Flutter sheet under another sheet steps back behind it (slightly
+  smaller, its top peeking above, its grabber hidden) and returns when the sheet above closes.
+- **Navigation bar:** the scroll edge effect shows only once the page's content scrolls under
+  the bar, natively and in the replica, so content at rest under the bar stays crisp.
+- **Fixes:** a detent index outside `detents` no longer crashes; a content-sized Flutter sheet
+  follows content that grows after its first layout; the first drag on a content-sized native
+  sheet scrolls its content instead of being lost.
+
 ## 0.2.2
 
 - **Sheets:** a Flutter sheet given a `backgroundColor` stays solid at every detent: content no

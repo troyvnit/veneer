@@ -22,8 +22,8 @@ class NativeSheetDetent {
 
   /// As tall as the sheet's content (capped at [large]), following it as it
   /// changes — for sheets of controls rather than pages. Flutter sheets
-  /// measure the content; a native sheet, whose content lives in another
-  /// engine, uses [large].
+  /// measure the content themselves; in a native sheet, wrap it in
+  /// [NativeSheetContent] so its engine can tell UIKit its height.
   const NativeSheetDetent.content() : fraction = null, height = null, isContent = true;
 
   /// About half the screen: the sheet floats inset from the edges.
@@ -43,8 +43,10 @@ class NativeSheetDetent {
 
   Map<String, Object?> _encode() => this == medium
       ? {'type': 'medium'}
-      : this == large || isContent
+      : this == large
       ? {'type': 'large'}
+      : isContent
+      ? {'type': 'content'}
       : height != null
       ? {'type': 'height', 'value': height}
       : {'type': 'fraction', 'value': fraction};
@@ -155,6 +157,36 @@ void runNativeSheet(Widget app) {
   WidgetsFlutterBinding.ensureInitialized();
   VeneerBridge.instance.isSheetEngine = true;
   runApp(_SheetScrollEdgeReporter(child: app));
+}
+
+/// The content of a native sheet with a [NativeSheetDetent.content] detent:
+/// measures [child]'s natural height and has the UIKit sheet follow it (the
+/// sheet slides up at that height). Elsewhere — the Flutter sheet measures
+/// its content itself — it's just [child].
+class NativeSheetContent extends StatelessWidget {
+  const NativeSheetContent({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!NativeSheet.isNativeSheet) return child;
+    final mq = MediaQuery.of(context);
+    final display = View.of(context).display;
+    // The view is the sheet, so its size would cap the content at the
+    // sheet's current height: measure against the screen instead. UIKit adds
+    // the bottom safe area to a detent's height itself.
+    return ValueListenableBuilder<double?>(
+      valueListenable: VeneerBridge.instance.sheetMaximumHeight,
+      builder: (context, maximum, child) => _ContentSizedBox(
+        maxHeight: display.size.height / display.devicePixelRatio,
+        scrollsFrom: maximum == null ? null : maximum + mq.viewPadding.bottom,
+        onMeasured: (height) => VeneerBridge.instance.setSheetContentHeight(height - mq.viewPadding.bottom),
+        child: child,
+      ),
+      child: child,
+    );
+  }
 }
 
 /// Tells UIKit, as each touch starts, whether the content under it is
@@ -310,13 +342,26 @@ class NativeSheetRoute<T> extends PageRoute<T> {
     Widget child,
   ) => child;
 
+  /// Whether the route above is another sheet: this one then steps back
+  /// behind it (see [_NativeSheetState]) rather than receding like a page.
+  bool _coveredBySheet = false;
+
+  @override
+  void didChangeNext(Route<dynamic>? nextRoute) {
+    super.didChangeNext(nextRoute);
+    // Kept through the sheet above's dismissal, which ends with no next route.
+    if (nextRoute != null) _coveredBySheet = nextRoute is NativeSheetRoute;
+  }
+
   /// The page behind recedes — scales back with rounded corners — while the
-  /// sheet is at its large detent, as in UIKit.
+  /// sheet is at its large detent, as in UIKit. A sheet behind steps back on
+  /// its own.
   @override
   DelegatedTransitionBuilder? get delegatedTransition =>
       (context, animation, secondaryAnimation, allowSnapshotting, child) => AnimatedBuilder(
         animation: Listenable.merge([secondaryAnimation, _recede]),
         builder: (context, child) {
+          if (ModalRoute.of(context) is NativeSheetRoute) return child!;
           final t = Curves.easeOut.transform(secondaryAnimation.value.clamp(0, 1)) * _recede.value;
           if (t == 0) return child!;
           final top = MediaQuery.paddingOf(context).top;
@@ -358,6 +403,11 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
   static const _floatingInset = 8.0;
   static const _largeRadius = 34.0;
   static const _dimAlpha = 0.28;
+
+  /// Under another sheet, UIKit's sheet shrinks and lifts so its top edge
+  /// peeks above the new one, its grabber hidden.
+  static const _stackedShrink = 0.06;
+  static const _stackedLift = 10.0;
 
   late final AnimationController _height = AnimationController.unbounded(vsync: this);
   late final CurvedAnimation _present = CurvedAnimation(
@@ -421,7 +471,12 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
     super.initState();
     _height.addListener(_changed);
     _present.addListener(_changed);
+    _route.secondaryAnimation?.addListener(_changed);
   }
+
+  /// 0 on top, 1 fully stepped back behind a sheet above.
+  double get _stacked =>
+      _route._coveredBySheet ? Curves.easeOut.transform((_route.secondaryAnimation?.value ?? 0).clamp(0.0, 1.0)) : 0;
 
   @override
   void didChangeDependencies() {
@@ -452,6 +507,7 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
 
   @override
   void dispose() {
+    _route.secondaryAnimation?.removeListener(_changed);
     _height.dispose();
     _present.dispose();
     super.dispose();
@@ -629,6 +685,7 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
         chosen ??
         (dark ? const Color(0xFF1C1C1E) : Colors.white).withValues(alpha: lerpDouble(dark ? 0.78 : 0.82, 1, t));
     final grabber = _route.showGrabber ?? _route.detents.length > 1;
+    final stacked = _stacked;
 
     final radius = BorderRadius.vertical(top: Radius.circular(topRadius), bottom: Radius.circular(bottomRadius));
 
@@ -691,64 +748,74 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
           right: inset,
           bottom: inset - displacement,
           height: height,
-          child: Semantics(
-            scopesRoute: true,
-            explicitChildNodes: true,
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onVerticalDragStart: (_) => _dragStart(),
-              onVerticalDragUpdate: (d) => _dragBy(d.delta.dy),
-              onVerticalDragEnd: (d) => _dragEnd(d.primaryVelocity ?? 0),
-              onVerticalDragCancel: () => _dragEnd(0),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: radius,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: dark ? 0.45 : 0.14 * (1 - t) + 0.04),
-                      blurRadius: 40,
-                      offset: const Offset(0, 8),
+          child: Transform.translate(
+            offset: Offset(0, -_stackedLift * stacked),
+            child: Transform.scale(
+              scale: 1 - _stackedShrink * stacked,
+              alignment: Alignment.topCenter,
+              child: Semantics(
+                scopesRoute: true,
+                explicitChildNodes: true,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onVerticalDragStart: (_) => _dragStart(),
+                  onVerticalDragUpdate: (d) => _dragBy(d.delta.dy),
+                  onVerticalDragEnd: (d) => _dragEnd(d.primaryVelocity ?? 0),
+                  onVerticalDragCancel: () => _dragEnd(0),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: radius,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: dark ? 0.45 : 0.14 * (1 - t) + 0.04),
+                          blurRadius: 40,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-                child: Stack(
-                  children: [
-                    Positioned.fill(
-                      child: _sizesToContent
-                          ? _ContentSizedBox(maxHeight: _large, onMeasured: _contentMeasured, child: content)
-                          : content,
-                    ),
-                    // The sheet's rim: a hairline that keeps its rounded top
-                    // edge visible against a dark page behind, as UIKit's does.
-                    Positioned.fill(
-                      child: IgnorePointer(
-                        child: DecoratedBox(
-                          decoration: ShapeDecoration(
-                            shape: RoundedSuperellipseBorder(
-                              borderRadius: radius,
-                              side: BorderSide(color: style.border, width: 1 / mq.devicePixelRatio * 2),
+                    child: Stack(
+                      children: [
+                        Positioned.fill(
+                          child: _sizesToContent
+                              ? _ContentSizedBox(maxHeight: _large, onMeasured: _contentMeasured, child: content)
+                              : content,
+                        ),
+                        // The sheet's rim: a hairline that keeps its rounded top
+                        // edge visible against a dark page behind, as UIKit's does.
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: DecoratedBox(
+                              decoration: ShapeDecoration(
+                                shape: RoundedSuperellipseBorder(
+                                  borderRadius: radius,
+                                  side: BorderSide(color: style.border, width: 1 / mq.devicePixelRatio * 2),
+                                ),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                    if (grabber)
-                      Positioned(
-                        top: _grabberTop,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: Container(
-                            width: _grabberSize.width,
-                            height: _grabberSize.height,
-                            decoration: BoxDecoration(
-                              color: style.secondaryLabel.withValues(alpha: 0.35),
-                              borderRadius: BorderRadius.circular(_grabberSize.height / 2),
+                        if (grabber)
+                          Positioned(
+                            top: _grabberTop,
+                            left: 0,
+                            right: 0,
+                            child: Center(
+                              child: Opacity(
+                                opacity: 1 - stacked,
+                                child: Container(
+                                  width: _grabberSize.width,
+                                  height: _grabberSize.height,
+                                  decoration: BoxDecoration(
+                                    color: style.secondaryLabel.withValues(alpha: 0.35),
+                                    borderRadius: BorderRadius.circular(_grabberSize.height / 2),
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                  ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -776,22 +843,36 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
 /// for a [NativeSheetDetent.content] detent, then again to fill the sheet
 /// when the sheet is taller (a larger detent, or the rubber band).
 class _ContentSizedBox extends SingleChildRenderObjectWidget {
-  const _ContentSizedBox({required this.maxHeight, required this.onMeasured, super.child});
+  const _ContentSizedBox({required this.maxHeight, required this.onMeasured, this.scrollsFrom, super.child});
 
   final double maxHeight;
+
+  /// The tallest the sheet gets ([maxHeight] when null): content that
+  /// reaches it is held to the sheet and scrolls; shorter content is only
+  /// waiting for the sheet to grow to it, and keeps its height meanwhile.
+  final double? scrollsFrom;
   final ValueChanged<double> onMeasured;
 
   @override
-  _RenderContentSizedBox createRenderObject(BuildContext context) => _RenderContentSizedBox(maxHeight, onMeasured);
+  _RenderContentSizedBox createRenderObject(BuildContext context) =>
+      _RenderContentSizedBox(maxHeight, scrollsFrom ?? maxHeight, onMeasured);
 
   @override
   void updateRenderObject(BuildContext context, _RenderContentSizedBox renderObject) => renderObject
     ..maxHeight = maxHeight
+    ..scrollsFrom = scrollsFrom ?? maxHeight
     ..onMeasured = onMeasured;
 }
 
 class _RenderContentSizedBox extends RenderProxyBox {
-  _RenderContentSizedBox(this._maxHeight, this.onMeasured);
+  _RenderContentSizedBox(this._maxHeight, this._scrollsFrom, this.onMeasured);
+
+  double _scrollsFrom;
+  set scrollsFrom(double value) {
+    if (value == _scrollsFrom) return;
+    _scrollsFrom = value;
+    markNeedsLayout();
+  }
 
   double _maxHeight;
   set maxHeight(double value) {
@@ -803,6 +884,9 @@ class _RenderContentSizedBox extends RenderProxyBox {
   ValueChanged<double> onMeasured;
   double? _reported;
 
+  /// Keeps the second layout's constraints loose (see [performLayout]).
+  static const _slack = 0.01;
+
   @override
   void performLayout() {
     final child = this.child;
@@ -813,7 +897,25 @@ class _RenderContentSizedBox extends RenderProxyBox {
       parentUsesSize: true,
     );
     final natural = child.size.height;
-    if (size.height > natural + 0.5) child.layout(BoxConstraints.tight(size));
+    // Then laid out at the sheet's own height: stretched to fill a taller
+    // sheet, or held to a shorter one that can't grow to it (the large
+    // detent is shorter than the screen it was measured against) so scroll
+    // views end at its bottom. Content the sheet is still growing to keeps
+    // its height, clipped, rather than being squeezed for a frame. Never
+    // with tight constraints: those would make the child a relayout
+    // boundary, and its later changes of height would never reach this box.
+    final heldToSheet = size.height < natural - 0.5 && natural >= _scrollsFrom - 0.5;
+    if (size.height > natural + 0.5 || heldToSheet) {
+      child.layout(
+        BoxConstraints(
+          minWidth: size.width,
+          maxWidth: size.width,
+          minHeight: size.height,
+          maxHeight: size.height + _slack,
+        ),
+        parentUsesSize: true,
+      );
+    }
     if (_reported == null || (_reported! - natural).abs() >= 0.5) {
       _reported = natural;
       // Heights feed the sheet's layout, so report after this frame.

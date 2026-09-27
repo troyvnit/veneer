@@ -21,7 +21,19 @@ final class NativeSheetPresenter {
 
   private lazy var group = FlutterEngineGroup(name: "veneer.sheets", project: nil)
   private var prewarmed: [String: FlutterEngine] = [:]
-  private var sessions: [Int: NativeSheetSession] = [:]
+  /// Keyed by the presenting engine's plugin as well as the sheet id: each
+  /// engine numbers its own sheets, so a sheet presented from inside a sheet
+  /// reuses ids the app already holds.
+  private var sessions: [SessionKey: NativeSheetSession] = [:]
+
+  struct SessionKey: Hashable {
+    let owner: Int
+    let id: Int
+  }
+
+  /// How long a content-sized sheet waits for its first measurement before
+  /// presenting anyway.
+  private static let contentTimeout: TimeInterval = 0.35
 
   private static func key(_ entrypoint: String, _ libraryURI: String?) -> String {
     "\(libraryURI ?? "")#\(entrypoint)"
@@ -75,16 +87,18 @@ final class NativeSheetPresenter {
 
   /// `{id, entrypoint, libraryUri, arguments, detents: [{type, value}],
   ///   initialDetent, grabber, largestUndimmedDetent, dismissible,
-  ///   expandsOnScroll, cornerRadius}`.
-  func present(_ args: [String: Any], from presenter: UIViewController?, onEvent: @escaping (String, [String: Any]) -> Void)
-    -> Bool
-  {
+  ///   expandsOnScroll, cornerRadius}`, from the engine of plugin [owner].
+  func present(
+    _ args: [String: Any], owner: Int, from presenter: UIViewController?,
+    onEvent: @escaping (String, [String: Any]) -> Void
+  ) -> Bool {
     guard let presenter = presenter.map(Self.topmost), let id = (args["id"] as? NSNumber)?.intValue,
       let entrypoint = args["entrypoint"] as? String
     else { return false }
     let libraryURI = args["libraryUri"] as? String
     let arguments = args["arguments"] as? [String] ?? []
     let key = Self.key(entrypoint, libraryURI)
+    let sessionKey = SessionKey(owner: owner, id: id)
 
     let engine: FlutterEngine
     if arguments.isEmpty, let warm = prewarmed.removeValue(forKey: key) {
@@ -99,16 +113,38 @@ final class NativeSheetPresenter {
     controller.modalPresentationStyle = .pageSheet
 
     let session = NativeSheetSession(id: id, engine: engine, controller: controller, onEvent: onEvent)
+    // A sheet presented over another sheet goes away with it.
+    session.parent = sessions.values.first { $0.controller === presenter }
+    session.parent?.children.append(session)
     session.onFinish = { [weak self] in
-      self?.sessions[id] = nil
-      // Keep a warm engine ready for the next time.
+      self?.sessions[sessionKey] = nil
       if arguments.isEmpty { self?.prewarm(entrypoint: entrypoint, libraryURI: libraryURI) }
     }
     session.configure(args)
     session.payload = args["payload"] is NSNull ? nil : args["payload"]
-    sessions[id] = session
+    sessions[sessionKey] = session
     VeneerPlugin.deliverSheetPayload(to: controller, session.payload)
-    presenter.present(controller, animated: true)
+
+    let show = { [weak presenter, weak controller] in
+      guard let presenter, let controller, controller.presentingViewController == nil else { return }
+      presenter.present(controller, animated: true)
+    }
+    if session.sizesToContent {
+      // Lay the sheet out off screen so its content can measure itself;
+      // it slides up at that height (or at large, if it's slow to report).
+      session.onFirstContentHeight = show
+      controller.loadViewIfNeeded()
+      controller.view.frame = presenter.view.bounds
+      controller.view.setNeedsLayout()
+      controller.view.layoutIfNeeded()
+      DispatchQueue.main.asyncAfter(deadline: .now() + Self.contentTimeout) { [weak session] in
+        session?.presentPending()
+      }
+    } else {
+      show()
+    }
+    // The next sheet (one over this, or after it) starts warm too.
+    if arguments.isEmpty { prewarm(entrypoint: entrypoint, libraryURI: libraryURI) }
     return true
   }
 
@@ -118,7 +154,7 @@ final class NativeSheetPresenter {
     sessions.values.first { $0.controller === controller }
   }
 
-  func session(id: Int) -> NativeSheetSession? { sessions[id] }
+  func session(owner: Int, id: Int) -> NativeSheetSession? { sessions[SessionKey(owner: owner, id: id)] }
 
   private static func topmost(_ controller: UIViewController) -> UIViewController {
     var top = controller
@@ -136,6 +172,14 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
   var onFinish: (() -> Void)?
   /// Handed to the sheet's Flutter app (`NativeSheet.payload`).
   var payload: Any?
+  /// The sheet this one was presented over, and those presented over it.
+  weak var parent: NativeSheetSession?
+  var children: [NativeSheetSession] = []
+  /// Whether a detent follows the content's height, and that height (the
+  /// sheet above the bottom safe area), as the sheet's engine measures it.
+  private(set) var sizesToContent = false
+  private var contentHeight: CGFloat?
+  var onFirstContentHeight: (() -> Void)?
   private let onEvent: (String, [String: Any]) -> Void
   private var detentIds: [UISheetPresentationController.Detent.Identifier] = []
   private var result: Any?
@@ -166,20 +210,26 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
         detent = .custom(identifier: .init("veneer.\(i)")) { $0.maximumDetentValue * value }
       case "height":
         detent = .custom(identifier: .init("veneer.\(i)")) { min($0.maximumDetentValue, value) }
+      case "content":
+        sizesToContent = true
+        detent = .custom(identifier: .init("veneer.\(i)")) { [weak self] context in
+          self?.noteMaximumHeight(context.maximumDetentValue)
+          return min(context.maximumDetentValue, self?.contentHeight ?? context.maximumDetentValue)
+        }
       default: detent = .large()
       }
       detents.append(detent)
       detentIds.append(detent.identifier)
     }
     sheet.detents = detents
-    if let initial = (args["initialDetent"] as? NSNumber)?.intValue, initial < detentIds.count {
+    if let initial = (args["initialDetent"] as? NSNumber)?.intValue, detentIds.indices.contains(initial) {
       sheet.selectedDetentIdentifier = detentIds[initial]
     }
     sheet.prefersGrabberVisible = (args["grabber"] as? Bool) ?? (detents.count > 1)
     // Header controls sit 16 pt from the sheet's top edge, concentric with
     // its corners (Apple's sheet templates); content starts below that.
     controller.additionalSafeAreaInsets.top = NativeSheetSession.edgeInset
-    if let undimmed = (args["largestUndimmedDetent"] as? NSNumber)?.intValue, undimmed < detentIds.count {
+    if let undimmed = (args["largestUndimmedDetent"] as? NSNumber)?.intValue, detentIds.indices.contains(undimmed) {
       sheet.largestUndimmedDetentIdentifier = detentIds[undimmed]
     }
     sheet.prefersScrollingExpandsWhenScrolledToEdge = (args["expandsOnScroll"] as? Bool) ?? true
@@ -191,6 +241,42 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
     controller.isModalInPresentation = !((args["dismissible"] as? Bool) ?? true)
   }
 
+  /// The tallest the sheet can get, for its engine: content shorter than
+  /// that is growing the sheet to fit, content that reaches it scrolls.
+  private var maximumHeight: CGFloat?
+
+  private func noteMaximumHeight(_ height: CGFloat) {
+    guard abs((maximumHeight ?? -1) - height) > 0.5 else { return }
+    maximumHeight = height
+    // Detents resolve during layout: tell the engine afterwards.
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      VeneerPlugin.deliverSheetMaximumHeight(to: self.controller, height)
+    }
+  }
+
+  /// The content measured [height]: the sheet follows it, animated once
+  /// it's on screen.
+  func setContentHeight(_ height: CGFloat) {
+    guard sizesToContent, height > 0 else { return }
+    let first = contentHeight == nil
+    guard first || abs((contentHeight ?? 0) - height) > 0.5 else { return }
+    contentHeight = height
+    if first {
+      presentPending()
+    } else if let sheet = controller.sheetPresentationController {
+      sheet.animateChanges { sheet.invalidateDetents() }
+    }
+  }
+
+  /// Presents a content-sized sheet still waiting for its measurement.
+  func presentPending() {
+    let show = onFirstContentHeight
+    onFirstContentHeight = nil
+    controller.sheetPresentationController?.invalidateDetents()
+    show?()
+  }
+
   /// Dismisses with a result for the presenting app.
   func dismiss(result: Any?) {
     self.result = result
@@ -200,6 +286,12 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
   private func finish() {
     guard !finished else { return }
     finished = true
+    // UIKit took the sheets over this one down with it, without telling
+    // their delegates: finish them first, while this engine still runs.
+    for child in children { child.finish() }
+    children = []
+    parent?.children.removeAll { $0 === self }
+    onFirstContentHeight = nil
     onEvent("sheetDismissed", ["id": id, "result": result ?? NSNull()])
     VeneerPlugin.tearDownSheet(controller)
     onFinish?()

@@ -47,6 +47,10 @@ class VeneerBridge {
   /// navigation bar; 0 when none is showing.
   final ValueNotifier<double> chromeTopInset = ValueNotifier(0);
 
+  /// In a native sheet's engine: the tallest the UIKit sheet can get (above
+  /// the bottom safe area), once presented.
+  final ValueNotifier<double?> sheetMaximumHeight = ValueNotifier(null);
+
   final Map<int, VoidCallback> _shapeTapHandlers = {};
   final Map<int, ValueChanged<int>> _shapeMenuHandlers = {};
   ValueChanged<int>? _tabSelectedHandler;
@@ -227,6 +231,13 @@ class VeneerBridge {
     await _channel.invokeMethod<void>('setNavigationBar', config);
   }
 
+  /// Whether the active bar's page has scrolled under it (its edge effect
+  /// shows only then).
+  void setNavigationBarScrolled(bool scrolled) {
+    if (!_attached) return;
+    _channel.invokeMethod<void>('navigationBarScrolled', {'scrolled': scrolled});
+  }
+
   void updateNavigationBarHandler(ValueChanged<String> onItem) => _navItemHandler = onItem;
 
   void updateComposerHandlers(VeneerComposerHandlers handlers) => _composerHandlers = handlers;
@@ -323,6 +334,13 @@ class VeneerBridge {
     _channel.invokeMethod<void>('sheetContentAtTop', {'atTop': atTop});
   }
 
+  /// From inside a native sheet: its content's height, for a content-sized
+  /// detent. Sent before the sheet is presented too (it's laid out off
+  /// screen to measure), so it doesn't wait for the overlay.
+  void setSheetContentHeight(double height) {
+    _channel.invokeMethod<void>('sheetContentHeight', {'height': height});
+  }
+
   /// From inside a native sheet: the payload [presentSheet] was given,
   /// once the sheet is presented (a pre-warmed engine waits until then).
   Future<Object?> sheetPayload() => _channel.invokeMethod<Object?>('sheetPayload');
@@ -365,6 +383,8 @@ class VeneerBridge {
         final id = args['id']! as int;
         _sheetDetentHandlers.remove(id);
         _sheetResults.remove(id)?.complete(args['result']);
+      case 'sheetMaximumHeight':
+        sheetMaximumHeight.value = (args['height']! as num).toDouble();
       case 'sheetDetentChanged':
         _sheetDetentHandlers[args['id']! as int]?.call(args['detent']! as int);
       case 'composerLayout':
