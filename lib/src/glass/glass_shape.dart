@@ -81,9 +81,14 @@ class _GlassShapeState extends State<GlassShape> {
   int? _group;
   bool _native = false;
 
+  late final RouteChainWatcher _routes = RouteChainWatcher(() {
+    if (mounted) setState(() {});
+  });
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _routes.update(context);
     _native = useNativeLayer(context);
     // Runs after initState and whenever the enclosing GlassGroup changes;
     // moving to another group reparents the native view.
@@ -143,6 +148,7 @@ class _GlassShapeState extends State<GlassShape> {
 
   @override
   void dispose() {
+    _routes.dispose();
     if (_native) VeneerBridge.instance.removeShape(_id);
     super.dispose();
   }

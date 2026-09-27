@@ -161,10 +161,14 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
   bool _native = false;
 
   VeneerBridge get _bridge => VeneerBridge.instance;
+  late final RouteChainWatcher _routes = RouteChainWatcher(() {
+    if (mounted) _refresh();
+  });
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _routes.update(context);
     _refresh();
   }
 
@@ -245,6 +249,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
 
   @override
   void dispose() {
+    _routes.dispose();
     if (_active == this) {
       _active = null;
       _lastSent = null;

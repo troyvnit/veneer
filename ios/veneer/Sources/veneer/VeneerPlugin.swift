@@ -89,6 +89,7 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
         return
       }
       overlay.glassLayer.defaultSpacing = CGFloat((args["spacing"] as? NSNumber)?.doubleValue ?? 16)
+      DispatchQueue.main.async { overlay.resendLayout() }
       let fn: @convention(c) (UnsafePointer<Double>?, Int32, Int32) -> Void = veneer_apply_frame
       result([
         "applyFrameAddress": Int(bitPattern: unsafeBitCast(fn, to: UnsafeRawPointer.self)),

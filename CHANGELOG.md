@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.1
+
+- **Sheets:** `NativeSheetDetent.content()` sizes a Flutter-drawn sheet to its content and
+  follows it as it changes; sheets shorter than large float inset from the screen edges. Sheet
+  content gets a `Material` (text fields and list tiles work as-is) and the sheet's surface as
+  its scaffold background.
+- **Sheets, safe area and keyboard:** a sheet rising for the keyboard grows at least as fast as
+  the keyboard, so its content is never squeezed between the two; the keyboard inset reaching
+  the content no longer counts the sheet's floating inset twice; dragging the sheet puts the
+  keyboard away.
+- **Fixes:** bars, composers and the tab bar come back when a popup or sheet on an outer
+  navigator closes (a page in a tab's navigator); after a hot restart the native overlay
+  reports its insets again, so pages under a `NativeNavigationBar` don't slide under the bar.
+
 ## 0.2.0
 
 - **Navigation bar:** titles can be leading-aligned (`NativeBarTitle.alignment`) and styled

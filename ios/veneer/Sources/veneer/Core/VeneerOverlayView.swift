@@ -429,6 +429,14 @@ final class VeneerOverlayView: UIView {
   /// Flutter adds this to MediaQuery padding so scroll views end above the
   /// bar but still scroll underneath it. Not reported while the bar is
   /// hidden for a popup, so the page underneath doesn't re-lay out.
+  /// A new Dart isolate attached (a hot restart, say): it knows nothing of
+  /// what was reported before, so the next layout reports everything again.
+  func resendLayout() {
+    lastReportedInsets = UIEdgeInsets(top: -1, left: 0, bottom: -1, right: 0)
+    lastComposerHeight = -1
+    setNeedsLayout()
+  }
+
   func reportInsets() {
     // A hidden tab bar keeps its last inset, so the page underneath doesn't
     // re-lay out; the navigation bar's inset is reported regardless.

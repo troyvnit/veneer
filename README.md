@@ -344,7 +344,10 @@ NativeSheet.close(context, result);
   scrolls, as in UIKit.
 - Give the sheet page's `Scaffold` a transparent background so the sheet's material shows.
 - Without an `entrypoint`, or off iOS 26, `builder` runs in a Flutter sheet with the same
-  detents, grabber, iOS 26 look and drag physics.
+  detents, grabber, iOS 26 look and drag physics. `NativeSheetRoute` pushes that Flutter sheet
+  directly, and `NativeSheetDetent.content()` sizes it to its content (native sheets use large).
+- The sheet's content gets the safe area a UIKit sheet gives it: the top clears the grabber, the
+  bottom clears the home indicator, and the keyboard moves the sheet to its largest detent.
 
 ### Menus
 

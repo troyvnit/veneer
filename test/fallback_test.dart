@@ -322,6 +322,82 @@ void main() {
     expect(taps, 1);
   });
 
+  for (final large in [false, true]) {
+    testWidgets('native sheet safe area (${large ? 'large' : 'floating'}): '
+        'grabber on top, home indicator and keyboard less the sheet inset', (tester) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(393, 852);
+      tester.view.padding = const FakeViewPadding(top: 59, bottom: 34);
+      tester.view.viewPadding = const FakeViewPadding(top: 59, bottom: 34);
+      addTearDown(tester.view.reset);
+
+      late MediaQueryData inside;
+      await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Text('page'))));
+      tester
+          .state<NavigatorState>(find.byType(Navigator))
+          .push(
+            NativeSheetRoute<void>(
+              detents: [large ? NativeSheetDetent.large : const NativeSheetDetent.height(300)],
+              builder: (context) {
+                inside = MediaQuery.of(context);
+                return const SizedBox.expand();
+              },
+            ),
+          );
+      await tester.pumpAndSettle();
+
+      final inset = large ? 0.0 : 8.0;
+      expect(inside.padding.top, 6);
+      expect(inside.padding.bottom, 34 - inset);
+      expect(inside.viewPadding.bottom, 34 - inset);
+
+      tester.view.viewInsets = const FakeViewPadding(bottom: 336);
+      await tester.pumpAndSettle();
+      final keyboardInset = large ? 0.0 : 8.0;
+      expect(inside.viewInsets.bottom, 336 - keyboardInset);
+    });
+  }
+
+  testWidgets('a rising keyboard never squeezes a collapsed sheet below its content', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.padding = const FakeViewPadding(top: 59, bottom: 34);
+    tester.view.viewPadding = const FakeViewPadding(top: 59, bottom: 34);
+    addTearDown(tester.view.reset);
+
+    const collapsed = 300.0;
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Text('page'))));
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .push(
+          NativeSheetRoute<void>(
+            detents: const [NativeSheetDetent.height(collapsed), NativeSheetDetent.large],
+            builder: (context) => Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+              child: const Column(
+                children: [
+                  Expanded(child: SizedBox.expand()),
+                  SizedBox(key: Key('bar'), height: 120),
+                ],
+              ),
+            ),
+          ),
+        );
+    await tester.pumpAndSettle();
+
+    double sheetHeight() =>
+        tester.getBottomLeft(find.byKey(const Key('bar'))).dy - tester.getTopLeft(find.byType(Column)).dy;
+    final before = sheetHeight();
+    for (var keyboard = 0.0; keyboard <= 336; keyboard += 28) {
+      tester.view.viewInsets = FakeViewPadding(bottom: keyboard);
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(tester.takeException(), isNull);
+      expect(sheetHeight(), greaterThanOrEqualTo(before - 0.5));
+    }
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.byType(Column)).dy, lessThan(80));
+  });
+
   test('isSupported needs iOS 26: the test host is not', () {
     VeneerBridge.instance.debugIsSupportedOverride = null;
     expect(Veneer.isSupported, isFalse);

@@ -140,10 +140,14 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
 
   NativeComposerController get _controller => _widgetController ?? (_ownController ??= NativeComposerController());
   VeneerBridge get _bridge => VeneerBridge.instance;
+  late final RouteChainWatcher _routes = RouteChainWatcher(() {
+    if (mounted) _refresh();
+  });
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _routes.update(context);
     _refresh();
   }
 
@@ -221,6 +225,7 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
 
   @override
   void dispose() {
+    _routes.dispose();
     if (_active == this) {
       _active = null;
       _lastSent = null;

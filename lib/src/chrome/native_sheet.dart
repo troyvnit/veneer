@@ -13,10 +13,16 @@ import '../core/veneer_bridge.dart';
 @immutable
 class NativeSheetDetent {
   /// A fraction of the tallest the sheet can be ([large]).
-  const NativeSheetDetent.fraction(double this.fraction) : height = null;
+  const NativeSheetDetent.fraction(double this.fraction) : height = null, isContent = false;
 
   /// A fixed height in points (capped at [large]).
-  const NativeSheetDetent.height(double this.height) : fraction = null;
+  const NativeSheetDetent.height(double this.height) : fraction = null, isContent = false;
+
+  /// As tall as the sheet's content (capped at [large]), following it as it
+  /// changes — for sheets of controls rather than pages. Flutter sheets
+  /// measure the content; a native sheet, whose content lives in another
+  /// engine, uses [large].
+  const NativeSheetDetent.content() : fraction = null, height = null, isContent = true;
 
   /// About half the screen: the sheet floats inset from the edges.
   static const medium = NativeSheetDetent.fraction(0.5);
@@ -26,23 +32,30 @@ class NativeSheetDetent {
 
   final double? fraction;
   final double? height;
+  final bool isContent;
 
-  /// Resolved against the large detent's height.
-  double resolve(double largeHeight) => math.min(largeHeight, height ?? largeHeight * fraction!);
+  /// Resolved against the large detent's height ([content] resolves to it
+  /// until measured).
+  double resolve(double largeHeight) =>
+      isContent ? largeHeight : math.min(largeHeight, height ?? largeHeight * fraction!);
 
   Map<String, Object?> _encode() => this == medium
       ? {'type': 'medium'}
-      : this == large
+      : this == large || isContent
       ? {'type': 'large'}
       : height != null
       ? {'type': 'height', 'value': height}
       : {'type': 'fraction', 'value': fraction};
 
   @override
-  bool operator ==(Object other) => other is NativeSheetDetent && other.fraction == fraction && other.height == height;
+  bool operator ==(Object other) =>
+      other is NativeSheetDetent &&
+      other.fraction == fraction &&
+      other.height == height &&
+      other.isContent == isContent;
 
   @override
-  int get hashCode => Object.hash(fraction, height);
+  int get hashCode => Object.hash(fraction, height, isContent);
 }
 
 /// Presents a sheet, following Apple's Human Interface Guidelines for sheets.
@@ -351,9 +364,48 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
   bool _dragging = false;
   bool _initialized = false;
   bool _keyboardExpanded = false;
+
+  /// The height the sheet had when the keyboard began to rise: until the
+  /// sheet reaches its largest detent it grows at least with the keyboard,
+  /// so its content is never squeezed between the two.
+  double? _keyboardBase;
+  double _keyboard = 0;
   NativeSheetDetent? _reported;
   List<double> _heights = const [];
   double _large = 0;
+
+  /// The content's own height, for a [NativeSheetDetent.content] detent.
+  double? _contentHeight;
+  double _lastKeyboard = 0;
+
+  bool get _sizesToContent => _route.detents.any((d) => d.isContent);
+
+  double _resolve(NativeSheetDetent d) =>
+      d.isContent && _contentHeight != null ? math.min(_contentHeight!, _large) : d.resolve(_large);
+
+  void _recomputeHeights() => _heights = [for (final d in _route.detents) _resolve(d)]..sort();
+
+  /// The content was measured (or changed height): a sheet resting at the
+  /// content detent follows it — at once while the keyboard moves (the
+  /// content pads for it frame by frame), on the sheet's spring otherwise.
+  void _contentMeasured(double height) {
+    if (!mounted || (_contentHeight != null && (_contentHeight! - height).abs() < 0.5)) return;
+    final first = _contentHeight == null;
+    final restingOnContent = _reported?.isContent ?? false;
+    _contentHeight = height;
+    _recomputeHeights();
+    if (_dragging) return setState(() {});
+    final target = _resolve(_reported ?? _route.detents.first);
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final keyboardMoving = keyboard != _lastKeyboard;
+    _lastKeyboard = keyboard;
+    if (first || keyboardMoving || !restingOnContent) {
+      if (first || keyboardMoving) _height.value = target;
+      setState(() {});
+    } else {
+      _settleTo(target, 0);
+    }
+  }
 
   NativeSheetRoute<Object?> get _route => widget.route;
 
@@ -370,21 +422,24 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
     final mq = MediaQuery.of(context);
     // The large detent leaves the status bar and a sliver of the page behind.
     _large = mq.size.height - mq.padding.top - 10;
-    _heights = [for (final d in _route.detents) d.resolve(_large)]..sort();
+    _recomputeHeights();
     if (!_initialized) {
       _initialized = true;
-      final initial = (_route.initialDetent ?? _route.detents.first).resolve(_large);
+      final initial = _resolve(_route.initialDetent ?? _route.detents.first);
       _height.value = initial;
       _reported = _detentFor(initial);
       WidgetsBinding.instance.addPostFrameCallback((_) => _publish());
     }
     // UIKit moves the sheet to its largest detent for the keyboard.
-    final keyboard = mq.viewInsets.bottom > 0;
+    _keyboard = mq.viewInsets.bottom;
+    final keyboard = _keyboard > 0;
     if (keyboard && !_keyboardExpanded && _height.value < _heights.last - 0.5) {
       _keyboardExpanded = true;
+      _keyboardBase = _height.value;
       WidgetsBinding.instance.addPostFrameCallback((_) => _settleTo(_heights.last, 0));
     } else if (!keyboard) {
       _keyboardExpanded = false;
+      _keyboardBase = null;
     }
   }
 
@@ -409,21 +464,29 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
     _route._recede.value = _largeness * (1 - (_drag / math.max(1, _min)).clamp(0.0, 1.0));
   }
 
+  double get _visibleHeight {
+    final base = _keyboardBase;
+    if (base == null || _dragging) return _height.value;
+    return math.max(_height.value, math.min(_max, base + _keyboard));
+  }
+
   double get _min => _heights.first;
   double get _max => _heights.last;
 
   /// 0 at or below the detent under large, 1 at large.
   double get _largeness {
+    // Only the large detent meets the edges; shorter sheets float.
+    if (_max < _large - 0.5) return 0;
     final below = _heights.length > 1 ? _heights[_heights.length - 2] : _max * 0.5;
     if (_max - below < 1) return _max >= _large - 0.5 ? 1 : 0;
-    return ((_height.value - below) / (_max - below)).clamp(0.0, 1.0);
+    return ((_visibleHeight - below) / (_max - below)).clamp(0.0, 1.0);
   }
 
   NativeSheetDetent _detentFor(double height) {
     var best = _route.detents.first;
     var distance = double.infinity;
     for (final d in _route.detents) {
-      final delta = (d.resolve(_large) - height).abs();
+      final delta = (_resolve(d) - height).abs();
       if (delta < distance) {
         distance = delta;
         best = d;
@@ -435,8 +498,11 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
   // MARK: Dragging
 
   void _dragStart() {
+    _height.value = _visibleHeight;
     _dragging = true;
-    _height.stop();
+    // Dragging the sheet puts the keyboard away, so the content isn't left
+    // squeezed between a shrinking sheet and the keyboard.
+    if (MediaQuery.viewInsetsOf(context).bottom > 0) FocusManager.instance.primaryFocus?.unfocus();
   }
 
   /// [delta] > 0 moves the sheet down.
@@ -533,10 +599,10 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
     final floatingRadius = hasHomeIndicator ? 46.0 : 22.0;
     final topRadius = lerpDouble(floatingRadius, _largeRadius, t)!;
     final bottomRadius = lerpDouble(floatingRadius, hasHomeIndicator ? 46 : 0, t)!;
-    final height = math.max(0.0, _height.value);
+    final height = math.max(0.0, _visibleHeight);
     final displacement = (1 - _present.value) * (height + inset + 24) + _drag;
 
-    final undimmed = _route.largestUndimmedDetent?.resolve(_large);
+    final undimmed = _route.largestUndimmedDetent == null ? null : _resolve(_route.largestUndimmedDetent!);
     final dimLevel = undimmed == null
         ? 1.0
         : _heights.where((h) => h > undimmed + 0.5).isEmpty
@@ -558,6 +624,8 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
       data: mq.copyWith(
         padding: mq.padding.copyWith(top: contentTop, bottom: math.max(0, mq.padding.bottom - inset)),
         viewPadding: mq.viewPadding.copyWith(top: contentTop, bottom: math.max(0, mq.viewPadding.bottom - inset)),
+        // The sheet's own inset already lifts its content off the bottom.
+        viewInsets: mq.viewInsets.copyWith(bottom: math.max(0, mq.viewInsets.bottom - inset)),
       ),
       child: ScrollConfiguration(
         // Clamping, so content at its edge reports overscroll to the sheet.
@@ -566,7 +634,19 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
           onNotification: _onScroll,
           // Native views can't follow a Flutter-drawn sheet: Veneer widgets
           // inside use their Flutter replicas.
-          child: VeneerFallbackScope(child: Builder(builder: _route.builder)),
+          // Like Flutter's own sheets: text fields, ink and list tiles in the
+          // content need a Material.
+          child: VeneerFallbackScope(
+            // The sheet's surface is the content's background: scaffolds and
+            // the bar's edge fade blend into it rather than the page's colour.
+            child: Theme(
+              data: Theme.of(context).copyWith(scaffoldBackgroundColor: surface),
+              child: Material(
+                type: MaterialType.transparency,
+                child: Builder(builder: _route.builder),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -619,7 +699,11 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
                 ),
                 child: Stack(
                   children: [
-                    Positioned.fill(child: content),
+                    Positioned.fill(
+                      child: _sizesToContent
+                          ? _ContentSizedBox(maxHeight: _large, onMeasured: _contentMeasured, child: content)
+                          : content,
+                    ),
                     // The sheet's rim: a hairline that keeps its rounded top
                     // edge visible against a dark page behind, as UIKit's does.
                     Positioned.fill(
@@ -658,5 +742,55 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
         ),
       ],
     );
+  }
+}
+
+/// Lays its child out at its own height (up to [maxHeight]) to measure it
+/// for a [NativeSheetDetent.content] detent, then again to fill the sheet
+/// when the sheet is taller (a larger detent, or the rubber band).
+class _ContentSizedBox extends SingleChildRenderObjectWidget {
+  const _ContentSizedBox({required this.maxHeight, required this.onMeasured, super.child});
+
+  final double maxHeight;
+  final ValueChanged<double> onMeasured;
+
+  @override
+  _RenderContentSizedBox createRenderObject(BuildContext context) => _RenderContentSizedBox(maxHeight, onMeasured);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderContentSizedBox renderObject) => renderObject
+    ..maxHeight = maxHeight
+    ..onMeasured = onMeasured;
+}
+
+class _RenderContentSizedBox extends RenderProxyBox {
+  _RenderContentSizedBox(this._maxHeight, this.onMeasured);
+
+  double _maxHeight;
+  set maxHeight(double value) {
+    if (value == _maxHeight) return;
+    _maxHeight = value;
+    markNeedsLayout();
+  }
+
+  ValueChanged<double> onMeasured;
+  double? _reported;
+
+  @override
+  void performLayout() {
+    final child = this.child;
+    size = constraints.biggest;
+    if (child == null) return;
+    child.layout(
+      BoxConstraints(minWidth: size.width, maxWidth: size.width, maxHeight: _maxHeight),
+      parentUsesSize: true,
+    );
+    final natural = child.size.height;
+    if (size.height > natural + 0.5) child.layout(BoxConstraints.tight(size));
+    if (_reported == null || (_reported! - natural).abs() >= 0.5) {
+      _reported = natural;
+      // Heights feed the sheet's layout, so report after this frame.
+      WidgetsBinding.instance.addPostFrameCallback((_) => onMeasured(natural));
+    }
   }
 }

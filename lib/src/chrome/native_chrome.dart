@@ -158,10 +158,18 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
   void _onInset() => setState(() {});
 
   bool _covered = false;
+  late final RouteChainWatcher _routes = RouteChainWatcher(() {
+    if (mounted) _updateCovered();
+  });
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _routes.update(context);
+    _updateCovered();
+  }
+
+  void _updateCovered() {
     // A route pushed over this page hides the bar, as UIKit's
     // hidesBottomBarWhenPushed does; it slides back as the route pops.
     final covered = !isRouteOnTop(context);
@@ -173,6 +181,7 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
 
   @override
   void dispose() {
+    _routes.dispose();
     _bridge.chromeBottomInset.removeListener(_onInset);
     _bridge.chromeTopInset.removeListener(_onInset);
     if (_covered) _bridge.setTabBarCovered(false);
