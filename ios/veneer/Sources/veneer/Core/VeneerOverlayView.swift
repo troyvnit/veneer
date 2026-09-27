@@ -120,6 +120,18 @@ final class VeneerOverlayView: UIView {
 
   // MARK: - Chrome: tab bar
 
+  /// The engine behind this overlay is going away (a dismissed sheet):
+  /// drop the native views and stop following the keyboard.
+  func tearDown() {
+    NotificationCenter.default.removeObserver(self)
+    composer?.unfocus()
+    setComposer(nil)
+    setNavigationBar(nil)
+    setTabBar(nil)
+    onEvent = nil
+    removeFromSuperview()
+  }
+
   func setTabBar(_ args: [String: Any]?) {
     guard let args else {
       tabBarHost?.detach()
@@ -417,10 +429,12 @@ final class VeneerOverlayView: UIView {
   /// Flutter adds this to MediaQuery padding so scroll views end above the
   /// bar but still scroll underneath it. Not reported while the bar is
   /// hidden for a popup, so the page underneath doesn't re-lay out.
-  private func reportInsets() {
-    if let tabBarHost, tabBarHost.isHidden { return }
-    let bottom = tabBarHost.map { bounds.height - $0.tabBar.convert($0.tabBar.bounds, to: self).minY } ?? 0
-    let top = navigationBarHost.map { $0.isHidden ? 0 : $0.bar.convert($0.bar.bounds, to: self).maxY } ?? 0
+  func reportInsets() {
+    // A hidden tab bar keeps its last inset, so the page underneath doesn't
+    // re-lay out; the navigation bar's inset is reported regardless.
+    let bottom =
+      tabBarHost.map { $0.isHidden ? lastReportedInsets.bottom : bounds.height - $0.tabBar.convert($0.tabBar.bounds, to: self).minY } ?? 0
+    let top = navigationBarHost.map { $0.bar.convert($0.bar.bounds, to: self).maxY } ?? 0
     guard abs(bottom - lastReportedInsets.bottom) > 0.5 || abs(top - lastReportedInsets.top) > 0.5 else { return }
     lastReportedInsets = UIEdgeInsets(top: top, left: 0, bottom: bottom, right: 0)
     onEvent?("chromeInsets", ["bottom": Double(bottom), "top": Double(top)])

@@ -7,6 +7,7 @@ import '../core/fallback_scope.dart';
 import '../core/fallback_style.dart';
 import '../core/native_icon.dart';
 import '../core/native_menu.dart';
+import '../core/route_visibility.dart';
 import '../core/veneer_bridge.dart';
 import 'glass_coordinator.dart';
 import 'glass_group.dart';
@@ -152,7 +153,7 @@ class _GlassShapeState extends State<GlassShape> {
     // Hide when another route covers ours or an IndexedStack/Visibility
     // hides us: native glass would otherwise float above that content.
     // Offstage and zero opacity are caught by the coordinator's paint walk.
-    final visible = Visibility.of(context) && (ModalRoute.isCurrentOf(context) ?? true);
+    final visible = Visibility.of(context) && isRouteOnTop(context);
     return Semantics(
       button: widget.onTap != null || widget.menu != null,
       label: widget.label,

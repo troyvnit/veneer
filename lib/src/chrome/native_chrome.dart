@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/fallback_style.dart';
 import '../core/native_icon.dart';
+import '../core/route_visibility.dart';
 import '../core/veneer_bridge.dart';
 import 'native_navigation_bar.dart' show NativeScrollEdgeEffect;
 
@@ -162,7 +164,7 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
     super.didChangeDependencies();
     // A route pushed over this page hides the bar, as UIKit's
     // hidesBottomBarWhenPushed does; it slides back as the route pops.
-    final covered = !(ModalRoute.isCurrentOf(context) ?? true);
+    final covered = !isRouteOnTop(context);
     if (covered != _covered && _bridge.isSupported) {
       _covered = covered;
       _bridge.setTabBarCovered(covered);
@@ -238,9 +240,16 @@ class _FallbackChrome extends StatelessWidget {
   static const double splitGap = 8;
 
   /// Face ID iPhones place the bar ~22 pt above the screen edge
-  /// (34 pt home-indicator inset − 12); other devices keep 12 pt.
-  static double bottomGap(MediaQueryData mq) =>
-      mq.viewPadding.bottom > 0 ? math.max(mq.viewPadding.bottom - 12, 8) : 12;
+  /// (34 pt home-indicator inset − 12); other devices keep 12 pt. Android's
+  /// gesture handle sits inside its inset, so the bar clears it.
+  static double bottomGap(MediaQueryData mq) {
+    final inset = mq.viewPadding.bottom;
+    if (defaultTargetPlatform == TargetPlatform.android) return inset + 8;
+    return inset > 0 ? math.max(inset - 12, 8) : 12;
+  }
+
+  /// UIKit sizes the tab group to its items, up to the width available.
+  static const double tabWidth = 94;
 
   @override
   Widget build(BuildContext context) {
@@ -293,7 +302,15 @@ class _FallbackChrome extends StatelessWidget {
             type: MaterialType.transparency,
             child: Row(
               children: [
-                Expanded(child: capsule),
+                Expanded(
+                  child: Align(
+                    alignment: action == null ? Alignment.center : Alignment.centerLeft,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: tabWidth * scope.tabs.length + 8),
+                      child: capsule,
+                    ),
+                  ),
+                ),
                 if (action != null) ...[
                   const SizedBox(width: splitGap),
                   Semantics(

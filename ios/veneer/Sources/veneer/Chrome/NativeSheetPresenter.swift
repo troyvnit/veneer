@@ -33,8 +33,29 @@ final class NativeSheetPresenter {
     options.libraryURI = libraryURI
     options.entrypointArgs = arguments
     let engine = group.makeEngine(with: options)
+    Self.muteStatusBarStyle(of: engine)
     Self.registerPlugins(with: engine)
     return engine
+  }
+
+  /// iOS delivers every engine's `SystemChrome.setSystemUIOverlayStyle` to
+  /// every Flutter view controller, and `MaterialApp` sends one whenever it
+  /// resolves its theme — so a sheet engine (even a pre-warmed one, before
+  /// its preferences load) would restyle the app's status bar. A sheet never
+  /// sits under the status bar: its engine's requests are dropped, and every
+  /// other platform call goes to Flutter's own handler.
+  private static func muteStatusBarStyle(of engine: FlutterEngine) {
+    let pluginKey = "platformPlugin"
+    let handle = NSSelectorFromString("handleMethodCall:result:")
+    guard engine.responds(to: NSSelectorFromString(pluginKey)),
+      let plugin = engine.value(forKey: pluginKey) as? NSObject, plugin.responds(to: handle)
+    else { return }
+    engine.platformChannel.setMethodCallHandler { [weak plugin] call, result in
+      if call.method == "SystemChrome.setSystemUIOverlayStyle" { return result(nil) }
+      guard let plugin else { return result(FlutterMethodNotImplemented) }
+      let block: @convention(block) (Any?) -> Void = { result($0) }
+      _ = plugin.perform(handle, with: call, with: block)
+    }
   }
 
   /// The app's `GeneratedPluginRegistrant`, found at runtime so apps need no
@@ -84,7 +105,9 @@ final class NativeSheetPresenter {
       if arguments.isEmpty { self?.prewarm(entrypoint: entrypoint, libraryURI: libraryURI) }
     }
     session.configure(args)
+    session.payload = args["payload"] is NSNull ? nil : args["payload"]
     sessions[id] = session
+    VeneerPlugin.deliverSheetPayload(to: controller, session.payload)
     presenter.present(controller, animated: true)
     return true
   }
@@ -111,6 +134,8 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
   let engine: FlutterEngine
   let controller: FlutterViewController
   var onFinish: (() -> Void)?
+  /// Handed to the sheet's Flutter app (`NativeSheet.payload`).
+  var payload: Any?
   private let onEvent: (String, [String: Any]) -> Void
   private var detentIds: [UISheetPresentationController.Detent.Identifier] = []
   private var result: Any?
@@ -176,7 +201,12 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
     guard !finished else { return }
     finished = true
     onEvent("sheetDismissed", ["id": id, "result": result ?? NSNull()])
+    VeneerPlugin.tearDownSheet(controller)
     onFinish?()
+    // The engine is single-use: free it now rather than whenever the last
+    // reference to the controller goes.
+    let engine = self.engine
+    DispatchQueue.main.async { engine.destroyContext() }
   }
 
   // MARK: - UISheetPresentationControllerDelegate

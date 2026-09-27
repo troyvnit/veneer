@@ -9,6 +9,7 @@ import UIKit
 /// plain title/subtitle or a tappable capsule with icon, title and subtitle,
 /// like a channel header — and trailing buttons.
 @available(iOS 26.0, *)
+@MainActor
 final class NativeNavigationBarHost: NSObject {
   var onEvent: ((String, Any?) -> Void)?
 
@@ -79,7 +80,21 @@ final class NativeNavigationBarHost: NSObject {
         leading.append(UIBarButtonItem(customView: capsule))
         item.title = nil
         item.subtitle = nil
+        item.titleView = nil
+        item.style = .navigator
+      } else if let title, BarTitleView.isCustom(title) {
+        // Styled or leading-aligned: our own labels as the title view, which
+        // UIKit fits (and truncates) between the items. The editor style
+        // places the title at the leading edge, after the back button.
+        let view = BarTitleView()
+        view.configure(title)
+        item.title = nil
+        item.subtitle = nil
+        item.titleView = view
+        item.style = (title["alignment"] as? String) == "leading" ? .editor : .navigator
       } else {
+        item.titleView = nil
+        item.style = .navigator
         item.title = title?["title"] as? String
         item.subtitle = title?["subtitle"] as? String
       }
@@ -90,8 +105,17 @@ final class NativeNavigationBarHost: NSObject {
     let trailing = (args["trailing"] as? [[String: Any]]) ?? []
     if trailing as NSArray != lastTrailing {
       lastTrailing = trailing as NSArray
-      // UIKit lays right items out trailing-first; Dart lists them in reading order.
-      item.setRightBarButtonItems(trailing.reversed().map(button), animated: animated)
+      // UIKit lays right items out trailing-first; Dart lists them in reading
+      // order. A zero fixed space between groups splits their glass.
+      var items: [UIBarButtonItem] = []
+      var group: Int?
+      for spec in trailing.reversed() {
+        let g = (spec["group"] as? NSNumber)?.intValue ?? 0
+        if let group, group != g { items.append(.fixedSpace(0)) }
+        group = g
+        items.append(button(spec))
+      }
+      item.setRightBarButtonItems(items, animated: animated)
     }
     bar.tintColor = (args["tintColor"] as? NSNumber).map(UIColor.init(argb:))
   }
@@ -101,8 +125,9 @@ final class NativeNavigationBarHost: NSObject {
 
   private func button(_ spec: [String: Any]) -> UIBarButtonItem {
     let id = spec["id"] as? String ?? ""
+    let size = (spec["iconSize"] as? NSNumber).map { CGFloat($0.doubleValue) } ?? Self.iconSize
     let image = NativeIconDescriptor(spec["icon"]).flatMap {
-      NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : Self.iconSize)
+      NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : size)
     }
     let title = spec["title"] as? String
     let item: UIBarButtonItem
@@ -118,6 +143,16 @@ final class NativeNavigationBarHost: NSObject {
       if image != nil { item.title = nil }
     }
     item.accessibilityLabel = title
+    if let badge = spec["badge"] as? String {
+      if badge.isEmpty {
+        item.badge = .indicator()
+      } else if let count = Int(badge) {
+        item.badge = .count(count)
+      } else {
+        item.badge = .string(badge)
+      }
+    }
+    if (spec["prominent"] as? Bool) == true { item.style = .prominent }
     return item
   }
 
@@ -150,14 +185,102 @@ final class NativeNavigationBarHost: NSObject {
   }
 }
 
+/// A plain title and subtitle in the app's fonts and colours.
+@available(iOS 26.0, *)
+final class BarTitleView: UIView {
+  private let titleLabel = UILabel()
+  private let subtitleLabel = UILabel()
+  private let stack = UIStackView()
+  private var leadingAligned = false
+
+  /// Needs our own view: a text style, or leading alignment.
+  static func isCustom(_ spec: [String: Any]) -> Bool {
+    (spec["capsule"] as? Bool) != true
+      && ((spec["alignment"] as? String) == "leading" || spec["style"] is [String: Any] || spec["subtitleStyle"] is [String: Any])
+  }
+
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    stack.axis = .vertical
+    stack.spacing = 0
+    stack.addArrangedSubview(titleLabel)
+    stack.addArrangedSubview(subtitleLabel)
+    // Long titles truncate in whatever space the bar leaves them.
+    for label in [titleLabel, subtitleLabel] {
+      label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+      label.setContentHuggingPriority(.defaultLow, for: .horizontal)
+    }
+    stack.translatesAutoresizingMaskIntoConstraints = false
+    addSubview(stack)
+    NSLayoutConstraint.activate([
+      stack.leadingAnchor.constraint(equalTo: leadingAnchor),
+      stack.trailingAnchor.constraint(equalTo: trailingAnchor),
+      stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+      heightAnchor.constraint(equalToConstant: 44),
+    ])
+    isAccessibilityElement = true
+    accessibilityTraits = .header
+  }
+
+  required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+  func configure(_ spec: [String: Any]) {
+    leadingAligned = (spec["alignment"] as? String) == "leading"
+    let alignment: NSTextAlignment = leadingAligned ? .natural : .center
+    stack.alignment = leadingAligned ? .leading : .center
+    Self.apply(spec["style"], to: titleLabel, text: spec["title"] as? String,
+      fallback: .systemFont(ofSize: 17, weight: .semibold), color: .label)
+    Self.apply(spec["subtitleStyle"], to: subtitleLabel, text: spec["subtitle"] as? String,
+      fallback: .systemFont(ofSize: 12), color: .secondaryLabel)
+    titleLabel.textAlignment = alignment
+    subtitleLabel.textAlignment = alignment
+    subtitleLabel.isHidden = (spec["subtitle"] as? String)?.isEmpty ?? true
+    accessibilityLabel = [titleLabel.text, subtitleLabel.text].compactMap { $0 }.joined(separator: ", ")
+    invalidateIntrinsicContentSize()
+  }
+
+  static func apply(_ raw: Any?, to label: UILabel, text: String?, fallback: UIFont, color: UIColor) {
+    let style = raw as? [String: Any]
+    let size = (style?["size"] as? NSNumber).map { CGFloat($0.doubleValue) } ?? fallback.pointSize
+    let font = style == nil
+      ? fallback
+      : NativeIconRenderer.shared.textFont(family: style?["family"] as? String, size: size, weight: (style?["weight"] as? NSNumber)?.intValue)
+    label.font = font
+    label.textColor = (style?["color"] as? NSNumber).map(UIColor.init(argb:)) ?? color
+    label.lineBreakMode = .byTruncatingTail
+    if let height = (style?["height"] as? NSNumber).map({ CGFloat($0.doubleValue) }) {
+      let paragraph = NSMutableParagraphStyle()
+      paragraph.minimumLineHeight = size * height
+      paragraph.maximumLineHeight = size * height
+      paragraph.lineBreakMode = .byTruncatingTail
+      label.attributedText = NSAttributedString(string: text ?? "", attributes: [
+        .font: font, .foregroundColor: label.textColor as Any, .paragraphStyle: paragraph,
+        .baselineOffset: (size * height - font.lineHeight) / 4,
+      ])
+    } else {
+      label.text = text
+    }
+  }
+
+  /// Leading titles take all the room the bar gives them, so they start at
+  /// the leading edge; centred ones size to their text.
+  override var intrinsicContentSize: CGSize {
+    guard !leadingAligned else { return CGSize(width: UIView.layoutFittingExpandedSize.width, height: 44) }
+    let fitted = stack.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+    return CGSize(width: fitted.width, height: 44)
+  }
+}
+
 /// Channel-header style title: an icon beside a bold title and a secondary
 /// subtitle, as the custom view of a glass bar button item.
 @available(iOS 26.0, *)
 final class TitleCapsuleControl: UIControl {
   private let iconView = UIImageView()
+  private let accessoryView = UIImageView()
   private let titleLabel = UILabel()
   private let subtitleLabel = UILabel()
   private let stack = UIStackView()
+  private var stackLeading: NSLayoutConstraint?
 
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -172,16 +295,23 @@ final class TitleCapsuleControl: UIControl {
     let text = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
     text.axis = .vertical
     text.spacing = 0
+    accessoryView.contentMode = .scaleAspectFit
+    accessoryView.tintColor = .label
+    accessoryView.preferredSymbolConfiguration = .init(pointSize: 13, weight: .semibold)
     stack.addArrangedSubview(iconView)
     stack.addArrangedSubview(text)
+    stack.addArrangedSubview(accessoryView)
+    stack.setCustomSpacing(6, after: text)
     stack.axis = .horizontal
     stack.alignment = .center
     stack.spacing = 10
     stack.isUserInteractionEnabled = false
     stack.translatesAutoresizingMaskIntoConstraints = false
     addSubview(stack)
+    let stackLeading = stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4)
+    self.stackLeading = stackLeading
     NSLayoutConstraint.activate([
-      stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
+      stackLeading,
       stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
       stack.centerYAnchor.constraint(equalTo: centerYAnchor),
       heightAnchor.constraint(equalToConstant: 44),
@@ -193,13 +323,21 @@ final class TitleCapsuleControl: UIControl {
   required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
   func configure(_ spec: [String: Any]) {
-    titleLabel.text = spec["title"] as? String
-    subtitleLabel.text = spec["subtitle"] as? String
+    BarTitleView.apply(spec["style"], to: titleLabel, text: spec["title"] as? String,
+      fallback: .systemFont(ofSize: 16, weight: .bold), color: .label)
+    BarTitleView.apply(spec["subtitleStyle"], to: subtitleLabel, text: spec["subtitle"] as? String,
+      fallback: .systemFont(ofSize: 12, weight: .regular), color: .secondaryLabel)
     subtitleLabel.isHidden = (spec["subtitle"] as? String)?.isEmpty ?? true
     iconView.image = NativeIconDescriptor(spec["icon"]).flatMap {
       NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : 18)
     }
     iconView.isHidden = iconView.image == nil
+    // Text alone needs the capsule's own padding; an icon sits closer.
+    stackLeading?.constant = iconView.isHidden ? 12 : 4
+    accessoryView.image = NativeIconDescriptor(spec["accessory"]).flatMap {
+      NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : 16)
+    }
+    accessoryView.isHidden = accessoryView.image == nil
     accessibilityLabel = [titleLabel.text, subtitleLabel.text].compactMap { $0 }.joined(separator: ", ")
   }
 

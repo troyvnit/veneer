@@ -218,14 +218,22 @@ class ComposerBaseView: UIView, UITextViewDelegate {
 enum NativeMenu {
   static func make(_ raw: Any?, id: String, iconSize: CGFloat = 20, onSelect: @escaping (String) -> Void) -> UIMenu? {
     guard let items = raw as? [[String: Any]], !items.isEmpty else { return nil }
-    let actions: [UIMenuElement] = items.enumerated().map { i, item in
+    // Dividers split the items into inline sections, as UIKit draws them.
+    var sections: [[UIMenuElement]] = [[]]
+    for (i, item) in items.enumerated() {
+      if (item["divider"] as? Bool) == true {
+        if !(sections.last?.isEmpty ?? true) { sections.append([]) }
+        continue
+      }
       let image = NativeIconDescriptor(item["icon"]).flatMap {
         NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : iconSize)
       }
       let action = UIAction(title: item["title"] as? String ?? "", image: image) { _ in onSelect("\(id).menu\(i)") }
       if (item["destructive"] as? Bool) == true { action.attributes = .destructive }
-      return action
+      sections[sections.count - 1].append(action)
     }
-    return UIMenu(children: actions)
+    sections.removeAll { $0.isEmpty }
+    if sections.count == 1 { return UIMenu(children: sections[0]) }
+    return UIMenu(children: sections.map { UIMenu(options: .displayInline, children: $0) })
   }
 }

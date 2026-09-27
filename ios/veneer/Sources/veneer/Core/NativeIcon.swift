@@ -257,6 +257,67 @@ final class NativeIconRenderer {
     return nil
   }
 
+  // MARK: - Text fonts
+
+  private var textFonts: [String: String] = [:]
+  private var weightedManifest: [String: [(asset: String, weight: Int)]]?
+
+  /// A `UIFont` from the app's Flutter fonts: the FontManifest [family]'s
+  /// face closest to [weight], registered with Core Text on first use. Falls
+  /// back to the system font.
+  func textFont(family: String?, size: CGFloat, weight: Int?) -> UIFont {
+    let systemWeight: UIFont.Weight = switch weight ?? 400 {
+    case ..<150: .ultraLight
+    case ..<250: .thin
+    case ..<350: .light
+    case ..<450: .regular
+    case ..<550: .medium
+    case ..<650: .semibold
+    case ..<750: .bold
+    case ..<850: .heavy
+    default: .black
+    }
+    guard let family, let faces = weightedFaces()[family], !faces.isEmpty else {
+      return .systemFont(ofSize: size, weight: systemWeight)
+    }
+    let target = weight ?? 400
+    let face = faces.min { abs($0.weight - target) < abs($1.weight - target) }!
+    if let name = textFonts[face.asset] ?? registerFont(asset: face.asset), let font = UIFont(name: name, size: size) {
+      return font
+    }
+    return .systemFont(ofSize: size, weight: systemWeight)
+  }
+
+  private func registerFont(asset: String) -> String? {
+    guard let path = assetPath?(asset, nil),
+      let provider = CGDataProvider(url: URL(fileURLWithPath: path) as CFURL),
+      let font = CGFont(provider), let name = font.postScriptName as String?
+    else { return nil }
+    var error: Unmanaged<CFError>?
+    // Already registered (e.g. by another engine) is fine.
+    _ = CTFontManagerRegisterGraphicsFont(font, &error)
+    textFonts[asset] = name
+    return name
+  }
+
+  private func weightedFaces() -> [String: [(asset: String, weight: Int)]] {
+    if let weightedManifest { return weightedManifest }
+    var result: [String: [(asset: String, weight: Int)]] = [:]
+    if let path = assetPath?("FontManifest.json", nil),
+      let data = FileManager.default.contents(atPath: path),
+      let entries = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]]
+    {
+      for entry in entries {
+        guard let family = entry["family"] as? String, let fonts = entry["fonts"] as? [[String: Any]] else { continue }
+        result[family] = fonts.compactMap { f in
+          (f["asset"] as? String).map { ($0, (f["weight"] as? NSNumber)?.intValue ?? 400) }
+        }
+      }
+    }
+    weightedManifest = result
+    return result
+  }
+
   /// FontManifest.json: `[{"family": "...", "fonts": [{"asset": "..."}]}]`.
   private func manifest() -> [String: [String]] {
     if let fontManifest { return fontManifest }

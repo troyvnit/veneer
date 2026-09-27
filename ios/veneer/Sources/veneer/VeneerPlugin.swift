@@ -36,6 +36,8 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
   let id: Int
 
   private let registrar: FlutterPluginRegistrar
+  /// A sheet engine's request for its payload, made before it was presented.
+  private var pendingPayload: FlutterResult?
   private let channel: FlutterMethodChannel
   /// Type-erased: `VeneerOverlayView` exists only on iOS 26+.
   private var overlayRef: AnyObject?
@@ -63,9 +65,10 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
     let instance = VeneerPlugin(registrar: registrar, channel: channel)
     registrar.addMethodCallDelegate(instance, channel: channel)
     guard #available(iOS 26.0, *) else { return }
-    NativeIconRenderer.shared.assetPath = { [weak registrar] asset, package in
-      guard let registrar else { return nil }
-      let key = package.map { registrar.lookupKey(forAsset: asset, fromPackage: $0) } ?? registrar.lookupKey(forAsset: asset)
+    // Engine independent: sheet engines come and go, the app's assets stay.
+    NativeIconRenderer.shared.assetPath = { asset, package in
+      let key = package.map { FlutterDartProject.lookupKey(forAsset: asset, fromPackage: $0) }
+        ?? FlutterDartProject.lookupKey(forAsset: asset)
       return Bundle.main.path(forResource: key, ofType: nil)
     }
   }
@@ -171,6 +174,14 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
       overlay?.setSheetContentAtTop((args["atTop"] as? Bool) ?? true)
       result(nil)
 
+    case "sheetPayload":
+      if let session = NativeSheetPresenter.shared.session(showing: registrar.viewController) {
+        result(session.payload)
+      } else {
+        pendingPayload?(nil)
+        pendingPayload = result
+      }
+
     case "dismissSheet":
       // From inside a sheet: dismiss the sheet showing this engine.
       let session = (args["id"] as? NSNumber).flatMap { NativeSheetPresenter.shared.session(id: $0.intValue) }
@@ -190,6 +201,26 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
 
     default:
       result(FlutterMethodNotImplemented)
+    }
+  }
+
+  /// A sheet showing [controller] was dismissed: its engine's overlay goes.
+  @available(iOS 26.0, *)
+  static func tearDownSheet(_ controller: UIViewController) {
+    for plugin in instances.values.compactMap({ $0.plugin }) where plugin.registrar.viewController === controller {
+      plugin.pendingPayload?(nil)
+      plugin.pendingPayload = nil
+      plugin.overlay?.tearDown()
+      plugin.overlayRef = nil
+    }
+  }
+
+  /// Answers a sheet engine that asked for its payload before [controller]
+  /// was presented.
+  static func deliverSheetPayload(to controller: UIViewController, _ payload: Any?) {
+    for plugin in instances.values.compactMap({ $0.plugin }) where plugin.registrar.viewController === controller {
+      plugin.pendingPayload?(payload)
+      plugin.pendingPayload = nil
     }
   }
 

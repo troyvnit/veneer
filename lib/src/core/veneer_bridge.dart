@@ -241,8 +241,13 @@ class VeneerBridge {
     await _channel.invokeMethod<void>('setComposer', config);
   }
 
+  /// The space the native composer last reported taking above the keyboard,
+  /// tab bar or safe area; 0 while there's no composer.
+  double composerHeight = 0;
+
   Future<void> removeComposer() async {
     _composerHandlers = null;
+    composerHeight = 0;
     if (!_attached) return;
     await _channel.invokeMethod<void>('removeComposer');
   }
@@ -316,6 +321,10 @@ class VeneerBridge {
     _channel.invokeMethod<void>('sheetContentAtTop', {'atTop': atTop});
   }
 
+  /// From inside a native sheet: the payload [presentSheet] was given,
+  /// once the sheet is presented (a pre-warmed engine waits until then).
+  Future<Object?> sheetPayload() => _channel.invokeMethod<Object?>('sheetPayload');
+
   /// From inside a native sheet: dismisses it with [result].
   Future<bool> dismissSheet(Object? result) async =>
       await _channel.invokeMethod<bool>('dismissSheet', {'result': result}) ?? false;
@@ -357,8 +366,9 @@ class VeneerBridge {
       case 'sheetDetentChanged':
         _sheetDetentHandlers[args['id']! as int]?.call(args['detent']! as int);
       case 'composerLayout':
+        composerHeight = (args['height']! as num).toDouble();
         _composerHandlers?.onLayout(
-          (args['height']! as num).toDouble(),
+          composerHeight,
           Duration(microseconds: (((args['duration'] as num?) ?? 0) * 1e6).round()),
         );
     }

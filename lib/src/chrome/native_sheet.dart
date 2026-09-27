@@ -60,8 +60,9 @@ class NativeSheetDetent {
 /// and the GPU context; call [NativeSheet.prewarm] early so content is ready
 /// the moment the sheet slides up. The sheet's isolate doesn't share state
 /// with the app: pass [arguments] in (they reach the entrypoint as its
-/// `List<String>` parameter; arguments bypass pre-warmed engines) and return
-/// a result with [NativeSheet.close]. Veneer works inside it: a
+/// `List<String>` parameter; arguments bypass pre-warmed engines), or a
+/// [payload] the sheet reads with [NativeSheet.payload] (pre-warmed engines
+/// receive it when presented), and return a result with [NativeSheet.close]. Veneer works inside it: a
 /// [NativeNavigationBar] is a real `UINavigationBar` in the sheet and a
 /// composer rides the sheet natively.
 ///
@@ -79,6 +80,7 @@ Future<T?> showNativeSheet<T>({
   String? entrypoint,
   String? libraryUri,
   List<String> arguments = const [],
+  Object? payload,
   List<NativeSheetDetent> detents = const [NativeSheetDetent.large],
   NativeSheetDetent? initialDetent,
   bool? showGrabber,
@@ -96,6 +98,7 @@ Future<T?> showNativeSheet<T>({
         'entrypoint': entrypoint,
         'libraryUri': libraryUri,
         'arguments': arguments,
+        'payload': payload,
         'detents': [for (final d in detents) d._encode()],
         'initialDetent': initialDetent == null ? null : detents.indexOf(initialDetent),
         'grabber': showGrabber,
@@ -143,10 +146,24 @@ void runNativeSheet(Widget app) {
 /// scrolled to its top edge — the sheet's rule for whether a pull down drags
 /// the sheet or scrolls the content. Content that doesn't scroll counts as
 /// at the top.
-class _SheetScrollEdgeReporter extends StatelessWidget {
+class _SheetScrollEdgeReporter extends StatefulWidget {
   const _SheetScrollEdgeReporter({required this.child});
 
   final Widget child;
+
+  @override
+  State<_SheetScrollEdgeReporter> createState() => _SheetScrollEdgeReporterState();
+}
+
+class _SheetScrollEdgeReporterState extends State<_SheetScrollEdgeReporter> {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // A sheet never sits under the status bar, and iOS delivers an engine's
+    // overlay style to every Flutter view controller: left on, a sheet
+    // engine (pre-warmed ones too) would restyle the app's status bar.
+    context.findAncestorRenderObjectOfType<RenderView>()?.automaticSystemUiAdjustment = false;
+  }
 
   static bool _atTop(Offset position, int viewId) {
     final result = HitTestResult();
@@ -169,7 +186,7 @@ class _SheetScrollEdgeReporter extends StatelessWidget {
     behavior: HitTestBehavior.translucent,
     onPointerDown: (event) =>
         VeneerBridge.instance.setSheetContentAtTop(_atTop(event.position, View.of(context).viewId)),
-    child: child,
+    child: widget.child,
   );
 }
 
@@ -192,6 +209,14 @@ abstract final class NativeSheet {
   static Future<void> prewarm(String entrypoint, {String? libraryUri}) async {
     if (!VeneerBridge.instance.isSupported) return;
     await VeneerBridge.instance.prewarmSheet(entrypoint, libraryUri: libraryUri);
+  }
+
+  /// Inside a native sheet: the `payload` given to [showNativeSheet]. A
+  /// pre-warmed engine starts before it's presented, so this completes once
+  /// the sheet is presented. Null outside native sheets.
+  static Future<Object?> payload() async {
+    if (!VeneerBridge.instance.isSheetEngine) return null;
+    return VeneerBridge.instance.sheetPayload();
   }
 
   /// Whether this code runs inside a native sheet's engine.
@@ -595,6 +620,20 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
                 child: Stack(
                   children: [
                     Positioned.fill(child: content),
+                    // The sheet's rim: a hairline that keeps its rounded top
+                    // edge visible against a dark page behind, as UIKit's does.
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: ShapeDecoration(
+                            shape: RoundedSuperellipseBorder(
+                              borderRadius: radius,
+                              side: BorderSide(color: style.border, width: 1 / mq.devicePixelRatio * 2),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                     if (grabber)
                       Positioned(
                         top: _grabberTop,

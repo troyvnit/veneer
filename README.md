@@ -201,8 +201,13 @@ NativeNavigationBar(
 
 - A real `UINavigationBar`: 44 pt glass buttons, and adjacent trailing buttons sharing one glass
   capsule. When its buttons change, UIKit morphs the glass between the old and new sets.
-- `NativeBarTitle(capsule: true)` shows a tappable glass capsule with an icon, title and
-  subtitle, like a channel header; otherwise the system's centred title.
+- `NativeBarTitle(capsule: true)` shows a tappable glass capsule with an icon, title,
+  subtitle and optional `accessory` (such as a chevron), like a channel header; otherwise a
+  plain title, centred or leading (`alignment: NativeBarTitleAlignment.leading`). Pass `style`
+  and `subtitleStyle` to use your app's fonts and colours; the native bar loads the font
+  family from your Flutter assets.
+- Bar buttons can show a `badge` (a count, text, or `''` for a dot), use `prominent` tinted
+  glass, show text instead of an icon, and split into separate capsules with `group`.
 - **Scroll edge effect:** content dissolves into iOS 26's own progressive blur under the bar
   (`scrollEdgeEffect`, soft by default).
 - Shown while its page is visible; the most recently shown bar wins.
@@ -282,7 +287,11 @@ NativePromptComposer(
   grows into a card with attachments on top and the buttons on a bottom row.
 - **Side actions:** glass circles that split off the capsule like liquid while
   `showSideActions` is true (for example a voice session's mute and end buttons).
-- **Attachments:** image tiles (no `title`) or file chips, with remove buttons.
+- **Attachments:** image tiles (no `title`) or file chips, with remove buttons; `loading`
+  dims a tile and shows a spinner while it uploads.
+- **States:** `stopAction` replaces the circle while a reply is generating, `sendEnabled` and
+  `sendBusy` hold or spin the send button, and `editable: false` shows text (such as a live
+  transcript) without taking the keyboard.
 - Idle, it sits concentric with the display's corners; focused, it rides the keyboard.
 
 ### Sheets
@@ -324,8 +333,11 @@ NativeSheet.close(context, result);
   started at `entrypoint` (a top-level function in `main.dart`, or in `libraryUri`) and
   spawned from a shared `FlutterEngineGroup`, which shares compiled code and the GPU context.
   After a sheet closes, the next engine is warmed automatically.
-- The sheet's isolate doesn't share state with your app: pass `arguments` in (they reach the
-  entrypoint) and return a result with `NativeSheet.close`, or use your own channels.
+- The sheet's isolate doesn't share state with your app: pass a `payload` in (read it with
+  `NativeSheet.payload()`; pre-warmed engines receive it when presented) and return a result
+  with `NativeSheet.close`. `arguments` reach the entrypoint instead, but bypass pre-warming.
+- Sheet engines never restyle the app's status bar, and each engine is torn down when its
+  sheet is dismissed.
 - Inside, a `NativeNavigationBar` is a real `UINavigationBar` placed per Apple's sheet
   templates (16 pt from the sheet's edges), and composers ride the sheet natively. Pulling down
   drags the sheet when the content under the finger is at its top edge; otherwise the content
@@ -348,7 +360,8 @@ NativeBarButton(
 ```
 
 `menu` on `NativeBarButton`, `NativeComposerButton` and `GlassShape` opens a native `UIMenu` that
-grows out of the button. Off iOS 26 a Flutter menu with iOS metrics opens instead.
+grows out of the button. `NativeMenuItem.divider()` separates sections. Off iOS 26 a Flutter
+menu with iOS metrics opens instead.
 
 ### Glass shapes
 
@@ -401,6 +414,15 @@ instead of glass. It follows light and dark mode.
 
 To preview the replicas on an iOS 26 device, set `Veneer.debugForceFallback = true` before
 `runApp`. Wrap any subtree in `VeneerFallbackScope` to force its replicas.
+
+To match your design system, add a `VeneerFallbackStyle` to your theme's `extensions` (one per
+brightness); the replicas read their surfaces, labels, accent and badge colours from it:
+
+```dart
+ThemeData(extensions: [
+  VeneerFallbackStyle.iosLight.copyWith(accent: brand, surface: card),
+])
+```
 
 ## Limitations
 

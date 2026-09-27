@@ -68,11 +68,15 @@ final class NativePromptComposerView: ComposerBaseView {
   private let leadingButton = UIButton(configuration: .plain())
   private var actionButtons: [UIButton] = []
   private let primaryButton = UIButton(configuration: .filled())
+  private let sendSpinner = UIActivityIndicatorView(style: .medium)
   private let attachmentStrip = AttachmentStripView()
   private var sideButtons: [SideGlassButton] = []
 
   private var leadingSpec: [String: Any]?
   private var primarySpec: [String: Any]?
+  private var stopSpec: [String: Any]?
+  private var sendEnabled = true
+  private var sendBusy = false
   private var sendIcon: Any?
   private var actionSpecs: NSArray = []
   private var sideSpecs: NSArray = []
@@ -106,7 +110,9 @@ final class NativePromptComposerView: ComposerBaseView {
       self?.onEvent?("composerAttachmentRemoved", ["id": id])
     }
 
-    for v in [attachmentStrip, textView, leadingButton, primaryButton] as [UIView] {
+    sendSpinner.hidesWhenStopped = true
+    sendSpinner.isUserInteractionEnabled = false
+    for v in [attachmentStrip, textView, leadingButton, primaryButton, sendSpinner] as [UIView] {
       capsule.contentView.addSubview(v)
     }
     // Tapping anywhere on the capsule focuses it, like a text field.
@@ -117,11 +123,24 @@ final class NativePromptComposerView: ComposerBaseView {
 
   // MARK: - Configuration
 
-  /// `{leading: button?, actions: [button], primary: button?, sendIcon,
-  ///   side: [button + prominent], sideShown, attachments: [{id, title,
-  ///   subtitle, thumbnail}]}`, button = `{id, icon, title, menu?}`.
+  /// `{leading: button?, actions: [button], primary: button?, stop: button?,
+  ///   sendIcon, sendEnabled, sendBusy, editable, side: [button + prominent],
+  ///   sideShown, attachments: [{id, title, subtitle, thumbnail, loading}]}`,
+  ///   button = `{id, icon, title, menu?}`.
   override func configure(_ args: [String: Any]) -> Bool {
     var animate = false
+
+    let editable = (args["editable"] as? Bool) ?? true
+    if textView.isEditable != editable {
+      if !editable { unfocus() }
+      textView.isEditable = editable
+      textView.isSelectable = editable
+    }
+    let stop = args["stop"] as? [String: Any]
+    if (stop == nil) != (stopSpec == nil) { animate = true }
+    stopSpec = stop
+    sendEnabled = (args["sendEnabled"] as? Bool) ?? true
+    sendBusy = (args["sendBusy"] as? Bool) ?? false
 
     leadingSpec = args["leading"] as? [String: Any]
     leadingButton.isHidden = leadingSpec == nil
@@ -197,42 +216,59 @@ final class NativePromptComposerView: ComposerBaseView {
   }
 
   @objc private func focusFromTap() {
-    if !isEditingText { focus() }
+    if !isEditingText, textView.isEditable { focus() }
   }
 
   private func primaryTapped() {
-    if canSend {
+    if let id = stopSpec?["id"] as? String {
+      emitButton(id)
+    } else if canSend {
       send()
-    } else if let id = primarySpec?["id"] as? String {
+    } else if !hasContent, let id = primarySpec?["id"] as? String {
       emitButton(id)
     }
   }
 
   // MARK: - Content
 
-  override var canSend: Bool { hasText || !attachmentIds.isEmpty }
+  private var hasContent: Bool { hasText || !attachmentIds.isEmpty }
 
-  private var primaryVisible: Bool { !sideShown || canSend }
+  override var canSend: Bool { hasContent && sendEnabled && !sendBusy && stopSpec == nil }
+
+  private var primaryVisible: Bool { !sideShown || hasContent || stopSpec != nil }
 
   override func contentChanged() {
-    let sending = canSend || primarySpec == nil
-    let face = sending ? "send:\(canSend)" : "primary"
+    let sending = hasContent || primarySpec == nil
+    let face =
+      stopSpec != nil ? "stop" : sendBusy && hasContent ? "busy" : sending ? "send:\(canSend)" : "primary"
     guard face != primaryFace else { return }
     primaryFace = face
     var config = primaryButton.configuration
-    if sending {
-      config?.image = buttonImage(sendIcon, imageSize: Metrics.primaryImageSize) ?? UIImage(systemName: "arrow.up")
-      config?.baseBackgroundColor = canSend ? accent : .tertiarySystemFill
-      config?.baseForegroundColor = canSend ? .white : .tertiaryLabel
+    switch face {
+    case "stop":
+      config?.image = buttonImage(stopSpec?["icon"], imageSize: Metrics.primaryImageSize) ?? UIImage(systemName: "stop.fill")
+      config?.baseBackgroundColor = accent
+      config?.baseForegroundColor = .white
+      primaryButton.accessibilityLabel = stopSpec?["title"] as? String ?? "Stop"
+    case "busy":
+      config?.image = nil
+      config?.baseBackgroundColor = .tertiarySystemFill
+      config?.baseForegroundColor = .tertiaryLabel
       primaryButton.accessibilityLabel = "Send"
-    } else {
+    case "primary":
       config?.image = buttonImage(primarySpec?["icon"], imageSize: Metrics.primaryImageSize)
       config?.baseBackgroundColor = accent
       config?.baseForegroundColor = .white
       primaryButton.accessibilityLabel = primarySpec?["title"] as? String
+    default:
+      config?.image = buttonImage(sendIcon, imageSize: Metrics.primaryImageSize) ?? UIImage(systemName: "arrow.up")
+      config?.baseBackgroundColor = canSend ? accent : .tertiarySystemFill
+      config?.baseForegroundColor = canSend ? .white : .tertiaryLabel
+      primaryButton.accessibilityLabel = "Send"
     }
     primaryButton.configuration = config
-    primaryButton.isEnabled = canSend || primarySpec != nil
+    primaryButton.isEnabled = face == "stop" || canSend || face == "primary"
+    if face == "busy" { sendSpinner.startAnimating() } else { sendSpinner.stopAnimating() }
   }
 
   override func textDidChangeLayout() {
@@ -342,6 +378,7 @@ final class NativePromptComposerView: ComposerBaseView {
     primaryButton.center = CGPoint(x: cw - Metrics.edgeCenter, y: rowTop + Metrics.row / 2)
     primaryButton.alpha = primaryVisible ? 1 : 0
     primaryButton.transform = primaryVisible ? .identity : CGAffineTransform(scaleX: 0.5, y: 0.5)
+    sendSpinner.center = primaryButton.center
 
     attachmentStrip.frame = CGRect(x: 0, y: Metrics.attachmentTop, width: cw, height: Metrics.attachmentHeight)
     attachmentStrip.alpha = attachmentIds.isEmpty ? 0 : 1
@@ -531,6 +568,8 @@ final class AttachmentTileView: UIView {
   private let titleLabel = UILabel()
   private let subtitleLabel = UILabel()
   private let removeButton = ExpandedHitButton(configuration: .filled())
+  private let spinner = UIActivityIndicatorView(style: .medium)
+  private let dim = UIView()
   private var isChip = false
 
   private static let chipThumbnail: CGFloat = 44
@@ -558,6 +597,12 @@ final class AttachmentTileView: UIView {
     removeButton.configuration?.baseForegroundColor = .white
     removeButton.accessibilityLabel = "Remove"
     removeButton.addAction(UIAction { [weak self] _ in self?.onRemove?() }, for: .touchUpInside)
+    dim.backgroundColor = UIColor.black.withAlphaComponent(0.35)
+    dim.isUserInteractionEnabled = false
+    spinner.color = .white
+    spinner.hidesWhenStopped = true
+    thumbnailClip.addSubview(dim)
+    thumbnailClip.addSubview(spinner)
     for v in [thumbnailClip, titleLabel, subtitleLabel, removeButton] { addSubview(v) }
   }
 
@@ -589,6 +634,10 @@ final class AttachmentTileView: UIView {
       thumbnailClip.backgroundColor = .quaternarySystemFill
     }
     thumbnail.preferredSymbolConfiguration = .init(pointSize: 20, weight: .regular)
+    let loading = (spec["loading"] as? Bool) ?? false
+    dim.isHidden = !loading
+    thumbnail.isHidden = loading && !(d?.keepsColors ?? false)
+    if loading { spinner.startAnimating() } else { spinner.stopAnimating() }
     setNeedsLayout()
   }
 
@@ -618,6 +667,8 @@ final class AttachmentTileView: UIView {
       thumbnailClip.layer.cornerRadius = 16
     }
     thumbnail.frame = thumbnailClip.bounds
+    dim.frame = thumbnailClip.bounds
+    spinner.center = CGPoint(x: thumbnailClip.bounds.midX, y: thumbnailClip.bounds.midY)
     let r = Self.removeSize
     removeButton.frame = CGRect(x: bounds.width - r - 5, y: 5, width: r, height: r)
   }

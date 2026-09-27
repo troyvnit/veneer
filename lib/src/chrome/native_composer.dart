@@ -9,6 +9,7 @@ import '../core/fallback_scope.dart';
 import '../core/fallback_style.dart';
 import '../core/native_icon.dart';
 import '../core/native_menu.dart';
+import '../core/route_visibility.dart';
 import '../core/veneer_bridge.dart';
 import '../glass/glass_coordinator.dart';
 
@@ -158,7 +159,7 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
   void _refresh({bool resend = false}) {
     _native = useNativeLayer(context);
     if (!_native) return;
-    final visible = Visibility.of(context) && (ModalRoute.of(context)?.isCurrent ?? true);
+    final visible = Visibility.of(context) && isRouteOnTop(context);
     if (visible != _visible) {
       _visible = visible;
       _push();
@@ -207,6 +208,9 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
     final encoded = jsonEncode(config);
     if (encoded == _lastSent) {
       _bridge.updateComposerHandlers(handlerSet);
+      // A new host for the same composer (its subtree was rebuilt): nothing
+      // is resent, so take the height native last reported.
+      if (_height == 0 && _bridge.composerHeight > 0) _height = _bridge.composerHeight;
       return;
     }
     final firstShow = _lastSent == null;

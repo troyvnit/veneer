@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.0
+
+- **Navigation bar:** titles can be leading-aligned (`NativeBarTitle.alignment`) and styled
+  with your app's fonts and colours (`style`, `subtitleStyle`), natively too. The title capsule
+  takes an `accessory` glyph.
+- **Bar buttons:** `badge`, `prominent` tinted glass, text-only buttons, and `group` to split
+  trailing buttons into separate capsules.
+- **Menus:** `NativeMenuItem.divider()` for sections.
+- **Prompt composer:** `stopAction`, `sendEnabled`, `sendBusy` and `editable`; attachments
+  take `loading`.
+- **Sheets:** `payload` / `NativeSheet.payload()` pass data into pre-warmed engines. Sheet
+  engines no longer restyle the app's status bar, and each is torn down when its sheet is
+  dismissed (their overlays no longer outlive them).
+- **Fallbacks:** `VeneerFallbackStyle` is a `ThemeExtension`, so replicas can follow your
+  design system. The replica bar spans its parent and places titles like UIKit, the menu is
+  opaque with section bands, the tab bar sizes to its tabs and clears Android's gesture handle,
+  and the Flutter sheet has a rim at its edge.
+- **Fixes:** a bar or composer on a page inside a nested navigator (a tab's) now hides when an
+  outer route covers it; a `NativeNavigationBar` outside a `NativeChromeScope` gives its content
+  the right top inset; a composer host rebuilt mid-page keeps its height.
+
 ## 0.1.1
 
 - **Composer:** if the software keyboard goes away while the text view keeps

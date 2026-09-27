@@ -8,17 +8,33 @@ part of 'native_composer.dart';
 /// one, a chip with a thumbnail, the title and [subtitle] (a file).
 @immutable
 class NativeComposerAttachment {
-  const NativeComposerAttachment({required this.id, this.title, this.subtitle, this.thumbnail, this.onRemove});
+  const NativeComposerAttachment({
+    required this.id,
+    this.title,
+    this.subtitle,
+    this.thumbnail,
+    this.loading = false,
+    this.onRemove,
+  });
 
   final String id;
   final String? title;
   final String? subtitle;
   final NativeIcon? thumbnail;
 
+  /// Still uploading or processing: dimmed, with a spinner.
+  final bool loading;
+
   /// The remove button was tapped; drop the attachment from the list.
   final VoidCallback? onRemove;
 
-  Map<String, Object?> _encode() => {'id': id, 'title': title, 'subtitle': subtitle, 'thumbnail': thumbnail?.encode()};
+  Map<String, Object?> _encode() => {
+    'id': id,
+    'title': title,
+    'subtitle': subtitle,
+    'thumbnail': thumbnail?.encode(),
+    'loading': loading,
+  };
 }
 
 /// An assistant-style prompt composer: native (UIKit) on iOS 26, a Flutter
@@ -54,7 +70,11 @@ class NativePromptComposer extends StatefulWidget {
     this.leading,
     this.actions = const [],
     this.primaryAction,
+    this.stopAction,
     this.sendIcon,
+    this.sendEnabled = true,
+    this.sendBusy = false,
+    this.editable = true,
     this.sideActions = const [],
     this.showSideActions = false,
     this.attachments = const [],
@@ -80,8 +100,22 @@ class NativePromptComposer extends StatefulWidget {
   /// Without it, a disabled send button shows instead.
   final NativeComposerButton? primaryAction;
 
+  /// While set, the filled circle is this button whatever the prompt holds —
+  /// e.g. stop while a reply is generating (defaults to `stop.fill`).
+  final NativeComposerButton? stopAction;
+
   /// Defaults to `arrow.up`.
   final NativeIcon? sendIcon;
+
+  /// Whether content may be sent; when false, send shows disabled.
+  final bool sendEnabled;
+
+  /// Send shows a spinner (e.g. attachments still uploading).
+  final bool sendBusy;
+
+  /// Whether the text can be edited; when false the composer shows its text
+  /// (e.g. a live dictation transcript) and doesn't take the keyboard.
+  final bool editable;
 
   /// Glass circles beside the capsule; [NativeComposerButton.prominent] tints
   /// one with the label colour.
@@ -142,7 +176,11 @@ class _NativePromptComposerState extends _ComposerHostState<NativePromptComposer
     'leading': widget.leading?._encode('leading', handlers),
     'actions': [for (final (i, b) in widget.actions.indexed) b._encode('action$i', handlers)],
     'primary': widget.primaryAction?._encode('primary', handlers),
+    'stop': widget.stopAction?._encode('stop', handlers),
     'sendIcon': widget.sendIcon?.encode(),
+    'sendEnabled': widget.sendEnabled,
+    'sendBusy': widget.sendBusy,
+    'editable': widget.editable,
     'side': [for (final (i, b) in widget.sideActions.indexed) b._encode('side$i', handlers)],
     'sideShown': widget.showSideActions,
     'attachments': [for (final a in widget.attachments) a._encode()],
@@ -240,7 +278,9 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
   @override
   void unfocus() => _focus.unfocus();
 
-  bool get _canSend => _text.text.trim().isNotEmpty || _c.attachments.isNotEmpty;
+  bool get _hasContent => _text.text.trim().isNotEmpty || _c.attachments.isNotEmpty;
+
+  bool get _canSend => _hasContent && _c.sendEnabled && !_c.sendBusy && _c.stopAction == null;
 
   void _send() {
     if (!_canSend) return;
@@ -299,7 +339,9 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
         final n = _c.sideActions.length;
         final capsuleWidth = width - (sideShown ? n * (_row + _sideSpacing) : 0);
         final canSend = _canSend;
-        final primaryVisible = !sideShown || canSend;
+        final hasContent = _hasContent;
+        final stop = _c.stopAction;
+        final primaryVisible = !sideShown || hasContent || stop != null;
         final hasLeading = _c.leading != null;
         final textLeading = hasLeading ? _textLeading : _textInset;
         final inlineWidth =
@@ -344,8 +386,14 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
           ),
         );
 
-        final sendFace = canSend || _c.primaryAction == null;
-        final primaryIcon = sendFace ? (_c.sendIcon ?? const NativeIcon.symbol('arrow.up')) : _c.primaryAction!.icon;
+        final sendFace = stop == null && (hasContent || _c.primaryAction == null);
+        final busy = sendFace && _c.sendBusy && hasContent;
+        final primaryIcon = stop != null
+            ? stop.icon
+            : sendFace
+            ? (_c.sendIcon ?? const NativeIcon.symbol('arrow.up'))
+            : _c.primaryAction!.icon;
+        final primaryFaceKey = stop != null ? 'stop' : (sendFace ? 'send' : 'primary');
 
         final capsule = AnimatedContainer(
           duration: _duration,
@@ -394,6 +442,7 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
                   child: TextField(
                     controller: _text,
                     focusNode: _focus,
+                    readOnly: !_c.editable,
                     minLines: 1,
                     maxLines: _c.maxLines,
                     keyboardType: TextInputType.multiline,
@@ -435,11 +484,15 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
                 visible: primaryVisible,
                 child: Semantics(
                   button: true,
-                  label: sendFace ? 'Send' : _c.primaryAction!.title,
+                  label: stop != null ? stop.title : (sendFace ? 'Send' : _c.primaryAction!.title),
                   enabled: sendFace ? canSend : true,
                   excludeSemantics: true,
                   child: GestureDetector(
-                    onTap: canSend ? _send : _c.primaryAction?.onPressed,
+                    onTap: stop != null
+                        ? stop.onPressed
+                        : canSend
+                        ? _send
+                        : (sendFace ? null : _c.primaryAction?.onPressed),
                     child: AnimatedContainer(
                       duration: _duration,
                       decoration: BoxDecoration(
@@ -453,12 +506,18 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
                           scale: Tween(begin: 0.4, end: 1.0).animate(animation),
                           child: FadeTransition(opacity: animation, child: child),
                         ),
-                        child: NativeIconView(
-                          primaryIcon,
-                          key: ValueKey(sendFace),
-                          size: 18,
-                          color: sendFace && !canSend ? style.disabled : Colors.white,
-                        ),
+                        child: busy
+                            ? SizedBox.square(
+                                key: const ValueKey('busy'),
+                                dimension: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: style.disabled),
+                              )
+                            : NativeIconView(
+                                primaryIcon,
+                                key: ValueKey(primaryFaceKey),
+                                size: 18,
+                                color: sendFace && !canSend ? style.disabled : Colors.white,
+                              ),
                       ),
                     ),
                   ),
@@ -507,7 +566,7 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
                           bottom: 0,
                           child: GestureDetector(
                             // Like the native capsule: tapping anywhere on it focuses.
-                            onTap: focused ? null : _focus.requestFocus,
+                            onTap: focused || !_c.editable ? null : _focus.requestFocus,
                             child: capsule,
                           ),
                         ),
@@ -623,6 +682,25 @@ class _FallbackAttachmentTile extends StatelessWidget {
             )
           else
             thumbnail,
+          if (a.loading)
+            Positioned(
+              left: chip ? 8 : 0,
+              top: chip ? 8 : 0,
+              width: side,
+              height: side,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(chip ? 10 : 16),
+                child: const ColoredBox(
+                  color: Color(0x59000000),
+                  child: Center(
+                    child: SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           Positioned(
             top: 5,
             right: 5,
