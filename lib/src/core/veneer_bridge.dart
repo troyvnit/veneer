@@ -133,7 +133,9 @@ class VeneerBridge {
         }
         _attached = true;
         onAttached?.call();
-        if (_popupShowing || _tabBarCovered) unawaited(_syncChromeHidden());
+        // Always, even when nothing hides it: an isolate that attached
+        // before (a hot restart) may have left the native chrome hidden.
+        unawaited(_syncChromeHidden());
         return true;
       } on PlatformException catch (e) {
         if (e.code != 'no_view') rethrow;

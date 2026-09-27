@@ -419,13 +419,16 @@ To preview the replicas on an iOS 26 device, set `Veneer.debugForceFallback = tr
 `runApp`. Wrap any subtree in `VeneerFallbackScope` to force its replicas.
 
 To match your design system, add a `VeneerFallbackStyle` to your theme's `extensions` (one per
-brightness); the replicas read their surfaces, labels, accent and badge colours from it:
+brightness); the replicas read their surfaces, labels, accent, badge colours and shadows from it:
 
 ```dart
 ThemeData(extensions: [
-  VeneerFallbackStyle.iosLight.copyWith(accent: brand, surface: card),
+  VeneerFallbackStyle.iosLight.copyWith(accent: brand, surface: card, shadows: brandShadow),
 ])
 ```
+
+A Flutter sheet given a `backgroundColor` stays solid at every detent; pass a
+`CupertinoDynamicColor` to have it follow light and dark mode while it's open.
 
 ## Limitations
 

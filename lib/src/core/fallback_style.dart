@@ -27,6 +27,7 @@ class VeneerFallbackStyle extends ThemeExtension<VeneerFallbackStyle> {
     required this.accent,
     required this.badge,
     required this.shadowColor,
+    this.shadows,
   });
 
   factory VeneerFallbackStyle.of(BuildContext context) {
@@ -89,7 +90,11 @@ class VeneerFallbackStyle extends ThemeExtension<VeneerFallbackStyle> {
 
   final Color shadowColor;
 
-  List<BoxShadow> get shadow => [BoxShadow(color: shadowColor, blurRadius: 24, offset: const Offset(0, 6))];
+  /// The shadow under every surface, in place of the default soft one in
+  /// [shadowColor] (blur 24, 6 pt down).
+  final List<BoxShadow>? shadows;
+
+  List<BoxShadow> get shadow => shadows ?? [BoxShadow(color: shadowColor, blurRadius: 24, offset: const Offset(0, 6))];
 
   /// A solid stand-in for a glass surface.
   BoxDecoration surfaceDecoration({BorderRadius? radius, BoxShape shape = BoxShape.rectangle, Color? color}) =>
@@ -115,6 +120,7 @@ class VeneerFallbackStyle extends ThemeExtension<VeneerFallbackStyle> {
     Color? accent,
     Color? badge,
     Color? shadowColor,
+    List<BoxShadow>? shadows,
   }) => VeneerFallbackStyle(
     dark: dark ?? this.dark,
     surface: surface ?? this.surface,
@@ -128,6 +134,7 @@ class VeneerFallbackStyle extends ThemeExtension<VeneerFallbackStyle> {
     accent: accent ?? this.accent,
     badge: badge ?? this.badge,
     shadowColor: shadowColor ?? this.shadowColor,
+    shadows: shadows ?? this.shadows,
   );
 
   @override
@@ -147,6 +154,7 @@ class VeneerFallbackStyle extends ThemeExtension<VeneerFallbackStyle> {
       accent: c(accent, other.accent),
       badge: c(badge, other.badge),
       shadowColor: c(shadowColor, other.shadowColor),
+      shadows: shadows == null && other.shadows == null ? null : BoxShadow.lerpList(shadow, other.shadow, t),
     );
   }
 }

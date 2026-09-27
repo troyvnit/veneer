@@ -229,6 +229,21 @@ void main() {
     expect(sent('setChromeHidden').last['hidden'], isFalse);
   });
 
+  testWidgets('a fresh attach shows chrome a previous isolate left hidden', variant: ios, (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeChromeScope(
+          tabs: const [NativeTabItem(title: 'Home', icon: NativeIcon.symbol('house'))],
+          selectedIndex: 0,
+          onTabSelected: (_) {},
+          child: const SizedBox(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(sent('setChromeHidden').map((a) => a['hidden']), [false]);
+  });
+
   testWidgets('glass shape menus are sent natively and picks come back', (tester) async {
     var picked = -1;
     await tester.pumpWidget(

@@ -1,9 +1,11 @@
 import 'dart:math' as math;
 import 'dart:ui' show ImageFilter, lerpDouble;
 
+import 'package:flutter/cupertino.dart' show CupertinoDynamicColor;
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 
 import '../core/fallback_scope.dart';
 import '../core/fallback_style.dart';
@@ -264,6 +266,11 @@ class NativeSheetRoute<T> extends PageRoute<T> {
   final bool isDismissible;
   final NativeSheetDetent? largestUndimmedDetent;
   final ValueChanged<NativeSheetDetent>? onDetentChanged;
+
+  /// A solid surface at every detent. Without it the sheet is white (light)
+  /// or #1C1C1E (dark), translucent below the large detent as in iOS 26.
+  /// A [CupertinoDynamicColor] follows the theme's brightness while the
+  /// sheet is open.
   final Color? backgroundColor;
 
   /// 0 below the large detent, 1 at it: how far the page behind recedes.
@@ -611,9 +618,16 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
     final dim = dimLevel * _present.value * (1 - (_drag / math.max(1, _min)).clamp(0.0, 1.0));
 
     final dark = style.dark;
-    final opaque = _route.backgroundColor ?? (dark ? const Color(0xFF1C1C1E) : Colors.white);
-    // A translucent material while floating, opaque once it meets the edges.
-    final surface = opaque.withValues(alpha: lerpDouble(dark ? 0.78 : 0.82, 1, t));
+    // A translucent material while floating, opaque once it meets the edges;
+    // a colour the app chose stays solid, so content never shows the page
+    // behind through it, nor bands under the bar's edge fade.
+    final chosen = switch (_route.backgroundColor) {
+      final c? => Color(CupertinoDynamicColor.resolve(c, context).toARGB32()),
+      null => null,
+    };
+    final surface =
+        chosen ??
+        (dark ? const Color(0xFF1C1C1E) : Colors.white).withValues(alpha: lerpDouble(dark ? 0.78 : 0.82, 1, t));
     final grabber = _route.showGrabber ?? _route.detents.length > 1;
 
     final radius = BorderRadius.vertical(top: Radius.circular(topRadius), bottom: Radius.circular(bottomRadius));
@@ -740,6 +754,19 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
             ),
           ),
         ),
+        // The page behind recedes onto black: like UIKit, the status bar
+        // turns light over it. Last, so adding it never remounts the sheet.
+        if (t * _present.value >= 0.5)
+          const Positioned.fill(
+            child: AnnotatedRegion<SystemUiOverlayStyle>(
+              value: SystemUiOverlayStyle(
+                statusBarColor: Color(0x00000000),
+                statusBarIconBrightness: Brightness.light,
+                statusBarBrightness: Brightness.dark,
+              ),
+              child: SizedBox.expand(),
+            ),
+          ),
       ],
     );
   }

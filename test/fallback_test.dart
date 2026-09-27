@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoDynamicColor;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -398,8 +399,144 @@ void main() {
     expect(tester.getTopLeft(find.byType(Column)).dy, lessThan(80));
   });
 
+  for (final large in [true, false]) {
+    testWidgets('status bar over a ${large ? 'large' : 'floating'} sheet', (tester) async {
+      await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Text('page'))));
+      tester
+          .state<NavigatorState>(find.byType(Navigator))
+          .push(
+            NativeSheetRoute<void>(
+              detents: [large ? NativeSheetDetent.large : const NativeSheetDetent.height(300)],
+              builder: (context) => const SizedBox.expand(),
+            ),
+          );
+      await tester.pumpAndSettle();
+
+      final regions = tester
+          .widgetList<AnnotatedRegion<SystemUiOverlayStyle>>(find.byType(AnnotatedRegion<SystemUiOverlayStyle>))
+          .where((r) => r.value.statusBarIconBrightness == Brightness.light);
+      expect(regions, large ? isNotEmpty : isEmpty);
+    });
+  }
+
+  testWidgets('dragging a sheet across the status bar switch keeps its content and settles', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.padding = const FakeViewPadding(top: 59, bottom: 34);
+    tester.view.viewPadding = const FakeViewPadding(top: 59, bottom: 34);
+    addTearDown(tester.view.reset);
+
+    var mounts = 0;
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Text('page'))));
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .push(
+          NativeSheetRoute<void>(
+            detents: const [NativeSheetDetent.height(300), NativeSheetDetent.large],
+            initialDetent: NativeSheetDetent.large,
+            builder: (context) => _MountCounter(onMount: () => mounts++),
+          ),
+        );
+    await tester.pumpAndSettle();
+    expect(mounts, 1);
+
+    await tester.drag(find.byType(_MountCounter), const Offset(0, 420));
+    await tester.pumpAndSettle();
+
+    expect(mounts, 1);
+    expect(tester.getTopLeft(find.byType(_MountCounter)).dy, greaterThan(852 - 300 - 30));
+    final light = tester
+        .widgetList<AnnotatedRegion<SystemUiOverlayStyle>>(find.byType(AnnotatedRegion<SystemUiOverlayStyle>))
+        .where((r) => r.value.statusBarIconBrightness == Brightness.light);
+    expect(light, isEmpty);
+  });
+
+  for (final chosen in [true, false]) {
+    testWidgets('a floating sheet is ${chosen ? 'solid in its chosen colour' : 'translucent by default'}', (
+      tester,
+    ) async {
+      const colour = Color(0xFFF7F7F8);
+      await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Text('page'))));
+      tester
+          .state<NavigatorState>(find.byType(Navigator))
+          .push(
+            NativeSheetRoute<void>(
+              detents: const [NativeSheetDetent.height(300)],
+              backgroundColor: chosen ? colour : null,
+              builder: (context) => const SizedBox.expand(),
+            ),
+          );
+      await tester.pumpAndSettle();
+
+      final surfaces = tester
+          .widgetList<ColoredBox>(find.byType(ColoredBox))
+          .map((b) => b.color)
+          .where((c) => c.a > 0.5 && (c.r > 0.9));
+      expect(surfaces, chosen ? contains(colour) : isNot(contains(colour)));
+      if (!chosen) expect(surfaces.any((c) => c.a < 1), isTrue);
+      expect(find.byWidgetPredicate((w) => w is BackdropFilter && w.enabled), chosen ? findsNothing : findsOneWidget);
+    });
+  }
+
+  testWidgets('a dynamic sheet colour follows the theme while the sheet is open', (tester) async {
+    const light = Color(0xFFFFFFFF);
+    const dark = Color(0xFF1B1B1D);
+    Widget app(ThemeMode mode) => MaterialApp(
+      theme: ThemeData(brightness: Brightness.light),
+      darkTheme: ThemeData(brightness: Brightness.dark),
+      themeMode: mode,
+      home: const Scaffold(body: Text('page')),
+    );
+    await tester.pumpWidget(app(ThemeMode.dark));
+    tester
+        .state<NavigatorState>(find.byType(Navigator))
+        .push(
+          NativeSheetRoute<void>(
+            detents: const [NativeSheetDetent.height(300)],
+            backgroundColor: const CupertinoDynamicColor.withBrightness(color: light, darkColor: dark),
+            builder: (context) => const SizedBox.expand(),
+          ),
+        );
+    await tester.pumpAndSettle();
+    Iterable<Color> surfaces() => tester.widgetList<ColoredBox>(find.byType(ColoredBox)).map((b) => b.color);
+    expect(surfaces(), contains(dark));
+
+    await tester.pumpWidget(app(ThemeMode.light));
+    await tester.pumpAndSettle();
+    expect(surfaces(), contains(light));
+    expect(surfaces(), isNot(contains(dark)));
+  });
+
+  testWidgets('a style\'s shadows replace the default under fallback surfaces', (tester) async {
+    const shadows = [BoxShadow(color: Color(0x14000000), offset: Offset(0, 8), blurRadius: 16, spreadRadius: -4)];
+    final style = VeneerFallbackStyle.iosLight.copyWith(shadows: shadows);
+    expect(style.surfaceDecoration().boxShadow, shadows);
+    expect(VeneerFallbackStyle.iosLight.surfaceDecoration().boxShadow!.single.blurRadius, 24);
+    expect(style.lerp(style, 0.5).shadow.single.blurRadius, 16);
+  });
+
   test('isSupported needs iOS 26: the test host is not', () {
     VeneerBridge.instance.debugIsSupportedOverride = null;
     expect(Veneer.isSupported, isFalse);
   });
+}
+
+class _MountCounter extends StatefulWidget {
+  const _MountCounter({required this.onMount});
+
+  final VoidCallback onMount;
+
+  @override
+  State<_MountCounter> createState() => _MountCounterState();
+}
+
+class _MountCounterState extends State<_MountCounter> {
+  @override
+  void initState() {
+    super.initState();
+    widget.onMount();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
 }

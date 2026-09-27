@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.2
+
+- **Sheets:** a Flutter sheet given a `backgroundColor` stays solid at every detent: content no
+  longer shows the page behind through it, nor a lighter band under the bar's edge fade. A
+  `CupertinoDynamicColor` follows the theme's brightness while the sheet is open. Sheets without
+  a colour keep iOS 26's translucency below the large detent.
+- **Sheets:** while the page behind recedes (the large detent), the status bar turns light over
+  it, as in UIKit; adding that never rebuilds the sheet mid-drag.
+- **Fallbacks:** `VeneerFallbackStyle.shadows` replaces the default shadow under replica
+  surfaces, so bars, buttons and the tab bar can use a design system's elevation.
+- **Fixes:** after a hot restart, chrome an earlier isolate left hidden (a Flutter sheet was up)
+  shows again.
+
 ## 0.2.1
 
 - **Sheets:** `NativeSheetDetent.content()` sizes a Flutter-drawn sheet to its content and
