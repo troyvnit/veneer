@@ -42,6 +42,8 @@ class ComposerBaseView: UIView, UITextViewDelegate {
   var maxLines = 6
   var clearOnSend = true
   var accent: UIColor = .systemBlue
+  /// Runs of text drawn in `accent` wherever they appear (mentions).
+  private var highlights: [String] = []
   private var lastConfig: NSDictionary?
 
   required override init(frame: CGRect) {
@@ -74,6 +76,9 @@ class ComposerBaseView: UIView, UITextViewDelegate {
     clearOnSend = (args["clearOnSend"] as? Bool) ?? true
     accent = (args["tintColor"] as? NSNumber).map(UIColor.init(argb:)) ?? .systemBlue
     textView.tintColor = accent
+    highlights = (args["highlights"] as? [String] ?? []).filter { !$0.isEmpty }
+    recordingBar.setLabels(cancel: args["recordingCancelLabel"] as? String, done: args["recordingDoneLabel"] as? String)
+    applyHighlights()
     let animate = configure(args) && window != nil && isShown
     contentChanged()
     if animate {
@@ -111,16 +116,57 @@ class ComposerBaseView: UIView, UITextViewDelegate {
   var text: String { textView.text ?? "" }
   var hasText: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
-  func setText(_ text: String) {
-    guard textView.text != text else { return }
-    textView.text = text
-    textChanged(notify: false)
+  func setText(_ text: String, selection: NSRange? = nil) {
+    if textView.text != text {
+      textView.text = text
+      textChanged(notify: false)
+    }
+    let length = (text as NSString).length
+    var range = NSRange(location: length, length: 0)
+    if let selection {
+      let start = min(max(0, selection.location), length)
+      range = NSRange(location: start, length: min(max(0, selection.length), length - start))
+    }
+    if textView.selectedRange != range { textView.selectedRange = range }
+  }
+
+  /// Draws `highlights` in the accent colour, the rest in the label colour,
+  /// without replacing the text (so the caret and an in-progress IME
+  /// composition stay put). Typing after a highlight types plain text.
+  func applyHighlights() {
+    let font = textView.font ?? .preferredFont(forTextStyle: .body)
+    let base: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: UIColor.label]
+    textView.typingAttributes = base
+    guard textView.markedTextRange == nil else { return }
+    let storage = textView.textStorage
+    let whole = NSRange(location: 0, length: storage.length)
+    storage.beginEditing()
+    storage.setAttributes(base, range: whole)
+    let string = storage.string as NSString
+    var taken: [NSRange] = []
+    for token in highlights.sorted(by: { $0.count > $1.count }) {
+      var search = whole
+      while search.length > 0 {
+        let found = string.range(of: token, options: [], range: search)
+        guard found.location != NSNotFound else { break }
+        if !taken.contains(where: { NSIntersectionRange($0, found).length > 0 }) {
+          storage.addAttribute(.foregroundColor, value: accent, range: found)
+          taken.append(found)
+        }
+        let next = found.location + found.length
+        search = NSRange(location: next, length: whole.length - next)
+      }
+    }
+    storage.endEditing()
   }
 
   func setShown(_ shown: Bool, animated: Bool = true) {
     guard shown != isShown else { return }
     isShown = shown
-    if !shown { unfocus() }
+    if !shown {
+      unfocus()
+      cancelRecording()
+    }
     isUserInteractionEnabled = shown
     guard animated else {
       alpha = shown ? 1 : 0
@@ -132,6 +178,74 @@ class ComposerBaseView: UIView, UITextViewDelegate {
   }
 
   func emitButton(_ id: String) { onEvent?("composerButton", ["id": id]) }
+
+  // MARK: - Voice recording
+
+  /// Set while recording, and while asking for the microphone before it.
+  private var recorder: VoiceRecorder?
+  /// The bar is up: recording has started.
+  private(set) var isRecording = false
+  /// The row shown in place of the composer's content while recording;
+  /// subclasses place it and fade their own content.
+  let recordingBar = RecordingBarView()
+
+  /// `{maxDuration (seconds)?}`.
+  func startRecording(_ args: [String: Any]) {
+    guard recorder == nil else { return }
+    let recorder = VoiceRecorder(maxDuration: (args["maxDuration"] as? NSNumber)?.doubleValue)
+    self.recorder = recorder
+    unfocus()
+    recordingBar.accent = accent
+    recordingBar.onCancel = { [weak self] in self?.cancelRecording() }
+    recordingBar.onDone = { [weak self] in self?.finishRecording() }
+    recorder.onSample = { [weak self] level, elapsed in self?.recordingBar.append(level: level, elapsed: elapsed) }
+    recorder.onLimit = { [weak self] in self?.finishRecording() }
+    recorder.start { [weak self] failure in
+      // Cancelled (or the composer went away) while asking for access.
+      guard let self, self.recorder === recorder else {
+        if failure == nil { recorder.cancel() }
+        return
+      }
+      if let failure {
+        self.recorder = nil
+        self.onEvent?("composerRecording", ["state": "failed", "reason": failure.rawValue])
+        return
+      }
+      UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+      self.isRecording = true
+      self.recordingBar.reset()
+      self.onEvent?("composerRecording", ["state": "started"])
+      self.recordingChanged()
+    }
+  }
+
+  func finishRecording() {
+    guard let recorder, isRecording else { return }
+    self.recorder = nil
+    isRecording = false
+    recordingChanged()
+    guard let clip = recorder.finish() else { return }
+    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    onEvent?("composerRecording", [
+      "state": "finished",
+      "path": clip.url.path,
+      "durationMs": Int((clip.duration * 1000).rounded()),
+    ])
+  }
+
+  func cancelRecording() {
+    guard let recorder else { return }
+    let wasRecording = isRecording
+    self.recorder = nil
+    isRecording = false
+    recorder.cancel()
+    guard wasRecording else { return }
+    onEvent?("composerRecording", ["state": "cancelled"])
+    recordingChanged()
+  }
+
+  /// Recording started or ended: swap the content for the bar (or back).
+  func recordingChanged() { animateContentLayout() }
 
   /// Whether the send button is live.
   var canSend: Bool { hasText }
@@ -201,9 +315,20 @@ class ComposerBaseView: UIView, UITextViewDelegate {
 
   func textViewDidChange(_ textView: UITextView) { textChanged(notify: true) }
 
+  func textViewDidChangeSelection(_ textView: UITextView) {
+    guard textView.markedTextRange == nil else { return }
+    onEvent?("composerSelection", selectionArgs)
+  }
+
+  private var selectionArgs: [String: Any] {
+    let range = textView.selectedRange
+    return ["selectionStart": range.location, "selectionEnd": range.location + range.length]
+  }
+
   func textChanged(notify: Bool) {
     placeholder.isHidden = !text.isEmpty
-    if notify { onEvent?("composerText", ["text": text]) }
+    applyHighlights()
+    if notify { onEvent?("composerText", ["text": text].merging(selectionArgs) { a, _ in a }) }
     contentChanged()
     textDidChangeLayout()
   }

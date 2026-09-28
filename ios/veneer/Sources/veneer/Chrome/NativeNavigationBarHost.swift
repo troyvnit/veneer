@@ -76,12 +76,19 @@ final class NativeNavigationBarHost: NSObject {
         let capsule = TitleCapsuleControl()
         capsule.configure(title)
         capsule.addAction(UIAction { [weak self] _ in self?.onEvent?("navItemPressed", ["id": title["id"] ?? "title"]) }, for: .touchUpInside)
-        if !leading.isEmpty { leading.append(.fixedSpace(0)) }  // separate glass backgrounds
-        leading.append(UIBarButtonItem(customView: capsule))
         item.title = nil
         item.subtitle = nil
-        item.titleView = nil
-        item.style = .navigator
+        if (title["fill"] as? Bool) == true {
+          // A bar button item hugs its content; the title view is what UIKit
+          // stretches between the items, so it carries its own glass.
+          item.titleView = FillingTitleCapsule(capsule)
+          item.style = .editor
+        } else {
+          if !leading.isEmpty { leading.append(.fixedSpace(0)) }  // separate glass backgrounds
+          leading.append(UIBarButtonItem(customView: capsule))
+          item.titleView = nil
+          item.style = .navigator
+        }
       } else if let title, BarTitleView.isCustom(title) {
         // Styled or leading-aligned: our own labels as the title view, which
         // UIKit fits (and truncates) between the items. The editor style
@@ -281,6 +288,7 @@ final class TitleCapsuleControl: UIControl {
   private let subtitleLabel = UILabel()
   private let stack = UIStackView()
   private var stackLeading: NSLayoutConstraint?
+  private var iconWidth: NSLayoutConstraint?
 
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -310,6 +318,8 @@ final class TitleCapsuleControl: UIControl {
     addSubview(stack)
     let stackLeading = stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4)
     self.stackLeading = stackLeading
+    iconWidth = iconView.widthAnchor.constraint(equalToConstant: 18)
+    iconView.heightAnchor.constraint(equalTo: iconView.widthAnchor).isActive = true
     NSLayoutConstraint.activate([
       stackLeading,
       stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
@@ -328,12 +338,18 @@ final class TitleCapsuleControl: UIControl {
     BarTitleView.apply(spec["subtitleStyle"], to: subtitleLabel, text: spec["subtitle"] as? String,
       fallback: .systemFont(ofSize: 12, weight: .regular), color: .secondaryLabel)
     subtitleLabel.isHidden = (spec["subtitle"] as? String)?.isEmpty ?? true
+    let iconSize = (spec["iconSize"] as? NSNumber).map { CGFloat($0.doubleValue) } ?? 18
     iconView.image = NativeIconDescriptor(spec["icon"]).flatMap {
-      NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : 18)
+      NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : iconSize)
     }
     iconView.isHidden = iconView.image == nil
-    // Text alone needs the capsule's own padding; an icon sits closer.
-    stackLeading?.constant = iconView.isHidden ? 12 : 4
+    // Text alone needs the capsule's own padding; a glyph sits closer, and an
+    // avatar-sized icon is concentric with the capsule, 2 pt from its edge.
+    let largeIcon = !iconView.isHidden && iconSize >= 32
+    stackLeading?.constant = iconView.isHidden ? 12 : largeIcon ? 2 : 4
+    stack.spacing = largeIcon ? 8 : 10
+    iconWidth?.constant = iconSize
+    iconWidth?.isActive = largeIcon
     accessoryView.image = NativeIconDescriptor(spec["accessory"]).flatMap {
       NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : 16)
     }
@@ -343,5 +359,43 @@ final class TitleCapsuleControl: UIControl {
 
   override var isHighlighted: Bool {
     didSet { stack.alpha = isHighlighted ? 0.5 : 1 }
+  }
+}
+
+/// A capsule title that spans the space between the bar's items: its own
+/// Liquid Glass (a bar button item's comes from UIKit), and an expanded
+/// intrinsic width that UIKit clamps to what the items leave.
+@available(iOS 26.0, *)
+final class FillingTitleCapsule: UIView {
+  private let glass: UIVisualEffectView = {
+    let effect = UIGlassEffect(style: .regular)
+    effect.isInteractive = true
+    return UIVisualEffectView(effect: effect)
+  }()
+
+  init(_ capsule: TitleCapsuleControl) {
+    super.init(frame: .zero)
+    glass.translatesAutoresizingMaskIntoConstraints = false
+    glass.clipsToBounds = true
+    glass.layer.cornerRadius = 22
+    glass.layer.cornerCurve = .continuous
+    addSubview(glass)
+    capsule.translatesAutoresizingMaskIntoConstraints = false
+    glass.contentView.addSubview(capsule)
+    NSLayoutConstraint.activate([
+      glass.leadingAnchor.constraint(equalTo: leadingAnchor),
+      glass.trailingAnchor.constraint(equalTo: trailingAnchor),
+      glass.topAnchor.constraint(equalTo: topAnchor),
+      glass.bottomAnchor.constraint(equalTo: bottomAnchor),
+      capsule.leadingAnchor.constraint(equalTo: glass.contentView.leadingAnchor),
+      capsule.trailingAnchor.constraint(equalTo: glass.contentView.trailingAnchor),
+      capsule.centerYAnchor.constraint(equalTo: glass.contentView.centerYAnchor),
+    ])
+  }
+
+  required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+  override var intrinsicContentSize: CGSize {
+    CGSize(width: UIView.layoutFittingExpandedSize.width, height: 44)
   }
 }

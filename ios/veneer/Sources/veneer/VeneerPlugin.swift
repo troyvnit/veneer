@@ -89,6 +89,9 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
         return
       }
       overlay.glassLayer.defaultSpacing = CGFloat((args["spacing"] as? NSNumber)?.doubleValue ?? 16)
+      // A new isolate (hot restart) attaches to the same overlay; a composer
+      // the old one showed has no Dart owner left to remove it.
+      overlay.setComposer(nil)
       DispatchQueue.main.async { overlay.resendLayout() }
       let fn: @convention(c) (UnsafePointer<Double>?, Int32, Int32) -> Void = veneer_apply_frame
       result([
@@ -117,6 +120,14 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
 
     case "setSpacing":
       overlay?.glassLayer.defaultSpacing = CGFloat((args["spacing"] as? NSNumber)?.doubleValue ?? 16)
+      result(nil)
+
+    case "configureContextMenu":
+      overlay?.contextMenus.configure(args)
+      result(nil)
+
+    case "removeContextMenu":
+      if let id = (args["id"] as? NSNumber)?.intValue { overlay?.contextMenus.remove(id: id) }
       result(nil)
 
     case "configureGroup":

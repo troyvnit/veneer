@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.4.0
+
+- **Context menus:** `NativeContextMenu` opens UIKit's own context menu when you long-press any
+  Flutter widget. You get the press shrink, the widget lifting over a blurred backdrop with the
+  menu beside it, haptics, and the settle back. UIKit recognizes the long press on the Flutter
+  view and hit-tests against where Flutter laid the widget out that frame, so it follows scrolling
+  and never interrupts a scroll. The lifted preview is a snapshot clipped to `borderRadius`.
+  Android and iOS 15–25 get a Flutter menu next to the widget instead.
+- **Voice recording in composers:** `NativeComposerController.startVoiceRecording()` turns
+  either composer into a recording bar, as in Slack: cancel, a live waveform, the elapsed time
+  and a done button in the tint colour. Recording is native (AAC `.m4a`, with microphone
+  permission and haptics). The clip arrives in `onVoiceRecorded` as a `NativeVoiceRecording`
+  (path and duration). A refusal arrives in `onVoiceRecordingFailed`, and so does a Flutter
+  fallback, so apps can record their own way there. Also new: `finishVoiceRecording()`,
+  `cancelVoiceRecording()`, `isRecording`, an optional `maxDuration`, and VoiceOver labels for
+  the bar's buttons. A recording is cancelled when its composer goes away. Your app needs
+  `NSMicrophoneUsageDescription`.
+- **Mentions in composers:** the controller tracks the caret (`selection`), and gains
+  `setText(text, selection:)` and `replaceRange` for completing a mention being typed. The
+  `highlights` parameter draws given runs of text (such as `@names`) in the tint colour, natively
+  and in the replicas.
+- **Navigation bar:** `NativeBarTitle(fill: true)` stretches a title capsule across the space
+  between the leading and trailing buttons, as a chat header does. `iconSize` fits an
+  avatar-sized icon, such as a 40 pt group avatar, concentric with the capsule.
+- **Fixes:**
+  - A page taking over the shared native composer now sends its own text. A new page no longer
+    shows the previous page's draft.
+  - A page coming back into view now shows its composer again.
+  - After a hot restart, a composer the previous isolate left on screen is removed.
+
 ## 0.3.0
 
 - **Native sheets can present native sheets.** A sheet opened from inside a sheet's engine

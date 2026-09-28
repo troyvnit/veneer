@@ -57,10 +57,10 @@ behaviour, so one codebase serves every platform.
 |---|---|
 | **Tab bar** | A real `UITabBarController`: the floating Liquid Glass bar, selection morph, badges and the split layout's detached trailing button. Slides away when another screen covers it. |
 | **Navigation bar** | A real `UINavigationBar` with glass bar buttons, a title capsule, grouped trailing buttons, native menus and iOS 26's scroll edge effect over Flutter content. |
-| **Composer** | A messaging composer: a glass capsule that morphs into an expanded card above the keyboard, inside the keyboard's own animation, with interactive keyboard dismissal. |
+| **Composer** | A messaging composer: a glass capsule that morphs into an expanded card above the keyboard, inside the keyboard's own animation, with interactive keyboard dismissal, mentions and Slack-style voice recording. |
 | **Prompt composer** | An assistant-style composer: grows from a capsule into a card for long prompts and attachments, turns its voice button into send as you type, and splits glass buttons off for a voice session. |
 | **Sheets** | Real UIKit sheets hosting Flutter content: detents, grabber, Liquid Glass at partial heights, the page behind receding — with Veneer's bars and composers inside. |
-| **Menus** | Native `UIMenu`s from bar buttons, composer buttons and glass shapes. |
+| **Menus** | Native `UIMenu`s from bar buttons, composer buttons and glass shapes, and UIKit context menus on long-pressed Flutter widgets. |
 | **Glass shapes** | `UIGlassEffect` shapes laid out by Flutter, merging within groups, clipped by Flutter clips, interactive. |
 | **Icons** | SF Symbols, any `IconData` (Material, Cupertino, custom and variable icon fonts), SVG and images — all rendered natively. |
 
@@ -203,7 +203,9 @@ NativeNavigationBar(
   capsule. When its buttons change, UIKit morphs the glass between the old and new sets.
 - `NativeBarTitle(capsule: true)` shows a tappable glass capsule with an icon, title,
   subtitle and optional `accessory` (such as a chevron), like a channel header; otherwise a
-  plain title, centred or leading (`alignment: NativeBarTitleAlignment.leading`). Pass `style`
+  plain title, centred or leading (`alignment: NativeBarTitleAlignment.leading`). With
+  `fill: true` the capsule spans the space between the buttons (a chat header), and `iconSize`
+  fits an avatar-sized icon such as a group avatar. Pass `style`
   and `subtitleStyle` to use your app's fonts and colours; the native bar loads the font
   family from your Flutter assets.
 - Bar buttons can show a `badge` (a count, text, or `''` for a dot), use `prominent` tinted
@@ -239,6 +241,33 @@ NativeComposer(
   finger, using UIKit's own mechanism, while Flutter keeps scrolling.
 - Use it in a `Scaffold(resizeToAvoidBottomInset: false)`: it handles the keyboard and pads
   `child` for the space it takes.
+- **Mentions:** `controller.selection` follows the caret, `controller.replaceRange(start, end,
+  '@Name ')` completes the mention being typed, and `highlights: ['@Name']` draws mentions in
+  the tint colour.
+- **Voice recording** (both composers), as in Slack:
+
+  ```dart
+  NativePromptComposer(
+    controller: composer,
+    actions: [
+      NativeComposerButton(
+        icon: const NativeIcon.symbol('mic'),
+        title: 'Record',
+        onPressed: () => composer.startVoiceRecording(maxDuration: const Duration(minutes: 5)),
+      ),
+    ],
+    onVoiceRecorded: (clip) => attach(clip.path, clip.duration),
+    onVoiceRecordingFailed: (reason) => recordWithFlutter(),
+    recordingCancelLabel: 'Cancel',
+    recordingDoneLabel: 'Done',
+    child: conversation,
+  )
+  ```
+
+  The composer becomes a recording bar with cancel, a live waveform, the elapsed time and done.
+  Recording is native: an AAC `.m4a` file in the temporary directory, which your app owns from
+  then on. Your app needs an `NSMicrophoneUsageDescription`. The Flutter fallback reports
+  `NativeVoiceRecordingFailure.unavailable`.
 
 ### Prompt composer
 
@@ -370,6 +399,25 @@ NativeBarButton(
 grows out of the button. `NativeMenuItem.divider()` separates sections. Off iOS 26 a Flutter
 menu with iOS metrics opens instead.
 
+**Context menus** on any Flutter widget:
+
+```dart
+NativeContextMenu(
+  borderRadius: BorderRadius.circular(18),
+  items: [
+    NativeMenuItem(title: 'Reply', icon: const NativeIcon.symbol('arrowshape.turn.up.left'), onSelected: reply),
+    NativeMenuItem(title: 'Delete', icon: const NativeIcon.symbol('trash'), destructive: true, onSelected: delete),
+  ],
+  child: bubble,
+)
+```
+
+A long press opens UIKit's context menu. The widget lifts over a blurred backdrop, with the
+press shrink, haptics and the settle back. UIKit recognizes the press on the Flutter view against
+where Flutter laid the widget out that frame, so it follows scrolling, and a press that moves
+still scrolls. The preview is a snapshot of the widget clipped to `borderRadius`. Off iOS 26 a
+long press opens the Flutter menu next to the widget.
+
 ### Glass shapes
 
 ```dart
@@ -445,6 +493,8 @@ A Flutter sheet given a `backgroundColor` stays solid at every detent; pass a
 - **Sheets:** the sheet's Flutter content runs in its own isolate (see [Sheets](#sheets)).
 - **Gestures:** a touch that starts on an interactive glass shape belongs to UIKit and can't
   start a Flutter scroll.
+- **Context menus:** the lifted preview is a still snapshot, so animated content freezes while
+  the menu is up.
 - **Accessibility:** not yet audited with VoiceOver.
 - **Not yet native:** toolbars, search, and leaf controls such as switches and sliders.
 

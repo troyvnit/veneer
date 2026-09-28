@@ -115,6 +115,11 @@ final class NativePromptComposerView: ComposerBaseView {
     for v in [attachmentStrip, textView, leadingButton, primaryButton, sendSpinner] as [UIView] {
       capsule.contentView.addSubview(v)
     }
+    recordingBar.edgeCenter = Metrics.edgeCenter
+    recordingBar.buttonSize = Metrics.primary
+    recordingBar.alpha = 0
+    recordingBar.isUserInteractionEnabled = false
+    capsule.contentView.addSubview(recordingBar)
     // Tapping anywhere on the capsule focuses it, like a text field.
     capsule.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(focusFromTap)))
   }
@@ -216,6 +221,7 @@ final class NativePromptComposerView: ComposerBaseView {
   }
 
   @objc private func focusFromTap() {
+    guard !isRecording else { return }
     if !isEditingText, textView.isEditable { focus() }
   }
 
@@ -308,6 +314,7 @@ final class NativePromptComposerView: ComposerBaseView {
 
   /// Wraps at the inline width, contains a line break, or has attachments.
   func isMultiline(capsuleWidth: CGFloat) -> Bool {
+    if isRecording { return false }
     if !attachmentIds.isEmpty || text.contains("\n") { return true }
     guard !text.isEmpty else { return false }
     let fitted = textView.sizeThatFits(
@@ -393,6 +400,19 @@ final class NativePromptComposerView: ComposerBaseView {
       textView.isScrollEnabled = false
     }
     placeholder.frame = CGRect(x: 0, y: Metrics.textVerticalInset, width: textView.bounds.width, height: ceil(lineHeight))
+
+    // Recording: the bar takes the row and the content fades under it.
+    let recording = isRecording
+    recordingBar.frame = CGRect(x: 0, y: rowTop, width: cw, height: Metrics.row)
+    recordingBar.alpha = recording ? 1 : 0
+    recordingBar.isUserInteractionEnabled = recording
+    leadingButton.alpha = recording ? 0 : 1
+    textView.alpha = recording ? 0 : 1
+    if recording {
+      for v in [primaryButton, attachmentStrip, sendSpinner] + actionButtons as [UIView] { v.alpha = 0 }
+    }
+    for v in [leadingButton, primaryButton, textView] as [UIView] { v.isUserInteractionEnabled = !recording }
+    if recording { for b in actionButtons { b.isUserInteractionEnabled = false } }
 
     let n = CGFloat(sideButtons.count)
     for (i, b) in sideButtons.enumerated() {

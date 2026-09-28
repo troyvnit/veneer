@@ -35,6 +35,12 @@ class GlassCoordinator {
   static const int stride = 20;
   static const int composerHostId = -1;
 
+  static int _nextAnchorId = 1;
+
+  /// Ids for anything whose geometry rides the frames (glass shapes,
+  /// context-menu regions); one sequence, so native can tell them apart.
+  static int allocateId() => _nextAnchorId++;
+
   final Map<Object, (int, Offset Function())> _composerHosts = {};
 
   /// Registers a composer widget that's showing; [offset] reports its page's

@@ -71,6 +71,8 @@ final class GlassLayerView: UIView {
   var onShapeTapped: ((Int) -> Void)?
   /// A shape's menu item was picked: shape id, item index.
   var onShapeMenu: ((Int, Int) -> Void)?
+  /// Context-menu regions ride the same frames as shapes.
+  weak var contextMenus: ContextMenuRegions?
 
   private var shapes: [Int: GlassShapeView] = [:]
   private var groups: [Int: GlassGroupView] = [:]
@@ -201,7 +203,14 @@ final class GlassLayerView: UIView {
     var visibilityChanges: [(GlassShapeView, Bool)] = []
     for i in 0..<count {
       let o = 2 + i * Self.stride
-      guard let shape = shapes[Int(buf[o])], shape.superview != nil else { continue }
+      let id = Int(buf[o])
+      if let contextMenus, contextMenus.has(id) {
+        let frame = CGRect(x: buf[o + 1], y: buf[o + 2], width: buf[o + 3], height: buf[o + 4])
+        let clip = Int(buf[o + 6]) != 0 ? ShapeClip(buf, at: o + 7).path : nil
+        contextMenus.update(id: id, frame: frame, visible: buf[o + 5] > 0.5, clip: clip)
+        continue
+      }
+      guard let shape = shapes[id], shape.superview != nil else { continue }
       let clipId = Int(buf[o + 6])
       if clipId != shape.clipId { place(shape, group: shape.groupId, clip: clipId) }
       if clipId != 0 { groups[shape.groupId]?.scopes[clipId]?.setClip(ShapeClip(buf, at: o + 7)) }

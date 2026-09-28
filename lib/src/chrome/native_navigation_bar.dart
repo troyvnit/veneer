@@ -81,6 +81,8 @@ class NativeBarTitle {
     this.icon,
     this.accessory,
     this.capsule = false,
+    this.fill = false,
+    this.iconSize,
     this.alignment = NativeBarTitleAlignment.center,
     this.style,
     this.subtitleStyle,
@@ -104,6 +106,14 @@ class NativeBarTitle {
   final TextStyle? style;
   final TextStyle? subtitleStyle;
   final bool capsule;
+
+  /// A [capsule] that spans all the space between the leading and trailing
+  /// buttons, as a chat header does, instead of hugging its text.
+  final bool fill;
+
+  /// Side of a non-symbol [icon] in a [capsule] (default 18 pt), e.g. 40
+  /// for a group avatar that fills the capsule's height.
+  final double? iconSize;
   final VoidCallback? onPressed;
 }
 
@@ -253,6 +263,8 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
               'style': _encodeStyle(title.style),
               'subtitleStyle': _encodeStyle(title.subtitleStyle),
               'capsule': title.capsule,
+              'fill': title.fill,
+              'iconSize': title.iconSize,
             },
       'trailing': [for (final (i, b) in widget.trailing.indexed) button('trailing$i', b)],
       'tintColor': widget.tintColor?.toARGB32(),
@@ -312,6 +324,13 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
 /// capsule 12 pt after it, trailing buttons sharing one capsule — solid
 /// instead of glass, floating over the content with a fade standing in for
 /// the scroll edge effect. Content gets top padding for it, as natively.
+/// An avatar-sized icon sits 2 pt from the capsule's edge, concentric with
+/// it; a glyph gets the capsule's own padding.
+bool _hasLargeIcon(NativeBarTitle title) => title.icon != null && (title.iconSize ?? 18) >= 32;
+
+EdgeInsets _capsulePadding(NativeBarTitle title) =>
+    _hasLargeIcon(title) ? const EdgeInsets.only(left: 2, right: 8) : const EdgeInsets.only(left: 14, right: 16);
+
 class _FallbackNavigationBar extends StatelessWidget {
   const _FallbackNavigationBar(this.bar, {required this.scrolled, required this.child});
 
@@ -423,14 +442,15 @@ class _FallbackNavigationBar extends StatelessWidget {
                   onTap: title.onPressed,
                   child: Container(
                     height: item,
-                    padding: const EdgeInsets.only(left: 14, right: 16),
+                    width: title.fill ? double.infinity : null,
+                    padding: _capsulePadding(title),
                     decoration: style.surfaceDecoration(radius: capsuleRadius),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (title.icon case final icon?) ...[
-                          NativeIconView(icon, size: 18, color: style.label),
-                          const SizedBox(width: 10),
+                          NativeIconView(icon, size: title.iconSize ?? 18, color: style.label),
+                          SizedBox(width: _hasLargeIcon(title) ? 8 : 10),
                         ],
                         Flexible(child: titleText(CrossAxisAlignment.start)),
                         if (title.accessory case final accessory?) ...[

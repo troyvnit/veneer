@@ -149,6 +149,42 @@ void main() {
     expect((calls.last.arguments as Map)['command'], 'unfocus');
   });
 
+  testWidgets('composer controller follows the native caret and completes a mention', variant: ios, (tester) async {
+    final controller = NativeComposerController();
+    final changes = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativePromptComposer(
+          controller: controller,
+          highlights: const ['@Kat QA'],
+          onChanged: changes.add,
+          child: const SizedBox(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(sent('setComposer').last['highlights'], ['@Kat QA']);
+
+    await nativeEvent('composerText', {'text': 'Hi @ka there', 'selectionStart': 6, 'selectionEnd': 6});
+    expect(controller.text, 'Hi @ka there');
+    expect(controller.selection, const TextSelection.collapsed(offset: 6));
+    expect(changes, ['Hi @ka there']);
+
+    await nativeEvent('composerSelection', {'selectionStart': 2, 'selectionEnd': 5});
+    expect(controller.selection, const TextSelection(baseOffset: 2, extentOffset: 5));
+    expect(changes, hasLength(1), reason: 'moving the caret is not a text change');
+
+    await nativeEvent('composerSelection', {'selectionStart': 6, 'selectionEnd': 6});
+    controller.replaceRange(3, 6, '@Kat QA ');
+    await tester.pump();
+    expect(controller.text, 'Hi @Kat QA  there');
+    expect(controller.selection, const TextSelection.collapsed(offset: 11));
+    final command = calls.last.arguments as Map;
+    expect(command['command'], 'setText');
+    expect(command['text'], 'Hi @Kat QA  there');
+    expect([command['selectionStart'], command['selectionEnd']], [11, 11]);
+  });
+
   testWidgets('prompt composer: config, menus, side actions and attachment removal', variant: ios, (tester) async {
     final events = <String>[];
     var removed = 0;
@@ -415,6 +451,94 @@ void main() {
     expect((config['menu']! as List).last, {'title': 'Delete', 'icon': null, 'destructive': true});
     await nativeEvent('shapeMenu', {'id': config['id'], 'index': 1});
     expect(picked, 1);
+  });
+
+  testWidgets('context menu registers its region, picks come back, and the child hides while it is up', (tester) async {
+    var picked = -1;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: NativeContextMenu(
+            borderRadius: BorderRadius.circular(16),
+            items: [
+              NativeMenuItem(title: 'Reply', onSelected: () => picked = 0),
+              NativeMenuItem(title: 'Delete', destructive: true, onSelected: () => picked = 1),
+            ],
+            child: const SizedBox(width: 200, height: 60, child: Text('bubble')),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final config = sent('configureContextMenu').last;
+    expect(config['radii'], [16.0, 16.0, 16.0, 16.0]);
+    expect((config['menu']! as List).first, {'title': 'Reply', 'icon': null, 'destructive': false});
+
+    await nativeEvent('contextMenuShown', {'id': config['id']});
+    await tester.pump();
+    expect(tester.widget<Opacity>(find.ancestor(of: find.text('bubble'), matching: find.byType(Opacity))).opacity, 0);
+    await nativeEvent('contextMenuItem', {'id': config['id'], 'index': 1});
+    await nativeEvent('contextMenuHidden', {'id': config['id']});
+    await tester.pump();
+    expect(picked, 1);
+    expect(tester.widget<Opacity>(find.ancestor(of: find.text('bubble'), matching: find.byType(Opacity))).opacity, 1);
+
+    await tester.pumpWidget(const SizedBox());
+    expect(sent('removeContextMenu').single['id'], config['id']);
+  });
+
+  testWidgets('voice recording: commands go native, the clip comes back', variant: ios, (tester) async {
+    final controller = NativeComposerController();
+    NativeVoiceRecording? clip;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativePromptComposer(
+          controller: controller,
+          recordingCancelLabel: 'Cancel',
+          recordingDoneLabel: 'Done',
+          onVoiceRecorded: (recording) => clip = recording,
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(sent('setComposer').last['recordingDoneLabel'], 'Done');
+
+    controller.startVoiceRecording(maxDuration: const Duration(minutes: 2));
+    await tester.pump();
+    expect(sent('composerCommand').last, containsPair('command', 'startRecording'));
+    expect(sent('composerCommand').last['maxDuration'], 120.0);
+
+    await nativeEvent('composerRecording', {'state': 'started'});
+    expect(controller.isRecording, isTrue);
+    await nativeEvent('composerRecording', {'state': 'finished', 'path': '/tmp/voice.m4a', 'durationMs': 2500});
+    expect(controller.isRecording, isFalse);
+    expect(clip?.path, '/tmp/voice.m4a');
+    expect(clip?.duration, const Duration(milliseconds: 2500));
+  });
+
+  testWidgets('a composer taking over the native view sends its own text', variant: ios, (tester) async {
+    final first = NativeComposerController(text: '@');
+    final second = NativeComposerController();
+    final navigator = GlobalKey<NavigatorState>();
+    await tester.pumpWidget(
+      MaterialApp(
+        navigatorKey: navigator,
+        home: NativePromptComposer(controller: first, child: const SizedBox.expand()),
+      ),
+    );
+    await tester.pump();
+    calls.clear();
+    navigator.currentState!.push(
+      MaterialPageRoute<void>(
+        builder: (_) => NativePromptComposer(controller: second, child: const SizedBox.expand()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(sent('composerCommand').where((c) => c['command'] == 'setText').last['text'], '');
+    navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+    expect(sent('composerCommand').where((c) => c['command'] == 'setText').last['text'], '@');
   });
 
   test('tab bar rejects more items than UIKit shows without a More tab', () {

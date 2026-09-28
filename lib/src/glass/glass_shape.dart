@@ -75,8 +75,7 @@ class GlassShape extends StatefulWidget {
 }
 
 class _GlassShapeState extends State<GlassShape> {
-  static int _nextId = 1;
-  final int _id = _nextId++;
+  final int _id = GlassCoordinator.allocateId();
 
   int? _group;
   bool _native = false;

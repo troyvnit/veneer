@@ -53,6 +53,7 @@ class VeneerBridge {
 
   final Map<int, VoidCallback> _shapeTapHandlers = {};
   final Map<int, ValueChanged<int>> _shapeMenuHandlers = {};
+  final Map<int, VeneerContextMenuHandlers> _contextMenuHandlers = {};
   ValueChanged<int>? _tabSelectedHandler;
   VoidCallback? _tabActionHandler;
   ValueChanged<String>? _navItemHandler;
@@ -79,6 +80,7 @@ class VeneerBridge {
     _ffiBuffer = null;
     _shapeTapHandlers.clear();
     _shapeMenuHandlers.clear();
+    _contextMenuHandlers.clear();
     _tabSelectedHandler = null;
     _tabActionHandler = null;
     _navItemHandler = null;
@@ -192,6 +194,19 @@ class VeneerBridge {
     await _channel.invokeMethod<void>('removeShape', {'id': id});
   }
 
+  /// A long-press context menu region; its geometry rides the glass frames.
+  Future<void> configureContextMenu(Map<String, Object?> config, VeneerContextMenuHandlers handlers) async {
+    _contextMenuHandlers[config['id']! as int] = handlers;
+    if (!await ensureAttached()) return;
+    await _channel.invokeMethod<void>('configureContextMenu', config);
+  }
+
+  Future<void> removeContextMenu(int id) async {
+    _contextMenuHandlers.remove(id);
+    if (!_attached) return;
+    await _channel.invokeMethod<void>('removeContextMenu', {'id': id});
+  }
+
   Future<void> configureGroup(Map<String, Object?> config) async {
     if (!await ensureAttached()) return;
     await _channel.invokeMethod<void>('configureGroup', config);
@@ -265,9 +280,19 @@ class VeneerBridge {
     await _channel.invokeMethod<void>('removeComposer');
   }
 
-  Future<void> composerCommand(String command, {String? text}) async {
+  Future<void> composerCommand(
+    String command, {
+    String? text,
+    TextSelection? selection,
+    Map<String, Object?> args = const {},
+  }) async {
     if (!_attached) return;
-    await _channel.invokeMethod<void>('composerCommand', {'command': command, 'text': text});
+    await _channel.invokeMethod<void>('composerCommand', {
+      ...args,
+      'command': command,
+      'text': text,
+      if (selection != null) ...{'selectionStart': selection.start, 'selectionEnd': selection.end},
+    });
   }
 
   bool _popupShowing = false;
@@ -360,6 +385,12 @@ class VeneerBridge {
         _shapeTapHandlers[args['id']]?.call();
       case 'shapeMenu':
         _shapeMenuHandlers[args['id']]?.call(args['index']! as int);
+      case 'contextMenuItem':
+        _contextMenuHandlers[args['id']]?.onSelected(args['index']! as int);
+      case 'contextMenuShown':
+        _contextMenuHandlers[args['id']]?.onOpenChanged(true);
+      case 'contextMenuHidden':
+        _contextMenuHandlers[args['id']]?.onOpenChanged(false);
       case 'tabSelected':
         _tabSelectedHandler?.call(args['index']! as int);
       case 'tabActionPressed':
@@ -372,11 +403,15 @@ class VeneerBridge {
       case 'composerButton':
         _composerHandlers?.onButton(args['id']! as String);
       case 'composerText':
-        _composerHandlers?.onText(args['text']! as String);
+        _composerHandlers?.onText(args['text']! as String, _selection(args));
+      case 'composerSelection':
+        if (_selection(args) case final selection?) _composerHandlers?.onSelection?.call(selection);
       case 'composerFocus':
         _composerHandlers?.onFocus(args['focused']! as bool);
       case 'composerSend':
         _composerHandlers?.onSend(args['text']! as String);
+      case 'composerRecording':
+        _composerHandlers?.onRecording?.call(args);
       case 'composerAttachmentRemoved':
         _composerHandlers?.onAttachmentRemoved?.call(args['id']! as String);
       case 'sheetDismissed':
@@ -398,7 +433,24 @@ class VeneerBridge {
   }
 }
 
+TextSelection? _selection(Map<Object?, Object?> args) {
+  final start = args['selectionStart'];
+  final end = args['selectionEnd'];
+  if (start is! int || end is! int) return null;
+  return TextSelection(baseOffset: start, extentOffset: end);
+}
+
 /// Callbacks from the native composer.
+class VeneerContextMenuHandlers {
+  const VeneerContextMenuHandlers({required this.onSelected, required this.onOpenChanged});
+
+  /// An item was picked, by index in the menu sent.
+  final ValueChanged<int> onSelected;
+
+  /// The menu lifted (true) or finished dismissing (false).
+  final ValueChanged<bool> onOpenChanged;
+}
+
 class VeneerComposerHandlers {
   const VeneerComposerHandlers({
     required this.onButton,
@@ -407,10 +459,17 @@ class VeneerComposerHandlers {
     required this.onSend,
     required this.onLayout,
     this.onAttachmentRemoved,
+    this.onSelection,
+    this.onRecording,
   });
 
   final ValueChanged<String> onButton;
-  final ValueChanged<String> onText;
+
+  /// The text changed; with the selection after the change, when known.
+  final void Function(String text, TextSelection? selection) onText;
+
+  /// The selection moved without the text changing.
+  final ValueChanged<TextSelection>? onSelection;
   final ValueChanged<bool> onFocus;
   final ValueChanged<String> onSend;
 
@@ -419,4 +478,8 @@ class VeneerComposerHandlers {
 
   /// An attachment's remove button was tapped (prompt composer).
   final ValueChanged<String>? onAttachmentRemoved;
+
+  /// Voice recording: `{state: started|finished|cancelled|failed, path,
+  /// durationMs, reason}`.
+  final ValueChanged<Map<String, Object?>>? onRecording;
 }

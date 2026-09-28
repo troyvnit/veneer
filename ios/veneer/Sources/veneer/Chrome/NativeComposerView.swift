@@ -54,6 +54,10 @@ final class NativeComposerView: ComposerBaseView {
     sendButton.addAction(UIAction { [weak self] _ in self?.send() }, for: .touchUpInside)
 
     for v in [textView, plusButton, idleButton, sendButton] as [UIView] { background.contentView.addSubview(v) }
+    recordingBar.edgeCenter = Metrics.idleHeight / 2
+    recordingBar.alpha = 0
+    recordingBar.isUserInteractionEnabled = false
+    background.contentView.addSubview(recordingBar)
     // Tapping anywhere on the idle capsule focuses it, like a text field.
     background.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(focusFromTap)))
     applyState()
@@ -108,6 +112,7 @@ final class NativeComposerView: ComposerBaseView {
   }
 
   @objc private func focusFromTap() {
+    guard !isRecording else { return }
     if !isEditingText { focus() }
   }
 
@@ -181,6 +186,17 @@ final class NativeComposerView: ComposerBaseView {
       sendButton.frame = CGRect(x: w - Metrics.sendTrailing - Metrics.row / 2, y: rowTop, width: Metrics.row, height: Metrics.row)
     }
     placeholder.frame = CGRect(x: 0, y: 11, width: textView.bounds.width, height: ceil(lineHeight))
+
+    // Recording (always idle: it starts by dropping the keyboard): the bar
+    // takes the capsule and the content fades under it.
+    let recording = isRecording
+    recordingBar.frame = bounds
+    recordingBar.alpha = recording ? 1 : 0
+    recordingBar.isUserInteractionEnabled = recording
+    for v in [textView, plusButton, idleButton] as [UIView] {
+      v.alpha = recording ? 0 : (v === idleButton && isExpanded ? 0 : 1)
+      v.isUserInteractionEnabled = !recording
+    }
   }
 
   // MARK: - Text

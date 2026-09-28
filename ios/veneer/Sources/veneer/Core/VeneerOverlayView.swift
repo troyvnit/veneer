@@ -19,6 +19,7 @@ import UIKit
 @available(iOS 26.0, *)
 final class VeneerOverlayView: UIView {
   let glassLayer = GlassLayerView()
+  let contextMenus = ContextMenuRegions()
   var onEvent: ((String, Any?) -> Void)? {
     didSet { tabBarHost?.onEvent = onEvent }
   }
@@ -63,6 +64,8 @@ final class VeneerOverlayView: UIView {
       self?.onEvent?("shapeMenu", ["id": id, "index": index])
     }
     addSubview(glassLayer)
+    glassLayer.contextMenus = contextMenus
+    contextMenus.onEvent = { [weak self] method, payload in self?.onEvent?(method, payload) }
     edgeEffects.attach(to: self, at: 1)
 
     keyboardDismissProxy.frame = bounds
@@ -212,6 +215,7 @@ final class VeneerOverlayView: UIView {
   func setComposer(_ args: [String: Any]?) {
     guard let args else {
       composer?.unfocus()
+      composer?.cancelRecording()
       composer?.removeFromSuperview()
       composer = nil
       lastComposerHeight = -1
@@ -228,6 +232,7 @@ final class VeneerOverlayView: UIView {
       // Another page's composer style: cross-fade from the old one.
       if let old = composer {
         old.unfocus()
+        old.cancelRecording()
         UIView.animate(withDuration: 0.2, animations: { old.alpha = 0 }, completion: { _ in old.removeFromSuperview() })
       }
       view = makeComposer(type)
@@ -265,7 +270,14 @@ final class VeneerOverlayView: UIView {
     switch args["command"] as? String {
     case "focus": composer.focus()
     case "unfocus": composer.unfocus()
-    case "setText": composer.setText(args["text"] as? String ?? "")
+    case "setText":
+      let selection = ((args["selectionStart"] as? NSNumber)?.intValue).map { start in
+        NSRange(location: start, length: max(0, ((args["selectionEnd"] as? NSNumber)?.intValue ?? start) - start))
+      }
+      composer.setText(args["text"] as? String ?? "", selection: selection)
+    case "startRecording": composer.startRecording(args)
+    case "finishRecording": composer.finishRecording()
+    case "cancelRecording": composer.cancelRecording()
     default: break
     }
   }
@@ -367,6 +379,9 @@ final class VeneerOverlayView: UIView {
   override func didMoveToSuperview() {
     super.didMoveToSuperview()
     updateKeyboardDismissal()
+    // Context menus go on the FlutterView itself: touches reach Flutter
+    // through it, and UIKit recognizes the long press on the same view.
+    if let superview { contextMenus.attach(to: superview) } else { contextMenus.detach() }
   }
 
   /// A sheet's view can be laid out before UIKit presents it (to measure

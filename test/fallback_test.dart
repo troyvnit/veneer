@@ -599,6 +599,40 @@ void main() {
     expect(fade(), 0);
   });
 
+  testWidgets('prompt composer replica: caret, replaceRange and highlighted mentions', (tester) async {
+    final controller = NativeComposerController();
+    const tint = Color(0xFF5B5BD6);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          resizeToAvoidBottomInset: false,
+          body: NativePromptComposer(
+            controller: controller,
+            tintColor: tint,
+            highlights: const ['@Kat QA', '@Kat QA Technician'],
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'Hi @ka');
+    await tester.pump();
+    expect(controller.text, 'Hi @ka');
+    expect(controller.selection.baseOffset, 6);
+
+    controller.replaceRange(3, 6, '@Kat QA Technician ');
+    await tester.pump();
+    final field = tester.widget<TextField>(find.byType(TextField));
+    expect(field.controller!.text, 'Hi @Kat QA Technician ');
+    expect(field.controller!.selection, const TextSelection.collapsed(offset: 22));
+
+    final span = field.controller!.buildTextSpan(context: tester.element(find.byType(TextField)), withComposing: false);
+    final tinted = span.children!.whereType<TextSpan>().where((c) => c.style?.color == tint).map((c) => c.text);
+    expect(tinted, ['@Kat QA Technician'], reason: 'the longer mention wins over the one inside it');
+  });
+
   testWidgets('a style\'s shadows replace the default under fallback surfaces', (tester) async {
     const shadows = [BoxShadow(color: Color(0x14000000), offset: Offset(0, 8), blurRadius: 16, spreadRadius: -4)];
     final style = VeneerFallbackStyle.iosLight.copyWith(shadows: shadows);
@@ -610,6 +644,43 @@ void main() {
   test('isSupported needs iOS 26: the test host is not', () {
     VeneerBridge.instance.debugIsSupportedOverride = null;
     expect(Veneer.isSupported, isFalse);
+  });
+
+  testWidgets('context menu replica opens on long press', (tester) async {
+    var picked = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: NativeContextMenu(
+            items: [NativeMenuItem(title: 'Copy', onSelected: () => picked = true)],
+            child: const SizedBox(width: 200, height: 60, child: Text('bubble')),
+          ),
+        ),
+      ),
+    );
+    await tester.longPress(find.text('bubble'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Copy'));
+    await tester.pumpAndSettle();
+    expect(picked, isTrue);
+    expect(calls, isEmpty);
+  });
+
+  testWidgets('voice recording on the replica reports it is unavailable', (tester) async {
+    final controller = NativeComposerController();
+    NativeVoiceRecordingFailure? failure;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativePromptComposer(
+          controller: controller,
+          onVoiceRecordingFailed: (reason) => failure = reason,
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    controller.startVoiceRecording();
+    expect(failure, NativeVoiceRecordingFailure.unavailable);
+    expect(controller.isRecording, isFalse);
   });
 }
 

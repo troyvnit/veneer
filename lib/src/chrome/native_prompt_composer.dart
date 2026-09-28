@@ -81,9 +81,14 @@ class NativePromptComposer extends StatefulWidget {
     this.onSend,
     this.onChanged,
     this.tintColor,
+    this.highlights = const [],
     this.maxLines = 8,
     this.clearOnSend = true,
     this.interactiveKeyboardDismissal = true,
+    this.onVoiceRecorded,
+    this.onVoiceRecordingFailed,
+    this.recordingCancelLabel,
+    this.recordingDoneLabel,
     required this.child,
   });
 
@@ -131,12 +136,26 @@ class NativePromptComposer extends StatefulWidget {
   /// Caret and primary circle colour.
   final Color? tintColor;
 
+  /// See [NativeComposer.highlights].
+  final List<String> highlights;
+
   /// Lines the text grows to before scrolling.
   final int maxLines;
   final bool clearOnSend;
 
   /// See [NativeComposer.interactiveKeyboardDismissal].
   final bool interactiveKeyboardDismissal;
+
+  /// A clip recorded with [NativeComposerController.startVoiceRecording].
+  final ValueChanged<NativeVoiceRecording>? onVoiceRecorded;
+
+  /// Recording couldn't start: microphone access declined, or no native
+  /// recorder here (the Flutter fallback).
+  final ValueChanged<NativeVoiceRecordingFailure>? onVoiceRecordingFailed;
+
+  /// VoiceOver labels for the recording bar's cancel and done buttons.
+  final String? recordingCancelLabel;
+  final String? recordingDoneLabel;
 
   final Widget child;
 
@@ -159,6 +178,18 @@ class _NativePromptComposerState extends _ComposerHostState<NativePromptComposer
 
   @override
   bool get _interactiveDismissal => widget.interactiveKeyboardDismissal;
+
+  @override
+  ValueChanged<NativeVoiceRecording>? get _onVoiceRecorded => widget.onVoiceRecorded;
+
+  @override
+  ValueChanged<NativeVoiceRecordingFailure>? get _onVoiceRecordingFailed => widget.onVoiceRecordingFailed;
+
+  @override
+  String? get _recordingCancelLabel => widget.recordingCancelLabel;
+
+  @override
+  String? get _recordingDoneLabel => widget.recordingDoneLabel;
 
   @override
   ValueChanged<String>? get _onSend => widget.onSend;
@@ -185,6 +216,7 @@ class _NativePromptComposerState extends _ComposerHostState<NativePromptComposer
     'sideShown': widget.showSideActions,
     'attachments': [for (final a in widget.attachments) a._encode()],
     'tintColor': widget.tintColor?.toARGB32(),
+    'highlights': widget.highlights,
     'maxLines': widget.maxLines,
   };
 
@@ -215,7 +247,9 @@ class _FallbackPromptComposer extends StatefulWidget {
 }
 
 class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implements _ComposerBackend {
-  late final TextEditingController _text = TextEditingController(text: widget.controller.text);
+  late final _HighlightingTextController _text = _HighlightingTextController.fromValue(
+    TextEditingValue(text: widget.controller.text, selection: widget.controller.selection),
+  );
   final FocusNode _focus = FocusNode();
 
   static const _row = 48.0;
@@ -257,8 +291,7 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
   }
 
   void _onText() {
-    widget.controller._nativeText(_text.text);
-    _c.onChanged?.call(_text.text);
+    if (widget.controller._nativeText(_text.text, _text.selection)) _c.onChanged?.call(_text.text);
     setState(() {});
   }
 
@@ -268,8 +301,9 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
   }
 
   @override
-  void setText(String text) {
-    if (_text.text != text) _text.text = text;
+  void setText(String text, TextSelection selection) {
+    final value = TextEditingValue(text: text, selection: selection);
+    if (_text.value.text != text || _text.value.selection != selection) _text.value = value;
   }
 
   @override
@@ -277,6 +311,16 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
 
   @override
   void unfocus() => _focus.unfocus();
+
+  @override
+  void startRecording(Duration? maxDuration) =>
+      _c.onVoiceRecordingFailed?.call(NativeVoiceRecordingFailure.unavailable);
+
+  @override
+  void finishRecording() {}
+
+  @override
+  void cancelRecording() {}
 
   bool get _hasContent => _text.text.trim().isNotEmpty || _c.attachments.isNotEmpty;
 
@@ -311,6 +355,9 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
     final mq = MediaQuery.of(context);
     final style = VeneerFallbackStyle.of(context);
     final accent = _c.tintColor ?? style.accent;
+    _text
+      ..highlights = _c.highlights
+      ..highlightColor = accent;
     final keyboard = mq.viewInsets.bottom;
     final systemBottom = MediaQueryData.fromView(View.of(context)).viewPadding.bottom;
     // Padding beyond the system's own inset means chrome (a tab bar) below.

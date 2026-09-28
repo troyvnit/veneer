@@ -45,45 +45,113 @@ class NativeComposerButton {
   }
 }
 
+/// A voice clip recorded in a composer: AAC audio in an `.m4a` file in the
+/// app's temporary directory. The app owns the file from here (upload it,
+/// move it, or delete it).
+@immutable
+class NativeVoiceRecording {
+  const NativeVoiceRecording({required this.path, required this.duration});
+
+  final String path;
+  final Duration duration;
+}
+
+/// Why a voice recording didn't start.
+enum NativeVoiceRecordingFailure {
+  /// Microphone access was declined.
+  permissionDenied,
+
+  /// No native recorder here (the Flutter fallback), or the audio session
+  /// couldn't start.
+  unavailable,
+}
+
 /// Where a controller's commands go: the native composer or the Flutter
 /// fallback.
 abstract class _ComposerBackend {
-  void setText(String text);
+  void setText(String text, TextSelection selection);
   void focus();
   void unfocus();
+  void startRecording(Duration? maxDuration);
+  void finishRecording();
+  void cancelRecording();
 }
 
 class _NativeBackend implements _ComposerBackend {
   const _NativeBackend();
 
   @override
-  void setText(String text) => VeneerBridge.instance.composerCommand('setText', text: text);
+  void setText(String text, TextSelection selection) =>
+      VeneerBridge.instance.composerCommand('setText', text: text, selection: selection);
 
   @override
   void focus() => VeneerBridge.instance.composerCommand('focus');
 
   @override
   void unfocus() => VeneerBridge.instance.composerCommand('unfocus');
+
+  @override
+  void startRecording(Duration? maxDuration) => VeneerBridge.instance.composerCommand(
+    'startRecording',
+    args: {if (maxDuration != null) 'maxDuration': maxDuration.inMilliseconds / 1000},
+  );
+
+  @override
+  void finishRecording() => VeneerBridge.instance.composerCommand('finishRecording');
+
+  @override
+  void cancelRecording() => VeneerBridge.instance.composerCommand('cancelRecording');
 }
 
 /// Reads and drives a composer ([NativeComposer], [NativePromptComposer]):
-/// its text and keyboard focus. The same controller works with the native
-/// composers and their Flutter fallbacks.
+/// its text, selection and keyboard focus. The same controller works with
+/// the native composers and their Flutter fallbacks.
+///
+/// Offsets are UTF-16 code units, as in Dart strings and UIKit's text view.
 class NativeComposerController extends ChangeNotifier {
-  NativeComposerController({String text = ''}) : _text = text; // ignore: prefer_initializing_formals
+  NativeComposerController({String text = ''})
+    : _text = text, // ignore: prefer_initializing_formals
+      _selection = TextSelection.collapsed(offset: text.length);
 
   String _text;
+  TextSelection _selection;
   bool _hasFocus = false;
   _ComposerBackend _backend = const _NativeBackend();
 
   String get text => _text;
 
-  set text(String value) {
-    if (value == _text) return;
+  /// Sets the text with the caret at its end.
+  set text(String value) => setText(value);
+
+  /// The caret, or the selected range, as the user last left it.
+  TextSelection get selection => _selection;
+
+  /// Sets the text and where the caret (or selection) goes — by default,
+  /// the end.
+  void setText(String value, {TextSelection? selection}) {
+    final next = _clamped(selection ?? TextSelection.collapsed(offset: value.length), value);
+    if (value == _text && next == _selection) return;
     _text = value;
-    _backend.setText(value);
+    _selection = next;
+    _backend.setText(value, next);
     notifyListeners();
   }
+
+  /// Replaces `text[start, end)` with [replacement] and puts the caret after
+  /// it — e.g. completing the `@na` being typed into a mention.
+  void replaceRange(int start, int end, String replacement) {
+    final from = start.clamp(0, _text.length);
+    final to = end.clamp(from, _text.length);
+    setText(
+      _text.replaceRange(from, to, replacement),
+      selection: TextSelection.collapsed(offset: from + replacement.length),
+    );
+  }
+
+  static TextSelection _clamped(TextSelection selection, String text) => selection.copyWith(
+    baseOffset: selection.baseOffset.clamp(0, text.length),
+    extentOffset: selection.extentOffset.clamp(0, text.length),
+  );
 
   /// Whether the composer's text field has the keyboard.
   bool get hasFocus => _hasFocus;
@@ -94,9 +162,48 @@ class NativeComposerController extends ChangeNotifier {
 
   void clear() => text = '';
 
-  void _nativeText(String value) {
-    if (value == _text) return;
+  /// Whether the composer is recording a voice clip.
+  bool get isRecording => _isRecording;
+  bool _isRecording = false;
+
+  /// Turns the composer into a recording bar, as in Slack: cancel, the live
+  /// waveform, the elapsed time and done. Asks for the microphone first.
+  /// The clip arrives in the composer's `onVoiceRecorded`, a refusal in
+  /// `onVoiceRecordingFailed`. Recording stops by itself at [maxDuration].
+  ///
+  /// Native only (iOS 26); the Flutter fallback reports
+  /// [NativeVoiceRecordingFailure.unavailable] so the app can record its
+  /// own way.
+  void startVoiceRecording({Duration? maxDuration}) => _backend.startRecording(maxDuration);
+
+  /// Stops and delivers the clip, like the bar's done button.
+  void finishVoiceRecording() => _backend.finishRecording();
+
+  /// Stops and discards the clip, like the bar's cancel button.
+  void cancelVoiceRecording() => _backend.cancelRecording();
+
+  void _nativeRecording(bool value) {
+    if (value == _isRecording) return;
+    _isRecording = value;
+    notifyListeners();
+  }
+
+  /// The text (and selection) changed in the composer; returns whether
+  /// the text did.
+  bool _nativeText(String value, [TextSelection? selection]) {
+    final next = _clamped(selection ?? TextSelection.collapsed(offset: value.length), value);
+    final changed = value != _text;
+    if (!changed && next == _selection) return false;
     _text = value;
+    _selection = next;
+    notifyListeners();
+    return changed;
+  }
+
+  void _nativeSelection(TextSelection selection) {
+    final next = _clamped(selection, _text);
+    if (next == _selection) return;
+    _selection = next;
     notifyListeners();
   }
 
@@ -132,6 +239,38 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
   ValueChanged<String>? get _onSend;
   ValueChanged<String>? get _onChanged;
   ValueChanged<String>? get _onAttachmentRemoved => null;
+  ValueChanged<NativeVoiceRecording>? get _onVoiceRecorded;
+  ValueChanged<NativeVoiceRecordingFailure>? get _onVoiceRecordingFailed;
+  String? get _recordingCancelLabel;
+  String? get _recordingDoneLabel;
+
+  void _onRecording(Map<String, Object?> event) {
+    final controller = _controller;
+    switch (event['state']) {
+      case 'started':
+        controller._nativeRecording(true);
+      case 'finished':
+        controller._nativeRecording(false);
+        final path = event['path'] as String?;
+        if (path != null) {
+          _onVoiceRecorded?.call(
+            NativeVoiceRecording(
+              path: path,
+              duration: Duration(milliseconds: (event['durationMs'] as int?) ?? 0),
+            ),
+          );
+        }
+      case 'cancelled':
+        controller._nativeRecording(false);
+      case 'failed':
+        controller._nativeRecording(false);
+        _onVoiceRecordingFailed?.call(
+          event['reason'] == 'permission'
+              ? NativeVoiceRecordingFailure.permissionDenied
+              : NativeVoiceRecordingFailure.unavailable,
+        );
+    }
+  }
 
   /// Style-specific config; registers button callbacks in [handlers].
   Map<String, Object?> _encode(Map<String, VoidCallback?> handlers);
@@ -174,6 +313,9 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
 
   void _push() {
     if (!_native) return;
+    // One native composer serves every page; the page taking it over sends
+    // its own text, or it would show the previous page's.
+    final takingOver = _visible && _active != this;
     if (_visible) {
       _active = this;
     } else if (_active != this) {
@@ -186,13 +328,15 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
       ..._encode(handlers),
       'clearOnSend': _clearOnSend,
       'interactiveDismissal': _interactiveDismissal,
+      'recordingCancelLabel': _recordingCancelLabel,
+      'recordingDoneLabel': _recordingDoneLabel,
     };
     final handlerSet = VeneerComposerHandlers(
       onButton: (id) => handlers[id]?.call(),
-      onText: (text) {
-        _controller._nativeText(text);
-        _onChanged?.call(text);
+      onText: (text, selection) {
+        if (_controller._nativeText(text, selection)) _onChanged?.call(text);
       },
+      onSelection: _controller._nativeSelection,
       onFocus: _controller._nativeFocus,
       onSend: (text) {
         if (_clearOnSend) _controller._nativeText('');
@@ -206,11 +350,12 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
         });
       },
       onAttachmentRemoved: (id) => _onAttachmentRemoved?.call(id),
+      onRecording: _onRecording,
     );
     // Pages rebuild every frame while the keyboard animates; only send real
     // changes. Callbacks are refreshed locally either way.
     final encoded = jsonEncode(config);
-    if (encoded == _lastSent) {
+    if (encoded == _lastSent && !takingOver) {
       _bridge.updateComposerHandlers(handlerSet);
       // A new host for the same composer (its subtree was rebuilt): nothing
       // is resent, so take the height native last reported.
@@ -220,7 +365,9 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
     final firstShow = _lastSent == null;
     _lastSent = encoded;
     _bridge.setComposer(config, handlerSet);
-    if (firstShow && _controller.text.isNotEmpty) _bridge.composerCommand('setText', text: _controller.text);
+    if (takingOver || (firstShow && _controller.text.isNotEmpty)) {
+      _bridge.composerCommand('setText', text: _controller.text, selection: _controller.selection);
+    }
   }
 
   @override
@@ -387,9 +534,14 @@ class NativeComposer extends StatefulWidget {
     this.onSend,
     this.onChanged,
     this.tintColor,
+    this.highlights = const [],
     this.maxLines = 6,
     this.clearOnSend = true,
     this.interactiveKeyboardDismissal = true,
+    this.onVoiceRecorded,
+    this.onVoiceRecordingFailed,
+    this.recordingCancelLabel,
+    this.recordingDoneLabel,
     required this.child,
   });
 
@@ -413,6 +565,10 @@ class NativeComposer extends StatefulWidget {
   /// Caret and enabled send button colour.
   final Color? tintColor;
 
+  /// Runs of the text drawn in [tintColor] wherever they appear — e.g. the
+  /// `@Name` of each mention. The rest keeps the label colour.
+  final List<String> highlights;
+
   /// Lines the text view grows to before scrolling.
   final int maxLines;
 
@@ -424,6 +580,17 @@ class NativeComposer extends StatefulWidget {
   /// dismissal (`keyboardDismissMode = .interactive`), with the composer
   /// riding on the keyboard. Flutter still receives the drag and scrolls.
   final bool interactiveKeyboardDismissal;
+
+  /// A clip recorded with [NativeComposerController.startVoiceRecording].
+  final ValueChanged<NativeVoiceRecording>? onVoiceRecorded;
+
+  /// Recording couldn't start: microphone access declined, or no native
+  /// recorder here (the Flutter fallback).
+  final ValueChanged<NativeVoiceRecordingFailure>? onVoiceRecordingFailed;
+
+  /// VoiceOver labels for the recording bar's cancel and done buttons.
+  final String? recordingCancelLabel;
+  final String? recordingDoneLabel;
 
   final Widget child;
 
@@ -448,6 +615,18 @@ class _NativeComposerState extends _ComposerHostState<NativeComposer> {
   bool get _interactiveDismissal => widget.interactiveKeyboardDismissal;
 
   @override
+  ValueChanged<NativeVoiceRecording>? get _onVoiceRecorded => widget.onVoiceRecorded;
+
+  @override
+  ValueChanged<NativeVoiceRecordingFailure>? get _onVoiceRecordingFailed => widget.onVoiceRecordingFailed;
+
+  @override
+  String? get _recordingCancelLabel => widget.recordingCancelLabel;
+
+  @override
+  String? get _recordingDoneLabel => widget.recordingDoneLabel;
+
+  @override
   ValueChanged<String>? get _onSend => widget.onSend;
 
   @override
@@ -461,6 +640,7 @@ class _NativeComposerState extends _ComposerHostState<NativeComposer> {
     'toolbar': [for (final (i, b) in widget.toolbar.indexed) b._encode('toolbar$i', handlers)],
     'sendIcon': widget.sendIcon?.encode(),
     'tintColor': widget.tintColor?.toARGB32(),
+    'highlights': widget.highlights,
     'maxLines': widget.maxLines,
   };
 
@@ -512,7 +692,9 @@ class _FallbackComposer extends StatefulWidget {
 }
 
 class _FallbackComposerState extends State<_FallbackComposer> implements _ComposerBackend {
-  late final TextEditingController _text = TextEditingController(text: widget.controller.text);
+  late final _HighlightingTextController _text = _HighlightingTextController.fromValue(
+    TextEditingValue(text: widget.controller.text, selection: widget.controller.selection),
+  );
   final FocusNode _focus = FocusNode();
 
   static const _idleHeight = 44.0;
@@ -551,8 +733,7 @@ class _FallbackComposerState extends State<_FallbackComposer> implements _Compos
   }
 
   void _onText() {
-    widget.controller._nativeText(_text.text);
-    _c.onChanged?.call(_text.text);
+    if (widget.controller._nativeText(_text.text, _text.selection)) _c.onChanged?.call(_text.text);
     setState(() {});
   }
 
@@ -562,8 +743,9 @@ class _FallbackComposerState extends State<_FallbackComposer> implements _Compos
   }
 
   @override
-  void setText(String text) {
-    if (_text.text != text) _text.text = text;
+  void setText(String text, TextSelection selection) {
+    final value = TextEditingValue(text: text, selection: selection);
+    if (_text.value.text != text || _text.value.selection != selection) _text.value = value;
   }
 
   @override
@@ -571,6 +753,16 @@ class _FallbackComposerState extends State<_FallbackComposer> implements _Compos
 
   @override
   void unfocus() => _focus.unfocus();
+
+  @override
+  void startRecording(Duration? maxDuration) =>
+      _c.onVoiceRecordingFailed?.call(NativeVoiceRecordingFailure.unavailable);
+
+  @override
+  void finishRecording() {}
+
+  @override
+  void cancelRecording() {}
 
   void _send() {
     final text = _text.text;
@@ -614,6 +806,9 @@ class _FallbackComposerState extends State<_FallbackComposer> implements _Compos
     final mq = MediaQuery.of(context);
     final style = VeneerFallbackStyle.of(context);
     final accent = _c.tintColor ?? style.accent;
+    _text
+      ..highlights = _c.highlights
+      ..highlightColor = accent;
     final keyboard = mq.viewInsets.bottom;
     final expanded = _focus.hasFocus && keyboard > 0;
     final base = math.max(keyboard, mq.padding.bottom);
@@ -789,4 +984,57 @@ class _FallbackComposerState extends State<_FallbackComposer> implements _Compos
       },
     );
   }
+}
+
+/// The fallbacks' text: [highlights] drawn in [highlightColor], as the
+/// native composers draw them.
+class _HighlightingTextController extends TextEditingController {
+  _HighlightingTextController.fromValue(super.value) : super.fromValue();
+
+  List<String> highlights = const [];
+  Color? highlightColor;
+
+  @override
+  TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
+    final color = highlightColor;
+    final tokens = highlights.where((t) => t.isNotEmpty).toList();
+    if (color == null || tokens.isEmpty || (withComposing && value.isComposingRangeValid)) {
+      return super.buildTextSpan(context: context, style: style, withComposing: withComposing);
+    }
+    final ranges = _highlightRanges(text, tokens);
+    if (ranges.isEmpty) return TextSpan(style: style, text: text);
+    final children = <TextSpan>[];
+    var cursor = 0;
+    for (final range in ranges) {
+      if (range.start > cursor) children.add(TextSpan(text: text.substring(cursor, range.start)));
+      children.add(
+        TextSpan(
+          text: text.substring(range.start, range.end),
+          style: TextStyle(color: color),
+        ),
+      );
+      cursor = range.end;
+    }
+    if (cursor < text.length) children.add(TextSpan(text: text.substring(cursor)));
+    return TextSpan(style: style, children: children);
+  }
+}
+
+/// Where [tokens] occur in [text], longest first so a token inside a longer
+/// one doesn't split it, without overlaps, in order.
+List<TextRange> _highlightRanges(String text, List<String> tokens) {
+  final sorted = [...tokens]..sort((a, b) => b.length.compareTo(a.length));
+  final ranges = <TextRange>[];
+  for (final token in sorted) {
+    if (token.isEmpty) continue;
+    var from = 0;
+    while (true) {
+      final start = text.indexOf(token, from);
+      if (start < 0) break;
+      final end = start + token.length;
+      if (!ranges.any((r) => start < r.end && end > r.start)) ranges.add(TextRange(start: start, end: end));
+      from = end;
+    }
+  }
+  return ranges..sort((a, b) => a.start.compareTo(b.start));
 }
