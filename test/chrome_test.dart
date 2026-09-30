@@ -44,7 +44,13 @@ void main() {
             title: const NativeBarTitle(title: 'launch-crew', subtitle: '6 members', capsule: true),
             trailing: [
               const NativeBarButton(icon: NativeIcon.symbol('square.grid.2x2'), title: 'Apps'),
-              NativeBarButton(icon: const NativeIcon.symbol('headphones'), title: 'Huddle', onPressed: () => huddle++),
+              NativeBarButton(
+                icon: const NativeIcon.symbol('headphones'),
+                title: 'Huddle',
+                prominent: true,
+                tint: const Color(0xFF6B4EFF),
+                onPressed: () => huddle++,
+              ),
             ],
             child: const SizedBox(),
           ),
@@ -58,6 +64,7 @@ void main() {
     expect(config['hidden'], isFalse);
     expect((config['title']! as Map)['capsule'], isTrue);
     expect([for (final b in config['trailing']! as List) (b as Map)['title']], ['Apps', 'Huddle']);
+    expect([for (final b in config['trailing']! as List) (b as Map)['tint']], [null, 0xFF6B4EFF]);
 
     // Rebuilding with an identical bar (e.g. every keyboard frame) sends nothing.
     await tester.pumpWidget(page(1));

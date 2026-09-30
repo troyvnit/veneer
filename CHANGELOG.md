@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2
+
+- **Bar button tint:** `NativeBarButton.tint` sets the colour of a prominent button's glass, such
+  as the app's primary colour. Before, prominent buttons always took the bar's `tintColor` and
+  fell back to the system blue.
+
 ## 0.4.1
 
 - **Fixes:**

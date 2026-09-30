@@ -55,7 +55,8 @@ final class NativeNavigationBarHost: NSObject {
   }
 
   /// `{leading: button?, title: {title, subtitle, icon, capsule, id}?,
-  ///   trailing: [button], tintColor}`, where button = `{id, icon, title, menu?}`.
+  ///   trailing: [button], tintColor}`, where button = `{id, icon, title, menu?,
+  ///   prominent, tint}`.
   ///
   /// Items are replaced only when their part of the config changed, and
   /// animated once the bar is showing, so UIKit morphs the glass between the
@@ -160,6 +161,7 @@ final class NativeNavigationBarHost: NSObject {
       }
     }
     if (spec["prominent"] as? Bool) == true { item.style = .prominent }
+    item.tintColor = (spec["tint"] as? NSNumber).map(UIColor.init(argb:))
     return item
   }
 

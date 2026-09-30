@@ -35,6 +35,7 @@ class NativeBarButton {
     this.menu,
     this.badge,
     this.prominent = false,
+    this.tint,
     this.group = 0,
     this.iconSize,
   }) : assert(icon != null || title != null, 'A bar button needs an icon or a title');
@@ -55,6 +56,11 @@ class NativeBarButton {
 
   /// Tinted glass (`UIBarButtonItem.Style.prominent`), e.g. a primary action.
   final bool prominent;
+
+  /// The colour of a [prominent] button's glass, e.g. the app's primary
+  /// colour. Defaults to the bar's [NativeNavigationBar.tintColor], then the
+  /// system tint.
+  final Color? tint;
 
   /// Trailing buttons with the same group share a glass capsule; a new group
   /// starts a separate one.
@@ -241,6 +247,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
         'menu': encodeMenu(id, b.menu, handlers),
         'badge': b.badge,
         'prominent': b.prominent,
+        'tint': b.tint?.toARGB32(),
         'group': b.group,
         'iconSize': b.iconSize,
       };
