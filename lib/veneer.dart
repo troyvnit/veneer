@@ -24,7 +24,7 @@ export 'src/chrome/native_chrome.dart';
 export 'src/chrome/native_composer.dart';
 export 'src/chrome/native_context_menu.dart';
 export 'src/chrome/native_navigation_bar.dart';
-export 'src/chrome/native_sheet.dart';
+export 'src/chrome/native_sheet.dart' hide veneerSheetAnchor;
 export 'src/core/fallback_scope.dart' show VeneerFallbackScope, useNativeLayer;
 export 'src/core/fallback_style.dart' show VeneerFallbackStyle;
 export 'src/core/native_icon.dart';

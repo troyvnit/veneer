@@ -159,6 +159,11 @@ void runNativeSheet(Widget app) {
   runApp(_SheetScrollEdgeReporter(child: app));
 }
 
+/// The entrypoint of the idle engine every native sheet's engine is spawned
+/// from (see `NativeSheetPresenter.anchor`).
+@pragma('vm:entry-point')
+void veneerSheetAnchor() {}
+
 /// The content of a native sheet with a [NativeSheetDetent.content] detent:
 /// measures [child]'s natural height and has the UIKit sheet follow it (the
 /// sheet slides up at that height). Elsewhere — the Flutter sheet measures

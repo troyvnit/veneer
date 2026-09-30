@@ -20,6 +20,17 @@ final class NativeSheetPresenter {
   static let shared = NativeSheetPresenter()
 
   private lazy var group = FlutterEngineGroup(name: "veneer.sheets", project: nil)
+  /// The group's first engine, which every sheet's engine is spawned from.
+  /// `FlutterEngineGroup` spawns from its oldest living engine, and a
+  /// finished sheet's engine can outlive its context (plugins hold on to
+  /// it), so spawning from one aborts. This one idles in an empty Dart
+  /// entrypoint for the app's lifetime and is never handed to a sheet.
+  private lazy var anchor: FlutterEngine = {
+    let options = FlutterEngineGroupOptions()
+    options.entrypoint = "veneerSheetAnchor"
+    options.libraryURI = "package:veneer/src/chrome/native_sheet.dart"
+    return group.makeEngine(with: options)
+  }()
   private var prewarmed: [String: FlutterEngine] = [:]
   /// Keyed by the presenting engine's plugin as well as the sheet id: each
   /// engine numbers its own sheets, so a sheet presented from inside a sheet
@@ -44,6 +55,7 @@ final class NativeSheetPresenter {
     options.entrypoint = entrypoint
     options.libraryURI = libraryURI
     options.entrypointArgs = arguments
+    _ = anchor
     let engine = group.makeEngine(with: options)
     Self.muteStatusBarStyle(of: engine)
     Self.registerPlugins(with: engine)

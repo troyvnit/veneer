@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1
+
+- **Fixes:**
+  - Opening a native sheet after another was dismissed no longer aborts the app
+    (`Spawning from an engine without a shell`). `FlutterEngineGroup` spawns every engine from
+    its oldest living one, which could be a finished sheet's engine whose context was already
+    destroyed. Sheet engines now spawn from a dedicated idle engine that lives with the app.
+
 ## 0.4.0
 
 - **Context menus:** `NativeContextMenu` opens UIKit's own context menu when you long-press any
