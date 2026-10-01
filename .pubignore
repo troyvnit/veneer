@@ -1,7 +1,8 @@
 # The pub package leaves out the demo video and GIF (the README links to
-# them on GitHub). Everything else follows .gitignore.
+# them on GitHub) and the release steps. Everything else follows .gitignore.
 doc/demo.gif
 doc/demo.mp4
+RELEASING.md
 
 # From .gitignore
 *.class
