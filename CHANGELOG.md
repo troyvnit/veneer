@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.3
+
+- **Titled bar buttons:** `NativeBarButton.showsTitle` shows the title beside the icon in a glass
+  capsule, like a labelled toolbar button, instead of using it only for VoiceOver.
+  `NativeBarButton.titleStyle` sets its font, size, weight and colour, natively too. On iOS 26 it's
+  a `UIButton` custom view that UIKit puts the bar's glass behind; the Flutter replica draws the
+  same capsule. Badges aren't shown on titled buttons.
+- **Explicit scroll state:** `NativeNavigationBar.scrolled` tells a bar that isn't an ancestor of
+  the scrolling content (e.g. one in `Scaffold.appBar`) whether content is under it, so its scroll
+  edge effect still shows. Null keeps detecting it from the child's scroll notifications.
+
 ## 0.4.2
 
 - **Bar button tint:** `NativeBarButton.tint` sets the colour of a prominent button's glass, such

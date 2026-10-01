@@ -97,6 +97,33 @@ void main() {
     expect(huddle, 1);
   });
 
+  testWidgets('navigation bar replica: a titled button shows its icon and title in a capsule', (tester) async {
+    var archived = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeNavigationBar(
+          trailing: [
+            NativeBarButton(
+              icon: const NativeIcon.icon(Icons.archive_outlined),
+              title: 'Archived',
+              showsTitle: true,
+              titleStyle: const TextStyle(fontWeight: FontWeight.w500),
+              onPressed: () => archived++,
+            ),
+          ],
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    final title = find.text('Archived');
+    expect(title, findsOneWidget);
+    expect(tester.widget<Text>(title).style?.fontWeight, FontWeight.w500);
+    expect(tester.getSize(find.bySemanticsLabel('Archived')).width, greaterThan(44));
+
+    await tester.tap(find.bySemanticsLabel('Archived'));
+    expect(archived, 1);
+  });
+
   testWidgets('composer replica: same controller drives text, focus and send', (tester) async {
     final controller = NativeComposerController();
     final sent = <String>[];

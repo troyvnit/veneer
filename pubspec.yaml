@@ -2,7 +2,7 @@ name: veneer
 description: >-
   Real native iOS 26 UI for Flutter: Liquid Glass, UIKit tab and navigation bars, composers and
   sheets driven by Flutter layout, with matching Flutter UI on Android.
-version: 0.4.2
+version: 0.4.3
 homepage: https://github.com/troyvnit/veneer
 repository: https://github.com/troyvnit/veneer
 issue_tracker: https://github.com/troyvnit/veneer/issues

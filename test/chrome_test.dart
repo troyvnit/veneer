@@ -75,6 +75,32 @@ void main() {
     expect(huddle, 1);
   });
 
+  testWidgets('a titled bar button sends its title and title style', variant: ios, (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: NativeNavigationBar(
+          trailing: [
+            NativeBarButton(
+              icon: NativeIcon.symbol('archivebox'),
+              title: 'Archived',
+              showsTitle: true,
+              titleStyle: TextStyle(fontFamily: 'Inter', fontSize: 17, fontWeight: FontWeight.w500),
+            ),
+            NativeBarButton(icon: NativeIcon.symbol('ellipsis'), title: 'More', group: 1),
+          ],
+          child: SizedBox(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final trailing = sent('setNavigationBar').single['trailing']! as List;
+    final archived = trailing.first as Map;
+    expect(archived['showsTitle'], isTrue);
+    expect(archived['titleStyle'], {'family': 'Inter', 'size': 17.0, 'weight': 500, 'height': null, 'color': null});
+    expect((trailing.last as Map)['showsTitle'], isFalse);
+    expect((trailing.last as Map)['titleStyle'], isNull);
+  });
+
   testWidgets('navigation bar on a hidden IndexedStack page never shows', variant: ios, (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
@@ -410,6 +436,34 @@ void main() {
     await tester.pump();
     expect(sent('navigationBarScrolled').last['scrolled'], isFalse);
     expect(sent('navigationBarScrolled').length, 2);
+  });
+
+  testWidgets('an explicit scrolled state drives the edge effect instead of the child', variant: ios, (tester) async {
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+    Widget page({required bool scrolled}) => MaterialApp(
+      home: NativeNavigationBar(
+        title: const NativeBarTitle(title: 'Page'),
+        scrolled: scrolled,
+        child: ListView(
+          controller: controller,
+          children: [for (var i = 0; i < 40; i++) SizedBox(height: 60, child: Text('row $i'))],
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(page(scrolled: true));
+    await tester.pumpAndSettle();
+    expect(sent('setNavigationBar').last['scrolled'], isTrue);
+
+    controller.jumpTo(200);
+    controller.jumpTo(0);
+    await tester.pump();
+    expect(sent('navigationBarScrolled'), isEmpty, reason: 'the child no longer decides');
+
+    await tester.pumpWidget(page(scrolled: false));
+    await tester.pump();
+    expect(sent('navigationBarScrolled').single['scrolled'], isFalse);
   });
 
   testWidgets('NativeSheetContent keeps its height while the sheet grows to it', variant: ios, (tester) async {

@@ -138,10 +138,18 @@ final class NativeNavigationBarHost: NSObject {
       NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : size)
     }
     let title = spec["title"] as? String
-    let item: UIBarButtonItem
-    if let menu = NativeMenu.make(spec["menu"], id: id, onSelect: { [weak self] itemId in
+    let menu = NativeMenu.make(spec["menu"], id: id, onSelect: { [weak self] itemId in
       self?.onEvent?("navItemPressed", ["id": itemId])
-    }) {
+    })
+    if (spec["showsTitle"] as? Bool) == true, let image, let title, !title.isEmpty {
+      let item = UIBarButtonItem(customView: titledButton(id: id, image: image, title: title, style: spec["titleStyle"], menu: menu))
+      item.accessibilityLabel = title
+      if (spec["prominent"] as? Bool) == true { item.style = .prominent }
+      item.tintColor = (spec["tint"] as? NSNumber).map(UIColor.init(argb:))
+      return item
+    }
+    let item: UIBarButtonItem
+    if let menu {
       item = image != nil ? UIBarButtonItem(image: image, menu: menu) : UIBarButtonItem(title: title, menu: menu)
     } else {
       let action = UIAction(title: title ?? "", image: image) { [weak self] _ in
@@ -163,6 +171,40 @@ final class NativeNavigationBarHost: NSObject {
     if (spec["prominent"] as? Bool) == true { item.style = .prominent }
     item.tintColor = (spec["tint"] as? NSNumber).map(UIColor.init(argb:))
     return item
+  }
+
+  private static let titledPadding: CGFloat = 16
+  private static let titledGap: CGFloat = 8
+
+  /// Icon and title side by side; UIKit puts the bar's glass behind it.
+  private func titledButton(id: String, image: UIImage, title: String, style raw: Any?, menu: UIMenu?) -> UIButton {
+    let style = raw as? [String: Any]
+    let size = (style?["size"] as? NSNumber).map { CGFloat($0.doubleValue) } ?? 17
+    let font = style == nil
+      ? UIFont.systemFont(ofSize: size, weight: .semibold)
+      : NativeIconRenderer.shared.textFont(family: style?["family"] as? String, size: size, weight: (style?["weight"] as? NSNumber)?.intValue)
+    let color = (style?["color"] as? NSNumber).map(UIColor.init(argb:)) ?? .label
+
+    var config = UIButton.Configuration.plain()
+    config.image = image
+    config.imagePlacement = .leading
+    config.imagePadding = Self.titledGap
+    config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Self.titledPadding, bottom: 0, trailing: Self.titledPadding)
+    config.baseForegroundColor = color
+    config.attributedTitle = AttributedString(title, attributes: AttributeContainer([.font: font, .foregroundColor: color]))
+    config.titleLineBreakMode = .byTruncatingTail
+
+    let button = UIButton(configuration: config)
+    button.accessibilityLabel = title
+    if let menu {
+      button.menu = menu
+      button.showsMenuAsPrimaryAction = true
+    } else {
+      button.addAction(UIAction { [weak self] _ in self?.onEvent?("navItemPressed", ["id": id]) }, for: .primaryActionTriggered)
+    }
+    button.sizeToFit()
+    button.frame.size.height = 44
+    return button
   }
 
   /// Distance from the screen (or sheet) edges to the outermost buttons;

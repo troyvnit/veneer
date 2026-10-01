@@ -38,7 +38,10 @@ class NativeBarButton {
     this.tint,
     this.group = 0,
     this.iconSize,
-  }) : assert(icon != null || title != null, 'A bar button needs an icon or a title');
+    this.showsTitle = false,
+    this.titleStyle,
+  }) : assert(icon != null || title != null, 'A bar button needs an icon or a title'),
+       assert(!showsTitle || (icon != null && title != null), 'showsTitle needs both an icon and a title');
 
   /// Without an icon, the button shows [title] as text.
   final NativeIcon? icon;
@@ -69,6 +72,15 @@ class NativeBarButton {
   /// Side of a non-symbol icon's box (default 20 pt) — e.g. larger for an
   /// avatar image.
   final double? iconSize;
+
+  /// Shows [title] beside [icon] in a glass capsule, like a labelled
+  /// toolbar button, instead of using it only for VoiceOver. A single
+  /// titled button gets its own capsule; badges aren't shown on it.
+  final bool showsTitle;
+
+  /// Font family, size, weight and colour of a [showsTitle] button's title,
+  /// natively too. Default: the system's 17 pt semibold label.
+  final TextStyle? titleStyle;
 }
 
 /// Where a plain (non-capsule) title sits: centred on the bar, as
@@ -142,6 +154,7 @@ class NativeNavigationBar extends StatefulWidget {
     this.trailing = const [],
     this.tintColor,
     this.scrollEdgeEffect = NativeScrollEdgeEffect.soft,
+    this.scrolled,
     required this.child,
   });
 
@@ -152,6 +165,11 @@ class NativeNavigationBar extends StatefulWidget {
   final List<NativeBarButton> trailing;
   final Color? tintColor;
   final NativeScrollEdgeEffect scrollEdgeEffect;
+
+  /// Whether content has scrolled under the bar, for a bar that isn't an
+  /// ancestor of the scrolling content (e.g. a `Scaffold.appBar`). Null
+  /// detects it from [child]'s scroll notifications.
+  final bool? scrolled;
 
   /// The page content.
   final Widget child;
@@ -180,7 +198,10 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
   /// effect shows only then, as UIKit's does.
   bool _scrolled = false;
 
+  bool get _isScrolled => widget.scrolled ?? _scrolled;
+
   bool _onScroll(Notification notification) {
+    if (widget.scrolled != null) return false;
     final (metrics, depth) = switch (notification) {
       final ScrollNotification n => (n.metrics, n.depth),
       final ScrollMetricsNotification n => (n.metrics, n.depth),
@@ -214,6 +235,10 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
   void didUpdateWidget(NativeNavigationBar old) {
     super.didUpdateWidget(old);
     _refresh(resend: true);
+    final scrolled = widget.scrolled;
+    if (scrolled != null && scrolled != old.scrolled && _native && _visible && _active == this) {
+      _bridge.setNavigationBarScrolled(scrolled);
+    }
   }
 
   /// Checked against the live route: a covered page can rebuild before it
@@ -250,6 +275,8 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
         'tint': b.tint?.toARGB32(),
         'group': b.group,
         'iconSize': b.iconSize,
+        'showsTitle': b.showsTitle,
+        'titleStyle': _encodeStyle(b.titleStyle),
       };
     }
 
@@ -285,7 +312,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
       return;
     }
     _lastSent = encoded;
-    _bridge.setNavigationBar({...config, 'scrolled': _scrolled}, (id) => handlers[id]?.call());
+    _bridge.setNavigationBar({...config, 'scrolled': _isScrolled}, (id) => handlers[id]?.call());
   }
 
   @override
@@ -302,7 +329,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
   @override
   Widget build(BuildContext context) {
     final child = NotificationListener<Notification>(onNotification: _onScroll, child: widget.child);
-    if (!_native) return _FallbackNavigationBar(widget, scrolled: _scrolled, child: child);
+    if (!_native) return _FallbackNavigationBar(widget, scrolled: _isScrolled, child: child);
     // Content starts below the bar and scrolls under it. Inside a
     // NativeChromeScope this is already applied; elsewhere (a pushed page,
     // a native sheet) the bar supplies it.
@@ -362,6 +389,8 @@ class _FallbackNavigationBar extends StatelessWidget {
   static const double item = 44;
   static const double margin = 16;
   static const double spacing = 12;
+  static const double titledPadding = 16;
+  static const double titledGap = 8;
 
   @override
   Widget build(BuildContext context) {
@@ -372,6 +401,35 @@ class _FallbackNavigationBar extends StatelessWidget {
     final barBottom = top + item + 6;
     final title = bar.title;
     final background = Theme.of(context).scaffoldBackgroundColor;
+
+    Widget titledButton(NativeBarButton b) => Semantics(
+      button: true,
+      label: b.title,
+      excludeSemantics: true,
+      child: Builder(
+        builder: (context) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: b.menu?.isNotEmpty ?? false ? () => showFallbackMenu(context, b.menu!) : b.onPressed,
+          child: Container(
+            height: item,
+            padding: const EdgeInsets.symmetric(horizontal: titledPadding),
+            decoration: style.surfaceDecoration(radius: BorderRadius.circular(item / 2)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: titledGap,
+              children: [
+                NativeIconView(b.icon!, size: b.iconSize ?? 24, color: foreground),
+                Text(
+                  b.title!,
+                  maxLines: 1,
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: foreground).merge(b.titleStyle),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
 
     Widget iconButton(NativeBarButton b, {double width = item}) => Semantics(
       button: true,
@@ -478,7 +536,9 @@ class _FallbackNavigationBar extends StatelessWidget {
         // several share a capsule.
         for (final (i, group) in groups.indexed) ...[
           if (i > 0) const SizedBox(width: spacing),
-          if (group.length == 1)
+          if (group.length == 1 && group.single.showsTitle)
+            titledButton(group.single)
+          else if (group.length == 1)
             DecoratedBox(
               decoration: style.surfaceDecoration(shape: BoxShape.circle),
               child: iconButton(group.single),
