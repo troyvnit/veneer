@@ -108,8 +108,8 @@ final class NativeTabBarHost: NSObject, UITabBarControllerDelegate {
       let search = UISearchTab { _ in PassthroughTabContentController() }
       search.automaticallyActivatesSearch = false
       search.title = action["title"] as? String ?? ""
-      if let image = icon(action["icon"]) { search.image = image }
-      configure(search, from: action)
+      if let image = icon(action["icon"], size: actionIconSize(action)) { search.image = image }
+      configure(search, from: action, iconSize: actionIconSize(action))
       tabs.append(search)
       actionIdentifier = search.identifier
       actionSelectable = (action["selectable"] as? Bool) ?? false
@@ -135,24 +135,28 @@ final class NativeTabBarHost: NSObject, UITabBarControllerDelegate {
     }
     if let action, let actionIdentifier, let tab = controller.tab(forIdentifier: actionIdentifier) {
       tab.title = action["title"] as? String ?? ""
-      if let image = icon(action["icon"]) { tab.image = image }
-      configure(tab, from: action)
+      if let image = icon(action["icon"], size: actionIconSize(action)) { tab.image = image }
+      configure(tab, from: action, iconSize: actionIconSize(action))
     }
   }
 
-  private func configure(_ tab: UITab, from item: [String: Any]) {
+  private func configure(_ tab: UITab, from item: [String: Any], iconSize: CGFloat = NativeTabBarHost.tabIconSize) {
     if #available(iOS 26.1, *) {
-      tab.selectedImage = icon(item["selectedIcon"])
+      tab.selectedImage = icon(item["selectedIcon"], size: iconSize)
     }
     tab.badgeValue = item["badge"] as? String
     if let label = item["title"] as? String, !label.isEmpty { tab.accessibilityIdentifier = label }
   }
 
-  private func icon(_ raw: Any?) -> UIImage? {
+  private func actionIconSize(_ action: [String: Any]) -> CGFloat {
+    (action["iconSize"] as? NSNumber).map { CGFloat($0.doubleValue) } ?? Self.tabIconSize
+  }
+
+  private func icon(_ raw: Any?, size: CGFloat = NativeTabBarHost.tabIconSize) -> UIImage? {
     guard let descriptor = NativeIconDescriptor(raw) else { return nil }
     // Symbols stay unconfigured so the tab bar applies its own metrics.
     return NativeIconRenderer.shared.image(
-      for: descriptor, pointSize: descriptor.isSymbol ? nil : Self.tabIconSize)
+      for: descriptor, pointSize: descriptor.isSymbol ? nil : size)
   }
 
   private func select(index: Int) {

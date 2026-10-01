@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.4
+
+- **Tab action icon size:** `NativeTabAction.iconSize` sets the side of a non-symbol action icon
+  (an SVG or image), natively and in the Flutter replica. Before, it was always 25 pt on iOS and
+  26 pt in the replica.
+
 ## 0.4.3
 
 - **Titled bar buttons:** `NativeBarButton.showsTitle` shows the title beside the icon in a glass

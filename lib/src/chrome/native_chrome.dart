@@ -49,6 +49,7 @@ class NativeTabAction {
     this.badge,
     this.onPressed,
     this.selectable = false,
+    this.iconSize,
   }) : assert(selectable || onPressed != null, 'A non-selectable action needs onPressed');
 
   final NativeIcon icon;
@@ -60,12 +61,17 @@ class NativeTabAction {
   final VoidCallback? onPressed;
   final bool selectable;
 
+  /// Side of a non-symbol icon's box (default 25 pt natively, 26 pt in the
+  /// Flutter replica). SF Symbols keep the tab bar's own metrics.
+  final double? iconSize;
+
   Map<String, Object?> _encode() => {
     'title': title,
     'icon': icon.encode(),
     'selectedIcon': selectedIcon?.encode(),
     'badge': badge,
     'selectable': selectable,
+    'iconSize': iconSize,
   };
 }
 
@@ -341,7 +347,7 @@ class _FallbackChrome extends StatelessWidget {
                             action.selectable && scope.selectedIndex == actionIndex
                                 ? (action.selectedIcon ?? action.icon)
                                 : action.icon,
-                            size: 26,
+                            size: action.iconSize ?? 26,
                             color: action.selectable && scope.selectedIndex == actionIndex ? accent : style.label,
                           ),
                         ),
