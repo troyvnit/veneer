@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.5
+
+- **Padded bar buttons:** `NativeBarButton.iconPadding` puts its own padding around the icon
+  instead of UIKit's bar-button insets, which widen a large icon's glass into a capsule; a 42 pt
+  avatar with 1 pt padding now fills a 44 pt circle. On iOS 26 it hides the bar's shared glass and
+  carries its own round Liquid Glass, since UIKit pads custom views sideways too. Badges aren't
+  shown on padded buttons.
+
 ## 0.4.4
 
 - **Tab action icon size:** `NativeTabAction.iconSize` sets the side of a non-symbol action icon

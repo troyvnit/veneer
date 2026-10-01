@@ -38,9 +38,11 @@ class NativeBarButton {
     this.tint,
     this.group = 0,
     this.iconSize,
+    this.iconPadding,
     this.showsTitle = false,
     this.titleStyle,
   }) : assert(icon != null || title != null, 'A bar button needs an icon or a title'),
+       assert(iconPadding == null || (icon != null && !showsTitle), 'iconPadding needs an icon and no shown title'),
        assert(!showsTitle || (icon != null && title != null), 'showsTitle needs both an icon and a title');
 
   /// Without an icon, the button shows [title] as text.
@@ -72,6 +74,12 @@ class NativeBarButton {
   /// Side of a non-symbol icon's box (default 20 pt) — e.g. larger for an
   /// avatar image.
   final double? iconSize;
+
+  /// Space between [icon] and its glass on every side, instead of UIKit's
+  /// bar-button insets, which widen a large icon's glass into a capsule. A
+  /// 42 pt avatar with 1 pt padding fills a 44 pt circle. Badges aren't shown
+  /// on padded buttons.
+  final double? iconPadding;
 
   /// Shows [title] beside [icon] in a glass capsule, like a labelled
   /// toolbar button, instead of using it only for VoiceOver. A single
@@ -275,6 +283,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
         'tint': b.tint?.toARGB32(),
         'group': b.group,
         'iconSize': b.iconSize,
+        'iconPadding': b.iconPadding,
         'showsTitle': b.showsTitle,
         'titleStyle': _encodeStyle(b.titleStyle),
       };

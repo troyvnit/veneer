@@ -148,6 +148,14 @@ final class NativeNavigationBarHost: NSObject {
       item.tintColor = (spec["tint"] as? NSNumber).map(UIColor.init(argb:))
       return item
     }
+    if let padding = (spec["iconPadding"] as? NSNumber).map({ CGFloat($0.doubleValue) }), let image {
+      let item = UIBarButtonItem(customView: PaddedGlassButton(paddedButton(id: id, image: image, title: title, padding: padding, menu: menu)))
+      item.hidesSharedBackground = true
+      item.accessibilityLabel = title
+      if (spec["prominent"] as? Bool) == true { item.style = .prominent }
+      item.tintColor = (spec["tint"] as? NSNumber).map(UIColor.init(argb:))
+      return item
+    }
     let item: UIBarButtonItem
     if let menu {
       item = image != nil ? UIBarButtonItem(image: image, menu: menu) : UIBarButtonItem(title: title, menu: menu)
@@ -171,6 +179,24 @@ final class NativeNavigationBarHost: NSObject {
     if (spec["prominent"] as? Bool) == true { item.style = .prominent }
     item.tintColor = (spec["tint"] as? NSNumber).map(UIColor.init(argb:))
     return item
+  }
+
+  /// The icon with its own padding instead of UIKit's bar-button insets, so
+  /// the glass hugs it: a 42 pt avatar with 1 pt padding is a 44 pt circle.
+  private func paddedButton(id: String, image: UIImage, title: String?, padding: CGFloat, menu: UIMenu?) -> UIButton {
+    var config = UIButton.Configuration.plain()
+    config.image = image
+    config.contentInsets = NSDirectionalEdgeInsets(top: padding, leading: padding, bottom: padding, trailing: padding)
+    let button = UIButton(configuration: config)
+    button.accessibilityLabel = title
+    if let menu {
+      button.menu = menu
+      button.showsMenuAsPrimaryAction = true
+    } else {
+      button.addAction(UIAction { [weak self] _ in self?.onEvent?("navItemPressed", ["id": id]) }, for: .primaryActionTriggered)
+    }
+    button.frame.size = CGSize(width: image.size.width + padding * 2, height: image.size.height + padding * 2)
+    return button
   }
 
   private static let titledPadding: CGFloat = 16
@@ -404,6 +430,36 @@ final class TitleCapsuleControl: UIControl {
   override var isHighlighted: Bool {
     didSet { stack.alpha = isHighlighted ? 0.5 : 1 }
   }
+}
+
+/// A padded bar button in its own round Liquid Glass. UIKit's shared bar
+/// glass pads a custom view sideways, so a padded item hides it and carries
+/// glass exactly its own size.
+@available(iOS 26.0, *)
+final class PaddedGlassButton: UIView {
+  private let glass: UIVisualEffectView = {
+    let effect = UIGlassEffect(style: .regular)
+    effect.isInteractive = true
+    return UIVisualEffectView(effect: effect)
+  }()
+
+  init(_ button: UIButton) {
+    let size = button.frame.size
+    super.init(frame: CGRect(origin: .zero, size: size))
+    glass.frame = bounds
+    glass.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    glass.clipsToBounds = true
+    glass.layer.cornerRadius = min(size.width, size.height) / 2
+    glass.layer.cornerCurve = .continuous
+    addSubview(glass)
+    button.frame = glass.contentView.bounds
+    button.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    glass.contentView.addSubview(button)
+  }
+
+  required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+  override var intrinsicContentSize: CGSize { bounds.size }
 }
 
 /// A capsule title that spans the space between the bar's items: its own
