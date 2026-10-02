@@ -367,7 +367,11 @@ NativeSheet.close(context, result);
   `NativeSheet.payload()`; pre-warmed engines receive it when presented) and return a result
   with `NativeSheet.close`. `arguments` reach the entrypoint instead, but bypass pre-warming.
 - Sheet engines never restyle the app's status bar, and each engine is torn down when its
-  sheet is dismissed.
+  sheet is dismissed — unless the sheet was shown with `keepAlive: true`: then closing only
+  hides it. Its app keeps running (uploads, polling, audio; no frames while hidden), the next
+  `showNativeSheet` at that entrypoint presents the same app again, and inside it
+  `NativeSheet.shown` and `NativeSheet.presented` report each hide and reopening (with its
+  payload). `NativeSheet.release(entrypoint)` frees it, for example on sign-out.
 - A sheet's engine can call `showNativeSheet` itself: the new sheet is presented natively over
   it, and goes away with it.
 - For a `NativeSheetDetent.content()` detent, wrap the sheet's content in `NativeSheetContent`:

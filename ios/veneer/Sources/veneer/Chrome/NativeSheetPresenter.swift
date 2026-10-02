@@ -32,6 +32,12 @@ final class NativeSheetPresenter {
     return group.makeEngine(with: options)
   }()
   private var prewarmed: [String: FlutterEngine] = [:]
+  /// Kept-alive sheets (`retain`) while hidden: the engine keeps running and
+  /// the view controller keeps its overlay, so the next presentation at the
+  /// same entrypoint shows the same app, chrome and all.
+  private var retained: [String: (engine: FlutterEngine, controller: FlutterViewController)] = [:]
+  /// Kept-alive entrypoints to free once their showing sheet closes.
+  private var releaseAfterClose: Set<String> = []
   /// Keyed by the presenting engine's plugin as well as the sheet id: each
   /// engine numbers its own sheets, so a sheet presented from inside a sheet
   /// reuses ids the app already holds.
@@ -93,13 +99,40 @@ final class NativeSheetPresenter {
   /// Starts an engine at [entrypoint] ahead of time, for the next sheet.
   func prewarm(entrypoint: String, libraryURI: String?) {
     let key = Self.key(entrypoint, libraryURI)
-    guard prewarmed[key] == nil else { return }
+    guard prewarmed[key] == nil, retained[key] == nil else { return }
     prewarmed[key] = makeEngine(entrypoint: entrypoint, libraryURI: libraryURI, arguments: [])
+  }
+
+  /// Frees the kept-alive engine at [entrypoint]: now if it's hidden, or
+  /// when its sheet closes.
+  func release(entrypoint: String, libraryURI: String?) {
+    let key = Self.key(entrypoint, libraryURI)
+    if let kept = retained.removeValue(forKey: key) {
+      Self.destroy(kept.engine, showing: kept.controller)
+    } else if sessions.values.contains(where: { $0.retainKey == key }) {
+      releaseAfterClose.insert(key)
+    }
+  }
+
+  private func keep(_ key: String, engine: FlutterEngine, controller: FlutterViewController) {
+    if releaseAfterClose.remove(key) != nil {
+      Self.destroy(engine, showing: controller)
+    } else {
+      retained[key] = (engine, controller)
+    }
+  }
+
+  static func destroy(_ engine: FlutterEngine, showing controller: UIViewController) {
+    VeneerPlugin.tearDownSheet(controller)
+    // Free it now rather than whenever the last reference to the controller
+    // goes.
+    DispatchQueue.main.async { engine.destroyContext() }
   }
 
   /// `{id, entrypoint, libraryUri, arguments, detents: [{type, value}],
   ///   initialDetent, grabber, largestUndimmedDetent, dismissible,
-  ///   expandsOnScroll, cornerRadius}`, from the engine of plugin [owner].
+  ///   expandsOnScroll, cornerRadius, retain}`, from the engine of plugin
+  ///   [owner].
   func present(
     _ args: [String: Any], owner: Int, from presenter: UIViewController?,
     onEvent: @escaping (String, [String: Any]) -> Void
@@ -111,31 +144,48 @@ final class NativeSheetPresenter {
     let arguments = args["arguments"] as? [String] ?? []
     let key = Self.key(entrypoint, libraryURI)
     let sessionKey = SessionKey(owner: owner, id: id)
+    let retain = ((args["retain"] as? Bool) ?? false) && arguments.isEmpty
+    // A second presentation while the kept-alive one is still showing gets
+    // an engine of its own.
+    let showingKept = sessions.values.contains { $0.retainKey == key }
 
     let engine: FlutterEngine
-    if arguments.isEmpty, let warm = prewarmed.removeValue(forKey: key) {
-      engine = warm
+    let controller: FlutterViewController
+    if retain, let kept = retained.removeValue(forKey: key) {
+      engine = kept.engine
+      controller = kept.controller
     } else {
-      engine = makeEngine(entrypoint: entrypoint, libraryURI: libraryURI, arguments: arguments)
+      if arguments.isEmpty, let warm = prewarmed.removeValue(forKey: key) {
+        engine = warm
+      } else {
+        engine = makeEngine(entrypoint: entrypoint, libraryURI: libraryURI, arguments: arguments)
+      }
+      controller = FlutterViewController(engine: engine, nibName: nil, bundle: nil)
+      controller.isViewOpaque = false
+      controller.view.backgroundColor = .clear
+      controller.modalPresentationStyle = .pageSheet
     }
-
-    let controller = FlutterViewController(engine: engine, nibName: nil, bundle: nil)
-    controller.isViewOpaque = false
-    controller.view.backgroundColor = .clear
-    controller.modalPresentationStyle = .pageSheet
+    let keeps = retain && !showingKept
 
     let session = NativeSheetSession(id: id, engine: engine, controller: controller, onEvent: onEvent)
+    session.retainKey = keeps ? key : nil
     // A sheet presented over another sheet goes away with it.
     session.parent = sessions.values.first { $0.controller === presenter }
     session.parent?.children.append(session)
     session.onFinish = { [weak self] in
-      self?.sessions[sessionKey] = nil
-      if arguments.isEmpty { self?.prewarm(entrypoint: entrypoint, libraryURI: libraryURI) }
+      guard let self else { return }
+      self.sessions[sessionKey] = nil
+      if keeps {
+        self.keep(key, engine: engine, controller: controller)
+      } else if arguments.isEmpty {
+        self.prewarm(entrypoint: entrypoint, libraryURI: libraryURI)
+      }
     }
     session.configure(args)
     session.payload = args["payload"] is NSNull ? nil : args["payload"]
     sessions[sessionKey] = session
     VeneerPlugin.deliverSheetPayload(to: controller, session.payload)
+    VeneerPlugin.deliverSheetPresented(to: controller, session.payload)
 
     let show = { [weak presenter, weak controller] in
       guard let presenter, let controller, controller.presentingViewController == nil else { return }
@@ -155,8 +205,9 @@ final class NativeSheetPresenter {
     } else {
       show()
     }
-    // The next sheet (one over this, or after it) starts warm too.
-    if arguments.isEmpty { prewarm(entrypoint: entrypoint, libraryURI: libraryURI) }
+    // The next sheet (one over this, or after it) starts warm too; a kept
+    // one is its own next sheet.
+    if arguments.isEmpty && !keeps { prewarm(entrypoint: entrypoint, libraryURI: libraryURI) }
     return true
   }
 
@@ -182,6 +233,9 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
   let engine: FlutterEngine
   let controller: FlutterViewController
   var onFinish: (() -> Void)?
+  /// Set for a kept-alive sheet: closing hides it, and its engine and
+  /// controller go back to the presenter instead of being torn down.
+  var retainKey: String?
   /// Handed to the sheet's Flutter app (`NativeSheet.payload`).
   var payload: Any?
   /// The sheet this one was presented over, and those presented over it.
@@ -305,6 +359,11 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
     parent?.children.removeAll { $0 === self }
     onFirstContentHeight = nil
     onEvent("sheetDismissed", ["id": id, "result": result ?? NSNull()])
+    if retainKey != nil {
+      VeneerPlugin.deliverSheetHidden(to: controller)
+      onFinish?()
+      return
+    }
     VeneerPlugin.tearDownSheet(controller)
     onFinish?()
     // The engine is single-use: free it now rather than whenever the last

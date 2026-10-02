@@ -51,6 +51,16 @@ class VeneerBridge {
   /// the bottom safe area), once presented.
   final ValueNotifier<double?> sheetMaximumHeight = ValueNotifier(null);
 
+  /// In a native sheet's engine: whether its sheet is on screen. A kept-alive
+  /// sheet's engine keeps running while hidden.
+  final ValueNotifier<bool> sheetShown = ValueNotifier(false);
+
+  final StreamController<Object?> _sheetPresentations = StreamController.broadcast();
+
+  /// In a native sheet's engine: the payload of each presentation, as the
+  /// sheet comes up.
+  Stream<Object?> get sheetPresentations => _sheetPresentations.stream;
+
   final Map<int, VoidCallback> _shapeTapHandlers = {};
   final Map<int, ValueChanged<int>> _shapeMenuHandlers = {};
   final Map<int, VeneerContextMenuHandlers> _contextMenuHandlers = {};
@@ -88,6 +98,7 @@ class VeneerBridge {
     _popupShowing = false;
     _tabBarCovered = false;
     _chromeHiddenSent = null;
+    sheetShown.value = false;
   }
 
   /// The native layer needs iOS 26 (Liquid Glass, `UITab`, scroll edge
@@ -370,6 +381,23 @@ class VeneerBridge {
   /// once the sheet is presented (a pre-warmed engine waits until then).
   Future<Object?> sheetPayload() => _channel.invokeMethod<Object?>('sheetPayload');
 
+  /// From inside a native sheet: reads whether it's on screen now, for an
+  /// engine whose app started after it was presented.
+  Future<void> refreshSheetShown() async {
+    try {
+      sheetShown.value = await _channel.invokeMethod<bool>('sheetShown') ?? false;
+    } on MissingPluginException {
+      sheetShown.value = false;
+    }
+  }
+
+  /// Frees a kept-alive sheet engine at [entrypoint] (after its sheet closes,
+  /// if it's showing).
+  Future<void> releaseSheet(String entrypoint, {String? libraryUri}) async {
+    if (!await ensureAttached()) return;
+    await _channel.invokeMethod<void>('releaseSheet', {'entrypoint': entrypoint, 'libraryUri': libraryUri});
+  }
+
   /// From inside a native sheet: dismisses it with [result].
   Future<bool> dismissSheet(Object? result) async =>
       await _channel.invokeMethod<bool>('dismissSheet', {'result': result}) ?? false;
@@ -422,6 +450,11 @@ class VeneerBridge {
         _sheetResults.remove(id)?.complete(args['result']);
       case 'sheetMaximumHeight':
         sheetMaximumHeight.value = (args['height']! as num).toDouble();
+      case 'sheetPresented':
+        sheetShown.value = true;
+        _sheetPresentations.add(args['payload']);
+      case 'sheetHidden':
+        sheetShown.value = false;
       case 'sheetDetentChanged':
         _sheetDetentHandlers[args['id']! as int]?.call(args['detent']! as int);
       case 'composerLayout':

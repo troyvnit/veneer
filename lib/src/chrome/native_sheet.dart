@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' show ImageFilter, lerpDouble;
 
 import 'package:flutter/cupertino.dart' show CupertinoDynamicColor;
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
@@ -79,7 +81,15 @@ class NativeSheetDetent {
 /// with the app: pass [arguments] in (they reach the entrypoint as its
 /// `List<String>` parameter; arguments bypass pre-warmed engines), or a
 /// [payload] the sheet reads with [NativeSheet.payload] (pre-warmed engines
-/// receive it when presented), and return a result with [NativeSheet.close]. Veneer works inside it: a
+/// receive it when presented), and return a result with [NativeSheet.close].
+///
+/// With [keepAlive], closing the sheet hides it instead of ending its engine:
+/// the sheet's app keeps running (timers, network, audio; no frames are drawn
+/// while hidden), and the next [showNativeSheet] at the same [entrypoint]
+/// presents the same app again, state intact. Inside, [NativeSheet.shown]
+/// says whether it's on screen and [NativeSheet.presented] brings each new
+/// payload. [NativeSheet.release] frees it. Ignored with [arguments], and
+/// where native sheets aren't used. Veneer works inside it: a
 /// [NativeNavigationBar] is a real `UINavigationBar` in the sheet and a
 /// composer rides the sheet natively.
 ///
@@ -107,6 +117,7 @@ Future<T?> showNativeSheet<T>({
   bool expandsOnScroll = true,
   Color? backgroundColor,
   bool useRootNavigator = true,
+  bool keepAlive = false,
 }) async {
   final bridge = VeneerBridge.instance;
   if (entrypoint != null && bridge.isSupported) {
@@ -122,6 +133,7 @@ Future<T?> showNativeSheet<T>({
         'largestUndimmedDetent': largestUndimmedDetent == null ? null : detents.indexOf(largestUndimmedDetent),
         'dismissible': isDismissible,
         'expandsOnScroll': expandsOnScroll,
+        'retain': keepAlive,
       }, onDetentChanged: onDetentChanged == null ? null : (i) => onDetentChanged(detents[i]));
       return result as T?;
     } on StateError {
@@ -156,6 +168,7 @@ Future<T?> showNativeSheet<T>({
 void runNativeSheet(Widget app) {
   WidgetsFlutterBinding.ensureInitialized();
   VeneerBridge.instance.isSheetEngine = true;
+  unawaited(VeneerBridge.instance.refreshSheetShown());
   runApp(_SheetScrollEdgeReporter(child: app));
 }
 
@@ -273,6 +286,26 @@ abstract final class NativeSheet {
 
   /// Whether this code runs inside a native sheet's engine.
   static bool get isNativeSheet => VeneerBridge.instance.isSheetEngine;
+
+  /// Inside a native sheet: whether it's on screen. Turns false when a
+  /// kept-alive sheet ([showNativeSheet]'s `keepAlive`) closes, while its app
+  /// keeps running, and true again when it's presented. Always false outside
+  /// native sheets.
+  static ValueListenable<bool> get shown => VeneerBridge.instance.sheetShown;
+
+  /// Inside a native sheet: the payload of each presentation as the sheet
+  /// comes up — for a kept-alive sheet, every reopening. Empty outside
+  /// native sheets.
+  static Stream<Object?> get presented => VeneerBridge.instance.sheetPresentations;
+
+  /// From the app: frees the kept-alive sheet engine at [entrypoint], ending
+  /// its app — immediately when it's hidden, or once its sheet closes. The
+  /// next [showNativeSheet] there starts a fresh one. Does nothing where
+  /// native sheets aren't available.
+  static Future<void> release(String entrypoint, {String? libraryUri}) async {
+    if (!VeneerBridge.instance.isSupported) return;
+    await VeneerBridge.instance.releaseSheet(entrypoint, libraryUri: libraryUri);
+  }
 }
 
 /// The Flutter sheet behind [showNativeSheet] where UIKit sheets aren't used:

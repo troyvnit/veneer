@@ -180,6 +180,15 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
       }
       result(nil)
 
+    case "releaseSheet":
+      if let entrypoint = args["entrypoint"] as? String {
+        NativeSheetPresenter.shared.release(entrypoint: entrypoint, libraryURI: args["libraryUri"] as? String)
+      }
+      result(nil)
+
+    case "sheetShown":
+      result(NativeSheetPresenter.shared.session(showing: registrar.viewController) != nil)
+
     case "presentSheet":
       let presented = NativeSheetPresenter.shared.present(args, owner: id, from: registrar.viewController) {
         [weak self] method, payload in
@@ -243,6 +252,21 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
   static func deliverSheetMaximumHeight(to controller: UIViewController, _ height: CGFloat) {
     for plugin in instances.values.compactMap({ $0.plugin }) where plugin.registrar.viewController === controller {
       plugin.channel.invokeMethod("sheetMaximumHeight", arguments: ["height": Double(height)])
+    }
+  }
+
+  /// Tells the engine showing [controller] its sheet came up with [payload]
+  /// (every presentation, including a kept-alive sheet's reopening).
+  static func deliverSheetPresented(to controller: UIViewController, _ payload: Any?) {
+    for plugin in instances.values.compactMap({ $0.plugin }) where plugin.registrar.viewController === controller {
+      plugin.channel.invokeMethod("sheetPresented", arguments: ["payload": payload ?? NSNull()])
+    }
+  }
+
+  /// Tells a kept-alive sheet's engine its sheet closed while it runs on.
+  static func deliverSheetHidden(to controller: UIViewController) {
+    for plugin in instances.values.compactMap({ $0.plugin }) where plugin.registrar.viewController === controller {
+      plugin.channel.invokeMethod("sheetHidden", arguments: nil)
     }
   }
 

@@ -342,6 +342,44 @@ void main() {
     expect(args['initialDetent'], 1);
   });
 
+  testWidgets('a kept-alive sheet asks native to retain its engine, and can be released', variant: ios, (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    final context = tester.element(find.byType(SizedBox));
+    unawaited(
+      showNativeSheet<void>(context: context, entrypoint: 'sheet', keepAlive: true, builder: (_) => const SizedBox()),
+    );
+    unawaited(showNativeSheet<void>(context: context, entrypoint: 'other', builder: (_) => const SizedBox()));
+    await tester.pump();
+    expect(sent('presentSheet').map((a) => a['retain']), [true, false]);
+
+    await NativeSheet.release('sheet');
+    expect(sent('releaseSheet').single, {'entrypoint': 'sheet', 'libraryUri': null});
+  });
+
+  testWidgets('in a sheet engine, shown and presented follow the sheet coming and going', variant: ios, (tester) async {
+    final payloads = <Object?>[];
+    final subscription = NativeSheet.presented.listen(payloads.add);
+    addTearDown(subscription.cancel);
+    expect(NativeSheet.shown.value, isFalse);
+
+    await nativeEvent('sheetPresented', {
+      'payload': {'screen': 'visit_detail'},
+    });
+    await tester.pump();
+    expect(NativeSheet.shown.value, isTrue);
+
+    await nativeEvent('sheetHidden', {});
+    expect(NativeSheet.shown.value, isFalse, reason: 'closed, while its app keeps running');
+
+    await nativeEvent('sheetPresented', {'payload': null});
+    await tester.pump();
+    expect(NativeSheet.shown.value, isTrue);
+    expect(payloads, [
+      {'screen': 'visit_detail'},
+      null,
+    ]);
+  });
+
   testWidgets('in a sheet engine, NativeSheetContent reports its height above the home indicator', variant: ios, (
     tester,
   ) async {

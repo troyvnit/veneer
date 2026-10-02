@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0
+
+- **Kept-alive sheets:** `showNativeSheet(keepAlive: true)` hides a native sheet on close instead
+  of ending its engine. The sheet's app keeps running (timers, network, audio; no frames while
+  hidden), and the next `showNativeSheet` at the same entrypoint presents the same app, chrome
+  and all. Inside, `NativeSheet.shown` says whether it's on screen and `NativeSheet.presented`
+  brings each presentation's payload; `NativeSheet.release` frees the engine (for example on
+  sign-out). Ignored with `arguments`, and on the Flutter fallback.
+
 ## 0.4.6
 
 - **Tappable attachments:** `NativeComposerAttachment.onTap` is called when the attachment tile

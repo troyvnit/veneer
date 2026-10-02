@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'veneer'
-  s.version          = '0.4.6'
+  s.version          = '0.5.0'
   s.summary          = 'Real native iOS 26 UI for Flutter: Liquid Glass, UIKit bars, composers and sheets.'
   s.description      = <<-DESC
 One native overlay above the Flutter surface, driven by Flutter layout every frame: UIKit tab
