@@ -85,10 +85,11 @@ final class NativeNavigationBarHost: NSObject {
           item.titleView = FillingTitleCapsule(capsule)
           item.style = .editor
         } else {
-          if !leading.isEmpty { leading.append(.fixedSpace(0)) }  // separate glass backgrounds
-          leading.append(UIBarButtonItem(customView: capsule))
-          item.titleView = nil
-          item.style = .navigator
+          // Also the title view, so UIKit fits it between the items and a
+          // long title truncates; as a bar button item it would keep its
+          // full width and push everything into the overflow menu.
+          item.titleView = HuggingTitleCapsule(capsule)
+          item.style = .editor
         }
       } else if let title, BarTitleView.isCustom(title) {
         // Styled or leading-aligned: our own labels as the title view, which
@@ -429,6 +430,44 @@ final class TitleCapsuleControl: UIControl {
 
   override var isHighlighted: Bool {
     didSet { stack.alpha = isHighlighted ? 0.5 : 1 }
+  }
+}
+
+/// A [TitleCapsuleControl] that hugs its content at the leading edge of the
+/// title view's space, in its own glass, and shrinks (truncating its title)
+/// when that space is narrower.
+@available(iOS 26.0, *)
+final class HuggingTitleCapsule: UIView {
+  private let glass: UIVisualEffectView = {
+    let effect = UIGlassEffect(style: .regular)
+    effect.isInteractive = true
+    return UIVisualEffectView(effect: effect)
+  }()
+
+  init(_ capsule: TitleCapsuleControl) {
+    super.init(frame: .zero)
+    glass.translatesAutoresizingMaskIntoConstraints = false
+    glass.clipsToBounds = true
+    glass.layer.cornerRadius = 22
+    glass.layer.cornerCurve = .continuous
+    addSubview(glass)
+    capsule.translatesAutoresizingMaskIntoConstraints = false
+    glass.contentView.addSubview(capsule)
+    NSLayoutConstraint.activate([
+      glass.leadingAnchor.constraint(equalTo: leadingAnchor),
+      glass.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
+      glass.topAnchor.constraint(equalTo: topAnchor),
+      glass.bottomAnchor.constraint(equalTo: bottomAnchor),
+      capsule.leadingAnchor.constraint(equalTo: glass.contentView.leadingAnchor),
+      capsule.trailingAnchor.constraint(equalTo: glass.contentView.trailingAnchor),
+      capsule.centerYAnchor.constraint(equalTo: glass.contentView.centerYAnchor),
+    ])
+  }
+
+  required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+  override var intrinsicContentSize: CGSize {
+    CGSize(width: UIView.layoutFittingExpandedSize.width, height: 44)
   }
 }
 

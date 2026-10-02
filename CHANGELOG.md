@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1
+
+- **Long capsule titles fit:** a `NativeBarTitle(capsule: true)` that doesn't `fill` now truncates its
+  title (and subtitle) to the space between the leading and trailing buttons, natively as in the
+  Flutter replica. Before, a title wider than the bar pushed the capsule and the trailing buttons
+  into UIKit's overflow menu. It still hugs its text at the leading edge, now in its own glass.
+
 ## 0.5.0
 
 - **Kept-alive sheets:** `showNativeSheet(keepAlive: true)` hides a native sheet on close instead
