@@ -179,6 +179,7 @@ void main() {
     var voice = 0;
     var ended = 0;
     var removed = 0;
+    var tapped = 0;
     Widget app({bool side = false, bool attached = false}) => MaterialApp(
       home: MediaQuery(
         data: const MediaQueryData(size: Size(400, 800), padding: EdgeInsets.only(bottom: 34)),
@@ -211,6 +212,7 @@ void main() {
                   subtitle: 'PDF',
                   thumbnail: const NativeIcon.symbol('doc.fill'),
                   onRemove: () => removed++,
+                  onTap: () => tapped++,
                 ),
             ],
             onSend: sent.add,
@@ -249,8 +251,12 @@ void main() {
     await tester.pumpWidget(app(attached: true));
     await tester.pumpAndSettle();
     expect(find.text('trip-plan.pdf'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('trip-plan.pdf, PDF'));
+    expect(tapped, 1);
+    expect(removed, 0, reason: 'a tap on the attachment is not a remove');
     await tester.tap(find.bySemanticsLabel('Remove'));
     expect(removed, 1);
+    expect(tapped, 1, reason: 'the remove button stays on top of the tap area');
     expect(calls, isEmpty);
   });
 

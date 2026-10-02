@@ -317,7 +317,8 @@ NativePromptComposer(
 - **Side actions:** glass circles that split off the capsule like liquid while
   `showSideActions` is true (for example a voice session's mute and end buttons).
 - **Attachments:** image tiles (no `title`) or file chips, with remove buttons; `loading`
-  dims a tile and shows a spinner while it uploads.
+  dims a tile and shows a spinner while it uploads, and `onTap` makes the tile itself tappable
+  (to preview or play it).
 - **States:** `stopAction` replaces the circle while a reply is generating, `sendEnabled` and
   `sendBusy` hold or spin the send button, and `editable: false` shows text (such as a live
   transcript) without taking the keyboard.

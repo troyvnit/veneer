@@ -414,6 +414,8 @@ class VeneerBridge {
         _composerHandlers?.onRecording?.call(args);
       case 'composerAttachmentRemoved':
         _composerHandlers?.onAttachmentRemoved?.call(args['id']! as String);
+      case 'composerAttachmentTapped':
+        _composerHandlers?.onAttachmentTapped?.call(args['id']! as String);
       case 'sheetDismissed':
         final id = args['id']! as int;
         _sheetDetentHandlers.remove(id);
@@ -459,6 +461,7 @@ class VeneerComposerHandlers {
     required this.onSend,
     required this.onLayout,
     this.onAttachmentRemoved,
+    this.onAttachmentTapped,
     this.onSelection,
     this.onRecording,
   });
@@ -478,6 +481,9 @@ class VeneerComposerHandlers {
 
   /// An attachment's remove button was tapped (prompt composer).
   final ValueChanged<String>? onAttachmentRemoved;
+
+  /// An attachment with a tap handler was tapped (prompt composer).
+  final ValueChanged<String>? onAttachmentTapped;
 
   /// Voice recording: `{state: started|finished|cancelled|failed, path,
   /// durationMs, reason}`.

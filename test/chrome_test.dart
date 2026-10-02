@@ -221,6 +221,7 @@ void main() {
   testWidgets('prompt composer: config, menus, side actions and attachment removal', variant: ios, (tester) async {
     final events = <String>[];
     var removed = 0;
+    var tapped = 0;
     Widget page({bool voice = false, bool attached = true}) => MaterialApp(
       home: NativePromptComposer(
         placeholder: 'Ask anything',
@@ -245,6 +246,7 @@ void main() {
               id: 'p1',
               thumbnail: const NativeIcon.image('assets/lake.jpg'),
               onRemove: () => removed++,
+              onTap: () => tapped++,
             ),
         ],
         child: const SizedBox(),
@@ -264,6 +266,7 @@ void main() {
       (config['attachments']! as List).single,
       containsPair('thumbnail', {'type': 'imageAsset', 'asset': 'assets/lake.jpg', 'package': null}),
     );
+    expect((config['attachments']! as List).single, containsPair('tappable', true));
 
     for (final id in ['leading.menu0', 'action0', 'primary', 'side0']) {
       await nativeEvent('composerButton', {'id': id});
@@ -272,6 +275,9 @@ void main() {
 
     await nativeEvent('composerAttachmentRemoved', {'id': 'p1'});
     expect(removed, 1);
+
+    await nativeEvent('composerAttachmentTapped', {'id': 'p1'});
+    expect(tapped, 1);
 
     await tester.pumpWidget(page(voice: true));
     await tester.pump();

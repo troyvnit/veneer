@@ -239,6 +239,7 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
   ValueChanged<String>? get _onSend;
   ValueChanged<String>? get _onChanged;
   ValueChanged<String>? get _onAttachmentRemoved => null;
+  ValueChanged<String>? get _onAttachmentTapped => null;
   ValueChanged<NativeVoiceRecording>? get _onVoiceRecorded;
   ValueChanged<NativeVoiceRecordingFailure>? get _onVoiceRecordingFailed;
   String? get _recordingCancelLabel;
@@ -350,6 +351,7 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
         });
       },
       onAttachmentRemoved: (id) => _onAttachmentRemoved?.call(id),
+      onAttachmentTapped: (id) => _onAttachmentTapped?.call(id),
       onRecording: _onRecording,
     );
     // Pages rebuild every frame while the keyboard animates; only send real

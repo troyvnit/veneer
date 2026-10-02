@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.6
+
+- **Tappable attachments:** `NativeComposerAttachment.onTap` is called when the attachment tile
+  itself is tapped, e.g. to preview a photo or play a video, natively and in the Flutter replica.
+  The remove button stays on top. Without `onTap` a tap on the tile focuses the prompt, as before.
+
 ## 0.4.5
 
 - **Padded bar buttons:** `NativeBarButton.iconPadding` puts its own padding around the icon

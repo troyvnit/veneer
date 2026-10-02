@@ -109,6 +109,9 @@ final class NativePromptComposerView: ComposerBaseView {
     attachmentStrip.onRemove = { [weak self] id in
       self?.onEvent?("composerAttachmentRemoved", ["id": id])
     }
+    attachmentStrip.onTap = { [weak self] id in
+      self?.onEvent?("composerAttachmentTapped", ["id": id])
+    }
 
     sendSpinner.hidesWhenStopped = true
     sendSpinner.isUserInteractionEnabled = false
@@ -130,7 +133,7 @@ final class NativePromptComposerView: ComposerBaseView {
 
   /// `{leading: button?, actions: [button], primary: button?, stop: button?,
   ///   sendIcon, sendEnabled, sendBusy, editable, side: [button + prominent],
-  ///   sideShown, attachments: [{id, title, subtitle, thumbnail, loading}]}`,
+  ///   sideShown, attachments: [{id, title, subtitle, thumbnail, loading, tappable}]}`,
   ///   button = `{id, icon, title, menu?}`.
   override func configure(_ args: [String: Any]) -> Bool {
     var animate = false
@@ -517,6 +520,7 @@ final class SideGlassButton: UIVisualEffectView {
 @available(iOS 26.0, *)
 final class AttachmentStripView: UIScrollView {
   var onRemove: ((String) -> Void)?
+  var onTap: ((String) -> Void)?
 
   private var tiles: [String: AttachmentTileView] = [:]
   private var order: [String] = []
@@ -550,6 +554,7 @@ final class AttachmentStripView: UIScrollView {
         let tile = AttachmentTileView(id: id)
         tile.configure(spec)
         tile.onRemove = { [weak self] in self?.onRemove?(id) }
+        tile.onTap = { [weak self] in self?.onTap?(id) }
         tile.alpha = 0
         tile.transform = CGAffineTransform(scaleX: 0.5, y: 0.5)
         addSubview(tile)
@@ -582,7 +587,11 @@ final class AttachmentStripView: UIScrollView {
 final class AttachmentTileView: UIView {
   let id: String
   var onRemove: (() -> Void)?
+  var onTap: (() -> Void)?
 
+  // A button, not a gesture recognizer: UIKit lets a button's tap win over
+  // the capsule's focus tap, as it does for the remove button.
+  private let tapArea = UIButton(type: .custom)
   private let thumbnailClip = UIView()
   private let thumbnail = UIImageView()
   private let titleLabel = UILabel()
@@ -617,13 +626,16 @@ final class AttachmentTileView: UIView {
     removeButton.configuration?.baseForegroundColor = .white
     removeButton.accessibilityLabel = "Remove"
     removeButton.addAction(UIAction { [weak self] _ in self?.onRemove?() }, for: .touchUpInside)
+    tapArea.addAction(UIAction { [weak self] _ in self?.onTap?() }, for: .touchUpInside)
+    tapArea.accessibilityTraits = .button
+    tapArea.isHidden = true
     dim.backgroundColor = UIColor.black.withAlphaComponent(0.35)
     dim.isUserInteractionEnabled = false
     spinner.color = .white
     spinner.hidesWhenStopped = true
     thumbnailClip.addSubview(dim)
     thumbnailClip.addSubview(spinner)
-    for v in [thumbnailClip, titleLabel, subtitleLabel, removeButton] { addSubview(v) }
+    for v in [thumbnailClip, titleLabel, subtitleLabel, tapArea, removeButton] { addSubview(v) }
   }
 
   required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -638,6 +650,9 @@ final class AttachmentTileView: UIView {
     subtitleLabel.isHidden = !isChip || (subtitle ?? "").isEmpty
     backgroundColor = isChip ? .tertiarySystemFill : .clear
     accessibilityLabel = [title, subtitle].compactMap { $0 }.joined(separator: ", ")
+    tapArea.isHidden = !((spec["tappable"] as? Bool) ?? false)
+    tapArea.isAccessibilityElement = !tapArea.isHidden
+    tapArea.accessibilityLabel = accessibilityLabel
 
     let side = isChip ? Self.chipThumbnail : 60
     let d = NativeIconDescriptor(spec["thumbnail"])
@@ -687,6 +702,7 @@ final class AttachmentTileView: UIView {
       thumbnailClip.layer.cornerRadius = 16
     }
     thumbnail.frame = thumbnailClip.bounds
+    tapArea.frame = bounds
     dim.frame = thumbnailClip.bounds
     spinner.center = CGPoint(x: thumbnailClip.bounds.midX, y: thumbnailClip.bounds.midY)
     let r = Self.removeSize

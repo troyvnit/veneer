@@ -15,6 +15,7 @@ class NativeComposerAttachment {
     this.thumbnail,
     this.loading = false,
     this.onRemove,
+    this.onTap,
   });
 
   final String id;
@@ -28,12 +29,17 @@ class NativeComposerAttachment {
   /// The remove button was tapped; drop the attachment from the list.
   final VoidCallback? onRemove;
 
+  /// The attachment itself was tapped, e.g. to preview or play it. Null
+  /// leaves the tile inert, so a tap on it focuses the prompt as before.
+  final VoidCallback? onTap;
+
   Map<String, Object?> _encode() => {
     'id': id,
     'title': title,
     'subtitle': subtitle,
     'thumbnail': thumbnail?.encode(),
     'loading': loading,
+    'tappable': onTap != null,
   };
 }
 
@@ -200,6 +206,10 @@ class _NativePromptComposerState extends _ComposerHostState<NativePromptComposer
   @override
   ValueChanged<String>? get _onAttachmentRemoved =>
       (id) => widget.attachments.where((a) => a.id == id).firstOrNull?.onRemove?.call();
+
+  @override
+  ValueChanged<String>? get _onAttachmentTapped =>
+      (id) => widget.attachments.where((a) => a.id == id).firstOrNull?.onTap?.call();
 
   @override
   Map<String, Object?> _encode(Map<String, VoidCallback?> handlers) => {
@@ -729,6 +739,15 @@ class _FallbackAttachmentTile extends StatelessWidget {
             )
           else
             thumbnail,
+          if (a.onTap case final onTap?)
+            Positioned.fill(
+              child: Semantics(
+                container: true,
+                button: true,
+                label: [a.title, a.subtitle].whereType<String>().where((s) => s.isNotEmpty).join(', '),
+                child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: onTap),
+              ),
+            ),
           if (a.loading)
             Positioned(
               left: chip ? 8 : 0,
