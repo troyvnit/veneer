@@ -29,7 +29,7 @@ export 'src/core/fallback_scope.dart' show VeneerFallbackScope, useNativeLayer;
 export 'src/core/fallback_style.dart' show VeneerFallbackStyle;
 export 'src/core/native_icon.dart';
 export 'src/core/native_menu.dart' show NativeMenuItem;
-export 'src/core/veneer_bridge.dart' show VeneerBridge, VeneerTransport;
+export 'src/core/veneer_bridge.dart' show SheetRequestHandler, VeneerBridge, VeneerTransport;
 export 'src/glass/glass_group.dart';
 export 'src/glass/glass_shape.dart';
 

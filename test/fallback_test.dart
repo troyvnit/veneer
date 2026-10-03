@@ -124,6 +124,14 @@ void main() {
     expect(archived, 1);
   });
 
+  test('a sheet request in the fallback calls the app handler directly', () async {
+    NativeSheet.setRequestHandler((name, arguments) async => '$name:$arguments');
+    addTearDown(() => NativeSheet.setRequestHandler(null));
+
+    expect(await NativeSheet.request('token', 1), 'token:1');
+    expect(calls.where((call) => call.method == 'sheetRequest'), isEmpty);
+  });
+
   testWidgets('composer replica: same controller drives text, focus and send', (tester) async {
     final controller = NativeComposerController();
     final sent = <String>[];

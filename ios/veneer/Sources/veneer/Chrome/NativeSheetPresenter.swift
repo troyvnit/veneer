@@ -135,6 +135,7 @@ final class NativeSheetPresenter {
   ///   [owner].
   func present(
     _ args: [String: Any], owner: Int, from presenter: UIViewController?,
+    onRequest: @escaping (Any?, @escaping FlutterResult) -> Void,
     onEvent: @escaping (String, [String: Any]) -> Void
   ) -> Bool {
     guard let presenter = presenter.map(Self.topmost), let id = (args["id"] as? NSNumber)?.intValue,
@@ -167,7 +168,8 @@ final class NativeSheetPresenter {
     }
     let keeps = retain && !showingKept
 
-    let session = NativeSheetSession(id: id, engine: engine, controller: controller, onEvent: onEvent)
+    let session = NativeSheetSession(
+      id: id, engine: engine, controller: controller, onRequest: onRequest, onEvent: onEvent)
     session.retainKey = keeps ? key : nil
     // A sheet presented over another sheet goes away with it.
     session.parent = sessions.values.first { $0.controller === presenter }
@@ -247,6 +249,9 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
   private var contentHeight: CGFloat?
   var onFirstContentHeight: (() -> Void)?
   private let onEvent: (String, [String: Any]) -> Void
+  /// Forwards the sheet engine's `NativeSheet.request`s to the engine that
+  /// presented it, whose answer (or error) goes back as the reply.
+  private let onRequest: (Any?, @escaping FlutterResult) -> Void
   private var detentIds: [UISheetPresentationController.Detent.Identifier] = []
   private var result: Any?
   private var finished = false
@@ -254,12 +259,25 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
   /// Distance from the sheet's top and side edges to header controls.
   static let edgeInset: CGFloat = 16
 
-  init(id: Int, engine: FlutterEngine, controller: FlutterViewController, onEvent: @escaping (String, [String: Any]) -> Void) {
+  init(
+    id: Int, engine: FlutterEngine, controller: FlutterViewController,
+    onRequest: @escaping (Any?, @escaping FlutterResult) -> Void,
+    onEvent: @escaping (String, [String: Any]) -> Void
+  ) {
     self.id = id
     self.engine = engine
     self.controller = controller
+    self.onRequest = onRequest
     self.onEvent = onEvent
     super.init()
+  }
+
+  /// A request from this sheet's engine, for the engine that presented it.
+  func request(_ arguments: Any?, reply: @escaping FlutterResult) {
+    guard !finished else {
+      return reply(FlutterError(code: "not_shown", message: "The sheet is no longer showing", details: nil))
+    }
+    onRequest(arguments, reply)
   }
 
   func configure(_ args: [String: Any]) {

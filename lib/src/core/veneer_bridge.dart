@@ -27,6 +27,10 @@ enum VeneerTransport {
 typedef _ApplyFrameNative = Void Function(Pointer<Double>, Int32, Int32);
 typedef _ApplyFrameDart = void Function(Pointer<Double>, int, int);
 
+/// Answers a native sheet's [name] request with a value the standard message
+/// codec carries.
+typedef SheetRequestHandler = Future<Object?> Function(String name, Object? arguments);
+
 /// Low-level link to the iOS overlay. Widgets use this; apps normally don't.
 class VeneerBridge {
   VeneerBridge._() {
@@ -99,6 +103,7 @@ class VeneerBridge {
     _tabBarCovered = false;
     _chromeHiddenSent = null;
     sheetShown.value = false;
+    sheetRequestHandler = null;
   }
 
   /// The native layer needs iOS 26 (Liquid Glass, `UITab`, scroll edge
@@ -398,6 +403,15 @@ class VeneerBridge {
     await _channel.invokeMethod<void>('releaseSheet', {'entrypoint': entrypoint, 'libraryUri': libraryUri});
   }
 
+  /// In an engine that presents native sheets: answers their requests
+  /// (`NativeSheet.request`), set through `NativeSheet.setRequestHandler`.
+  SheetRequestHandler? sheetRequestHandler;
+
+  /// From inside a native sheet: asks the engine that presented it, which
+  /// answers with its [sheetRequestHandler].
+  Future<Object?> sheetRequest(String name, Object? arguments) =>
+      _channel.invokeMethod<Object?>('sheetRequest', {'name': name, 'arguments': arguments});
+
   /// From inside a native sheet: dismisses it with [result].
   Future<bool> dismissSheet(Object? result) async =>
       await _channel.invokeMethod<bool>('dismissSheet', {'result': result}) ?? false;
@@ -457,6 +471,15 @@ class VeneerBridge {
         sheetShown.value = false;
       case 'sheetDetentChanged':
         _sheetDetentHandlers[args['id']! as int]?.call(args['detent']! as int);
+      case 'sheetRequest':
+        final handler = sheetRequestHandler;
+        if (handler == null) {
+          throw PlatformException(
+            code: 'no_handler',
+            message: 'The app that presented this sheet has no NativeSheet.setRequestHandler',
+          );
+        }
+        return handler(args['name']! as String, args['arguments']);
       case 'composerLayout':
         composerHeight = (args['height']! as num).toDouble();
         _composerHandlers?.onLayout(

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0
+
+- **Sheet requests:** a native sheet can ask the app that presented it for something while it's
+  open — `NativeSheet.request(name, arguments)` inside the sheet, answered by
+  `NativeSheet.setRequestHandler` in the app — e.g. a fresh credential, since a sheet's engine
+  shares no memory with the app. Answers and errors (`PlatformException`: `no_handler`,
+  `not_shown`) go back to the sheet. In the Flutter fallback the handler is called directly.
+
 ## 0.5.1
 
 - **Long capsule titles fit:** a `NativeBarTitle(capsule: true)` that doesn't `fill` now truncates its

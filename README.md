@@ -366,6 +366,12 @@ NativeSheet.close(context, result);
 - The sheet's isolate doesn't share state with your app: pass a `payload` in (read it with
   `NativeSheet.payload()`; pre-warmed engines receive it when presented) and return a result
   with `NativeSheet.close`. `arguments` reach the entrypoint instead, but bypass pre-warming.
+- While it's open, the sheet can ask the app for more with `NativeSheet.request(name, arguments)`
+  — a fresh credential, or data only the app holds. The app answers with the handler it set
+  through `NativeSheet.setRequestHandler((name, arguments) async => …)`; its value (or error, as
+  a `PlatformException`) comes back to the sheet. In the Flutter fallback the handler is called
+  directly, so the same code runs everywhere. A sheet presented from inside a sheet asks that
+  sheet's engine, which can forward the request with a handler of its own.
 - Sheet engines never restyle the app's status bar, and each engine is torn down when its
   sheet is dismissed — unless the sheet was shown with `keepAlive: true`: then closing only
   hides it. Its app keeps running (uploads, polling, audio; no frames while hidden), the next

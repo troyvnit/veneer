@@ -287,6 +287,31 @@ abstract final class NativeSheet {
   /// Whether this code runs inside a native sheet's engine.
   static bool get isNativeSheet => VeneerBridge.instance.isSheetEngine;
 
+  /// Inside a sheet: asks the app that presented it, which answers through
+  /// [setRequestHandler] — e.g. for a fresh credential, or data only the app
+  /// holds. A native sheet's engine shares no memory with the app, so this
+  /// is how it reaches the app while open. In the Flutter fallback the sheet
+  /// runs in the app's engine and the handler is called directly.
+  ///
+  /// [arguments] and the answer are values the standard message codec
+  /// carries. Throws a [PlatformException] when the app has no handler or
+  /// the handler fails (`no_handler`, `not_shown` for a sheet that's no
+  /// longer showing). A sheet presented from inside a sheet asks that
+  /// sheet's engine, which can forward with a handler of its own.
+  static Future<Object?> request(String name, [Object? arguments]) async {
+    final bridge = VeneerBridge.instance;
+    if (bridge.isSheetEngine) return bridge.sheetRequest(name, arguments);
+    final handler = bridge.sheetRequestHandler;
+    if (handler == null) {
+      throw PlatformException(code: 'no_handler', message: 'No NativeSheet.setRequestHandler for "$name"');
+    }
+    return handler(name, arguments);
+  }
+
+  /// In the app: answers [request]s from the sheets it presents. One handler
+  /// serves every sheet; switch on the request's name. Null removes it.
+  static void setRequestHandler(SheetRequestHandler? handler) => VeneerBridge.instance.sheetRequestHandler = handler;
+
   /// Inside a native sheet: whether it's on screen. Turns false when a
   /// kept-alive sheet ([showNativeSheet]'s `keepAlive`) closes, while its app
   /// keeps running, and true again when it's presented. Always false outside

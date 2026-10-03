@@ -190,11 +190,27 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
       result(NativeSheetPresenter.shared.session(showing: registrar.viewController) != nil)
 
     case "presentSheet":
-      let presented = NativeSheetPresenter.shared.present(args, owner: id, from: registrar.viewController) {
-        [weak self] method, payload in
+      let presented = NativeSheetPresenter.shared.present(
+        args, owner: id, from: registrar.viewController,
+        onRequest: { [weak self] request, reply in
+          guard let self else {
+            return reply(
+              FlutterError(code: "not_shown", message: "The engine that presented the sheet is gone", details: nil))
+          }
+          self.channel.invokeMethod("sheetRequest", arguments: request, result: reply)
+        }
+      ) { [weak self] method, payload in
         self?.channel.invokeMethod(method, arguments: payload)
       }
       result(presented)
+
+    case "sheetRequest":
+      // From inside a sheet: ask the engine that presented it.
+      guard let session = NativeSheetPresenter.shared.session(showing: registrar.viewController) else {
+        result(FlutterError(code: "not_shown", message: "This engine's sheet isn't showing", details: nil))
+        return
+      }
+      session.request(call.arguments, reply: result)
 
     case "sheetContentAtTop":
       overlay?.setSheetContentAtTop((args["atTop"] as? Bool) ?? true)

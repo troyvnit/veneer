@@ -356,6 +356,49 @@ void main() {
     expect(sent('releaseSheet').single, {'entrypoint': 'sheet', 'libraryUri': null});
   });
 
+  test('in a sheet engine, a request goes to the presenting app and returns its answer', () async {
+    VeneerBridge.instance.isSheetEngine = true;
+    addTearDown(() => VeneerBridge.instance.isSheetEngine = false);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return call.method == 'sheetRequest' ? 'jwt-1' : null;
+    });
+
+    final answer = await NativeSheet.request('token', {'scope': 'api'});
+
+    expect(answer, 'jwt-1');
+    expect(sent('sheetRequest').single, {
+      'name': 'token',
+      'arguments': {'scope': 'api'},
+    });
+  });
+
+  Future<Object?> askFromSheet(String name, Object? arguments) async {
+    final reply = Completer<ByteData?>();
+    await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
+      'veneer',
+      const StandardMethodCodec().encodeMethodCall(MethodCall('sheetRequest', {'name': name, 'arguments': arguments})),
+      reply.complete,
+    );
+    return const StandardMethodCodec().decodeEnvelope((await reply.future)!);
+  }
+
+  test('the presenting app answers a sheet request with its handler', () async {
+    final asked = <(String, Object?)>[];
+    NativeSheet.setRequestHandler((name, arguments) async {
+      asked.add((name, arguments));
+      return {'jwt': 'jwt-2'};
+    });
+    addTearDown(() => NativeSheet.setRequestHandler(null));
+
+    expect(await askFromSheet('token', null), {'jwt': 'jwt-2'});
+    expect(asked, [('token', null)]);
+  });
+
+  test('a sheet request without a handler in the app fails with no_handler', () async {
+    expect(askFromSheet('token', null), throwsA(isA<PlatformException>().having((e) => e.code, 'code', 'no_handler')));
+  });
+
   testWidgets('in a sheet engine, shown and presented follow the sheet coming and going', variant: ios, (tester) async {
     final payloads = <Object?>[];
     final subscription = NativeSheet.presented.listen(payloads.add);
