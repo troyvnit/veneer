@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart' show CupertinoDynamicColor;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -723,6 +725,32 @@ void main() {
     expect(failure, NativeVoiceRecordingFailure.unavailable);
     expect(controller.isRecording, isFalse);
   });
+
+  testWidgets('a controller sends a Flutter sheet messages and closes it with a result', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Text('page'))));
+    final controller = NativeSheetController();
+    final messages = <Object?>[];
+    Object? result;
+    unawaited(
+      showNativeSheet<Object?>(
+        context: tester.element(find.text('page')),
+        controller: controller,
+        builder: (context) => _MessageLog(stream: NativeSheet.messages(context), into: messages),
+      ).then((r) => result = r),
+    );
+    await tester.pumpAndSettle();
+    expect(controller.isOpen, isTrue);
+
+    await controller.send('refreshed');
+    await tester.pump();
+    expect(messages, ['refreshed']);
+
+    await controller.close('done');
+    await tester.pumpAndSettle();
+    expect(result, 'done');
+    expect(controller.isOpen, isFalse);
+    expect(find.byType(_MessageLog), findsNothing);
+  });
 }
 
 class _MountCounter extends StatefulWidget {
@@ -739,6 +767,35 @@ class _MountCounterState extends State<_MountCounter> {
   void initState() {
     super.initState();
     widget.onMount();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.expand();
+}
+
+class _MessageLog extends StatefulWidget {
+  const _MessageLog({required this.stream, required this.into});
+
+  final Stream<Object?> stream;
+  final List<Object?> into;
+
+  @override
+  State<_MessageLog> createState() => _MessageLogState();
+}
+
+class _MessageLogState extends State<_MessageLog> {
+  late final StreamSubscription<Object?> _subscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscription = widget.stream.listen(widget.into.add);
+  }
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
   }
 
   @override

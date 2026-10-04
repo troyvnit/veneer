@@ -93,6 +93,11 @@ class NativeSheetDetent {
 /// [NativeNavigationBar] is a real `UINavigationBar` in the sheet and a
 /// composer rides the sheet natively.
 ///
+/// With a [controller], the app can [NativeSheetController.send] the open
+/// sheet messages (it reads them from [NativeSheet.messages]) and
+/// [NativeSheetController.close] it — the other half of [NativeSheet.request],
+/// so a sheet can stay a view of state the app owns.
+///
 /// **Elsewhere (Android, iOS 15–25, or without an entrypoint)** — [builder]'s
 /// content in a Flutter sheet with the same behaviour ([NativeSheetRoute]),
 /// its Veneer widgets drawn as Flutter replicas.
@@ -118,41 +123,98 @@ Future<T?> showNativeSheet<T>({
   Color? backgroundColor,
   bool useRootNavigator = true,
   bool keepAlive = false,
+  NativeSheetController? controller,
 }) async {
   final bridge = VeneerBridge.instance;
   if (entrypoint != null && bridge.isSupported) {
+    int? presentedId;
     try {
-      final result = await bridge.presentSheet({
-        'entrypoint': entrypoint,
-        'libraryUri': libraryUri,
-        'arguments': arguments,
-        'payload': payload,
-        'detents': [for (final d in detents) d._encode()],
-        'initialDetent': initialDetent == null ? null : detents.indexOf(initialDetent),
-        'grabber': showGrabber,
-        'largestUndimmedDetent': largestUndimmedDetent == null ? null : detents.indexOf(largestUndimmedDetent),
-        'dismissible': isDismissible,
-        'expandsOnScroll': expandsOnScroll,
-        'retain': keepAlive,
-      }, onDetentChanged: onDetentChanged == null ? null : (i) => onDetentChanged(detents[i]));
+      final result = await bridge.presentSheet(
+        {
+          'entrypoint': entrypoint,
+          'libraryUri': libraryUri,
+          'arguments': arguments,
+          'payload': payload,
+          'detents': [for (final d in detents) d._encode()],
+          'initialDetent': initialDetent == null ? null : detents.indexOf(initialDetent),
+          'grabber': showGrabber,
+          'largestUndimmedDetent': largestUndimmedDetent == null ? null : detents.indexOf(largestUndimmedDetent),
+          'dismissible': isDismissible,
+          'expandsOnScroll': expandsOnScroll,
+          'retain': keepAlive,
+        },
+        onDetentChanged: onDetentChanged == null ? null : (i) => onDetentChanged(detents[i]),
+        onPresented: (id) {
+          presentedId = id;
+          controller?._nativeId = id;
+        },
+      );
       return result as T?;
     } on StateError {
       // Not presentable (no view controller yet): fall back to Flutter.
+    } finally {
+      if (presentedId != null && controller?._nativeId == presentedId) controller?._nativeId = null;
     }
   }
   if (!context.mounted) return null;
-  return Navigator.of(context, rootNavigator: useRootNavigator).push(
-    NativeSheetRoute<T>(
-      builder: builder,
-      detents: detents,
-      initialDetent: initialDetent,
-      showGrabber: showGrabber,
-      isDismissible: isDismissible,
-      largestUndimmedDetent: largestUndimmedDetent,
-      onDetentChanged: onDetentChanged,
-      backgroundColor: backgroundColor,
-    ),
+  final route = NativeSheetRoute<T>(
+    builder: builder,
+    detents: detents,
+    initialDetent: initialDetent,
+    showGrabber: showGrabber,
+    isDismissible: isDismissible,
+    largestUndimmedDetent: largestUndimmedDetent,
+    onDetentChanged: onDetentChanged,
+    backgroundColor: backgroundColor,
   );
+  controller?._route = route;
+  try {
+    return await Navigator.of(context, rootNavigator: useRootNavigator).push(route);
+  } finally {
+    if (controller?._route == route) controller?._route = null;
+  }
+}
+
+/// A handle on a sheet from [showNativeSheet], for the app that presented
+/// it: [send] the open sheet messages and [close] it. Give it to one
+/// presentation at a time; it can be reused once that sheet has closed.
+class NativeSheetController {
+  int? _nativeId;
+  NativeSheetRoute<Object?>? _route;
+
+  /// Whether the sheet it was given to is open.
+  bool get isOpen => _nativeId != null || _route != null;
+
+  /// Sends [message] to the open sheet, which reads it from
+  /// [NativeSheet.messages] — for a native sheet, any value the standard
+  /// message codec carries. Dropped when no sheet is open, and by a sheet
+  /// that isn't listening yet: give the sheet its initial state as the
+  /// payload.
+  Future<void> send(Object? message) async {
+    final id = _nativeId;
+    if (id != null) {
+      await VeneerBridge.instance.sendToSheet(id, message);
+    } else {
+      _route?._messages.add(message);
+    }
+  }
+
+  /// Closes the open sheet, returning [result] to [showNativeSheet].
+  Future<void> close([Object? result]) async {
+    final id = _nativeId;
+    if (id != null) {
+      await VeneerBridge.instance.closeSheet(id, result);
+      return;
+    }
+    final route = _route;
+    final navigator = route?.navigator;
+    if (route == null || navigator == null) return;
+    if (route.isCurrent) {
+      navigator.pop(result);
+    } else {
+      navigator.removeRoute(route, result);
+    }
+  }
 }
 
 /// Starts a native sheet's Flutter app. Call it from the sheet's entrypoint:
@@ -308,6 +370,17 @@ abstract final class NativeSheet {
     return handler(name, arguments);
   }
 
+  /// Inside a sheet: messages from the app that presented it
+  /// ([NativeSheetController.send]) — e.g. fresher state after the app acted
+  /// on a [request]. In a native sheet they come from the app's engine; in
+  /// the Flutter fallback, from the controller of the sheet showing
+  /// [context]. Messages sent before the sheet listens are dropped. Empty
+  /// elsewhere.
+  static Stream<Object?> messages(BuildContext context) {
+    if (VeneerBridge.instance.isSheetEngine) return VeneerBridge.instance.sheetMessages;
+    return context.getInheritedWidgetOfExactType<_SheetScope>()?.route._messages.stream ?? const Stream.empty();
+  }
+
   /// In the app: answers [request]s from the sheets it presents. One handler
   /// serves every sheet; switch on the request's name. Null removes it.
   static void setRequestHandler(SheetRequestHandler? handler) => VeneerBridge.instance.sheetRequestHandler = handler;
@@ -371,6 +444,9 @@ class NativeSheetRoute<T> extends PageRoute<T> {
   /// 0 below the large detent, 1 at it: how far the page behind recedes.
   final ValueNotifier<double> _recede = ValueNotifier(0);
 
+  /// From its [NativeSheetController], for [NativeSheet.messages].
+  final StreamController<Object?> _messages = StreamController.broadcast();
+
   @override
   bool get opaque => false;
 
@@ -394,7 +470,10 @@ class NativeSheetRoute<T> extends PageRoute<T> {
 
   @override
   Widget buildPage(BuildContext context, Animation<double> animation, Animation<double> secondaryAnimation) =>
-      _NativeSheet(route: this);
+      _SheetScope(
+        route: this,
+        child: _NativeSheet(route: this),
+      );
 
   // The sheet animates itself (the slide depends on its height).
   @override
@@ -443,8 +522,20 @@ class NativeSheetRoute<T> extends PageRoute<T> {
   @override
   void dispose() {
     _recede.dispose();
+    _messages.close();
     super.dispose();
   }
+}
+
+/// The sheet route around a fallback sheet's content, for
+/// [NativeSheet.messages].
+class _SheetScope extends InheritedWidget {
+  const _SheetScope({required this.route, required super.child});
+
+  final NativeSheetRoute<Object?> route;
+
+  @override
+  bool updateShouldNotify(_SheetScope oldWidget) => route != oldWidget.route;
 }
 
 class _NativeSheet extends StatefulWidget {

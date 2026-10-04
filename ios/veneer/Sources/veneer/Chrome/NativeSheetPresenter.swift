@@ -88,9 +88,18 @@ final class NativeSheetPresenter {
     }
   }
 
-  /// The app's `GeneratedPluginRegistrant`, found at runtime so apps need no
+  /// `VeneerPlugin.sheetPluginRegistrant` when the app sets one; otherwise
+  /// the app's `GeneratedPluginRegistrant`, found at runtime so apps need no
   /// extra setup for plugins to work inside sheets.
   private static func registerPlugins(with engine: FlutterEngine) {
+    if let registrant = VeneerPlugin.sheetPluginRegistrant {
+      registrant(engine)
+      let key = "VeneerPlugin"
+      if !engine.hasPlugin(key), let registrar = engine.registrar(forPlugin: key) {
+        VeneerPlugin.register(with: registrar)
+      }
+      return
+    }
     guard let registrant = NSClassFromString("GeneratedPluginRegistrant") as? NSObject.Type else { return }
     let selector = NSSelectorFromString("registerWithRegistry:")
     if registrant.responds(to: selector) { registrant.perform(selector, with: engine) }
@@ -189,16 +198,31 @@ final class NativeSheetPresenter {
     VeneerPlugin.deliverSheetPayload(to: controller, session.payload)
     VeneerPlugin.deliverSheetPresented(to: controller, session.payload)
 
+    // The next sheet (one over this, or after it) starts warm too; a kept
+    // one is its own next sheet. Its engine starts once this sheet is up, so
+    // it never competes with the measuring and the slide.
+    let warmNext = { [weak self] in
+      guard let self, arguments.isEmpty, !keeps else { return }
+      self.prewarm(entrypoint: entrypoint, libraryURI: libraryURI)
+    }
     let show = { [weak presenter, weak controller] in
       guard let presenter, let controller, controller.presentingViewController == nil else { return }
-      presenter.present(controller, animated: true)
+      presenter.present(controller, animated: true, completion: warmNext)
     }
     if session.sizesToContent {
-      // Lay the sheet out off screen so its content can measure itself;
-      // it slides up at that height (or at large, if it's slow to report).
-      session.onFirstContentHeight = show
+      // Let the content measure itself before the sheet comes up; it slides
+      // up at that height (or at large, if it's slow to report). Flutter
+      // lays a view out only once it's in a window, so it's attached beside
+      // the presenter, off screen, until then.
+      session.onFirstContentHeight = { [weak controller] in
+        if let controller { NativeSheetSession.detachMeasuring(controller) }
+        show()
+      }
       controller.loadViewIfNeeded()
-      controller.view.frame = presenter.view.bounds
+      presenter.addChild(controller)
+      controller.view.frame = presenter.view.bounds.offsetBy(dx: presenter.view.bounds.width * 2, dy: 0)
+      presenter.view.addSubview(controller.view)
+      controller.didMove(toParent: presenter)
       controller.view.setNeedsLayout()
       controller.view.layoutIfNeeded()
       DispatchQueue.main.asyncAfter(deadline: .now() + Self.contentTimeout) { [weak session] in
@@ -207,9 +231,6 @@ final class NativeSheetPresenter {
     } else {
       show()
     }
-    // The next sheet (one over this, or after it) starts warm too; a kept
-    // one is its own next sheet.
-    if arguments.isEmpty && !keeps { prewarm(entrypoint: entrypoint, libraryURI: libraryURI) }
     return true
   }
 
@@ -353,6 +374,14 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
     }
   }
 
+  /// Takes a content-sized sheet's view off the screen it measured on.
+  static func detachMeasuring(_ controller: UIViewController) {
+    guard controller.parent != nil else { return }
+    controller.willMove(toParent: nil)
+    controller.view.removeFromSuperview()
+    controller.removeFromParent()
+  }
+
   /// Presents a content-sized sheet still waiting for its measurement.
   func presentPending() {
     let show = onFirstContentHeight
@@ -376,6 +405,7 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
     children = []
     parent?.children.removeAll { $0 === self }
     onFirstContentHeight = nil
+    Self.detachMeasuring(controller)
     onEvent("sheetDismissed", ["id": id, "result": result ?? NSNull()])
     if retainKey != nil {
       VeneerPlugin.deliverSheetHidden(to: controller)

@@ -65,6 +65,12 @@ class VeneerBridge {
   /// sheet comes up.
   Stream<Object?> get sheetPresentations => _sheetPresentations.stream;
 
+  final StreamController<Object?> _sheetMessages = StreamController.broadcast();
+
+  /// In a native sheet's engine: messages from the app that presented it
+  /// (`NativeSheetController.send`).
+  Stream<Object?> get sheetMessages => _sheetMessages.stream;
+
   final Map<int, VoidCallback> _shapeTapHandlers = {};
   final Map<int, ValueChanged<int>> _shapeMenuHandlers = {};
   final Map<int, VeneerContextMenuHandlers> _contextMenuHandlers = {};
@@ -352,8 +358,13 @@ class VeneerBridge {
   }
 
   /// Presents a native sheet; completes with its result when dismissed, or
-  /// throws [StateError] if it couldn't be presented.
-  Future<Object?> presentSheet(Map<String, Object?> config, {ValueChanged<int>? onDetentChanged}) async {
+  /// throws [StateError] if it couldn't be presented. [onPresented] gets the
+  /// sheet's id once it's up, for [sendToSheet] and [closeSheet].
+  Future<Object?> presentSheet(
+    Map<String, Object?> config, {
+    ValueChanged<int>? onDetentChanged,
+    ValueChanged<int>? onPresented,
+  }) async {
     if (!await ensureAttached()) throw StateError('Veneer overlay not attached');
     final id = _nextSheetId++;
     final completer = Completer<Object?>();
@@ -365,8 +376,18 @@ class VeneerBridge {
       _sheetDetentHandlers.remove(id);
       throw StateError('Sheet could not be presented');
     }
+    onPresented?.call(id);
     return completer.future;
   }
+
+  /// From the app: sends [message] to the open sheet [id] presented, which
+  /// receives it in [sheetMessages]. False when the sheet isn't showing.
+  Future<bool> sendToSheet(int id, Object? message) async =>
+      await _channel.invokeMethod<bool>('sendToSheet', {'id': id, 'message': message}) ?? false;
+
+  /// From the app: dismisses the sheet [id] it presented, with [result].
+  Future<bool> closeSheet(int id, Object? result) async =>
+      await _channel.invokeMethod<bool>('dismissSheet', {'id': id, 'result': result}) ?? false;
 
   /// From inside a native sheet: whether the content under a new touch is at
   /// its top edge, so UIKit knows whether a pull down drags the sheet.
@@ -469,6 +490,8 @@ class VeneerBridge {
         _sheetPresentations.add(args['payload']);
       case 'sheetHidden':
         sheetShown.value = false;
+      case 'sheetMessage':
+        _sheetMessages.add(args['message']);
       case 'sheetDetentChanged':
         _sheetDetentHandlers[args['id']! as int]?.call(args['detent']! as int);
       case 'sheetRequest':

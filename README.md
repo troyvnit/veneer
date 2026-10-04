@@ -362,7 +362,10 @@ NativeSheet.close(context, result);
 - A Flutter engine renders into one view at a time, so the sheet runs **its own engine**,
   started at `entrypoint` (a top-level function in `main.dart`, or in `libraryUri`) and
   spawned from a shared `FlutterEngineGroup`, which shares compiled code and the GPU context.
-  After a sheet closes, the next engine is warmed automatically.
+  The next engine is warmed automatically once a sheet has slid up, and after it closes.
+- Each sheet engine registers all of your app's plugins unless you choose them: set
+  `VeneerPlugin.sheetPluginRegistrant` in your app delegate to register only what sheets use, so
+  plugins that observe the app (calls, push, analytics) don't run twice.
 - The sheet's isolate doesn't share state with your app: pass a `payload` in (read it with
   `NativeSheet.payload()`; pre-warmed engines receive it when presented) and return a result
   with `NativeSheet.close`. `arguments` reach the entrypoint instead, but bypass pre-warming.
@@ -372,6 +375,11 @@ NativeSheet.close(context, result);
   a `PlatformException`) comes back to the sheet. In the Flutter fallback the handler is called
   directly, so the same code runs everywhere. A sheet presented from inside a sheet asks that
   sheet's engine, which can forward the request with a handler of its own.
+- The app can talk to an open sheet too: give `showNativeSheet` a `NativeSheetController`,
+  then `controller.send(message)` reaches the sheet's `NativeSheet.messages(context)` stream,
+  and `controller.close(result)` dismisses it. Together with requests, a sheet can stay a view
+  of state the app owns: the payload is its first state, requests carry the user's actions to
+  the app, and the app's answers and messages bring fresher state back.
 - Sheet engines never restyle the app's status bar, and each engine is torn down when its
   sheet is dismissed — unless the sheet was shown with `keepAlive: true`: then closing only
   hides it. Its app keeps running (uploads, polling, audio; no frames while hidden), the next

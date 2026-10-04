@@ -17,6 +17,19 @@ import UIKit
 /// (Liquid Glass, `UITab`, scroll edge effects). Below that, `attach` answers
 /// `unsupported` and the Dart widgets render their Flutter fallbacks.
 public class VeneerPlugin: NSObject, FlutterPlugin {
+  /// Registers the plugins each native sheet's engine gets, instead of all
+  /// of the app's (`GeneratedPluginRegistrant`). Set it in the app delegate
+  /// when sheets need only a few plugins, so plugins that observe the app
+  /// (calls, push, analytics) don't run twice in every sheet engine. Veneer
+  /// registers itself if this doesn't.
+  ///
+  /// ```swift
+  /// VeneerPlugin.sheetPluginRegistrant = { registry in
+  ///   SharedPreferencesPlugin.register(with: registry.registrar(forPlugin: "SharedPreferencesPlugin")!)
+  /// }
+  /// ```
+  public static var sheetPluginRegistrant: ((FlutterPluginRegistry) -> Void)?
+
   /// Live instances by id, for the FFI entry point to route each engine's
   /// frames to its own overlay.
   private static var instances: [Int: WeakPlugin] = [:]
@@ -204,6 +217,12 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
       }
       result(presented)
 
+    case "sendToSheet":
+      // From the app: a message for a sheet it presented.
+      let session = (args["id"] as? NSNumber).flatMap { NativeSheetPresenter.shared.session(owner: id, id: $0.intValue) }
+      if let session { Self.deliverSheetMessage(to: session.controller, args["message"]) }
+      result(session != nil)
+
     case "sheetRequest":
       // From inside a sheet: ask the engine that presented it.
       guard let session = NativeSheetPresenter.shared.session(showing: registrar.viewController) else {
@@ -276,6 +295,13 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
   static func deliverSheetPresented(to controller: UIViewController, _ payload: Any?) {
     for plugin in instances.values.compactMap({ $0.plugin }) where plugin.registrar.viewController === controller {
       plugin.channel.invokeMethod("sheetPresented", arguments: ["payload": payload ?? NSNull()])
+    }
+  }
+
+  /// Hands the engine showing [controller] a message from the app.
+  static func deliverSheetMessage(to controller: UIViewController, _ message: Any?) {
+    for plugin in instances.values.compactMap({ $0.plugin }) where plugin.registrar.viewController === controller {
+      plugin.channel.invokeMethod("sheetMessage", arguments: ["message": message ?? NSNull()])
     }
   }
 

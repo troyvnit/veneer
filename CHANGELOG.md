@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.7.0
+
+- **Messages to sheets:** `showNativeSheet(controller: NativeSheetController())` lets the app
+  `send` messages to the open sheet, which reads them from `NativeSheet.messages(context)`, and
+  `close` it with a result. With `NativeSheet.request`, a sheet can stay a view of state the app
+  owns: the payload is its first state, requests carry actions to the app, and answers and
+  messages bring fresher state back. Works in the Flutter fallback too.
+- **Content-sized sheets open about 300 ms sooner:** a sheet with a `NativeSheetDetent.content()`
+  detent now measures its content before it slides up. Flutter lays a view out only once it's in
+  a window, so before, the measurement never came until the sheet was on screen: every such
+  sheet waited out the 350 ms limit and then slid up at the wrong height. Its view now measures
+  attached beside the presenter, off screen, and comes off the moment it's measured. In a
+  benchmark the slide started after about 65 ms instead of about 370 ms, without the dropped
+  frame each opening had.
+- The engine for the next sheet starts once the sheet has slid up, so it never competes with the
+  measuring and the slide.
+- **Choose sheet engines' plugins:** `VeneerPlugin.sheetPluginRegistrant` registers only the
+  plugins your sheets use, instead of all of the app's, so plugins that observe the app (calls,
+  push, analytics) don't run twice.
+
 ## 0.6.1
 
 - **Fix:** a content-sized sheet presented over another sheet no longer hides it. The sheet's

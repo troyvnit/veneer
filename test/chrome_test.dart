@@ -423,6 +423,61 @@ void main() {
     ]);
   });
 
+  testWidgets('a controller sends the open native sheet messages and closes it', variant: ios, (tester) async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return switch (call.method) {
+        'attach' => <String, Object?>{},
+        'presentSheet' || 'sendToSheet' || 'dismissSheet' => true,
+        _ => null,
+      };
+    });
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    final controller = NativeSheetController();
+    Object? result;
+    unawaited(
+      showNativeSheet<Object?>(
+        context: tester.element(find.byType(SizedBox)),
+        entrypoint: 'sheet',
+        controller: controller,
+        builder: (_) => const SizedBox(),
+      ).then((r) => result = r),
+    );
+    await tester.pump();
+    expect(controller.isOpen, isTrue);
+    final id = sent('presentSheet').single['id'];
+
+    await controller.send({'busy': true});
+    expect(sent('sendToSheet').single, {
+      'id': id,
+      'message': {'busy': true},
+    });
+
+    await controller.close('done');
+    expect(sent('dismissSheet').single, {'id': id, 'result': 'done'});
+    await nativeEvent('sheetDismissed', {'id': id, 'result': 'done'});
+    await tester.pump();
+    expect(result, 'done');
+    expect(controller.isOpen, isFalse);
+  });
+
+  testWidgets('in a sheet engine, messages from the app arrive in NativeSheet.messages', variant: ios, (tester) async {
+    VeneerBridge.instance.isSheetEngine = true;
+    addTearDown(() => VeneerBridge.instance.isSheetEngine = false);
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    final messages = <Object?>[];
+    final subscription = NativeSheet.messages(tester.element(find.byType(SizedBox))).listen(messages.add);
+    addTearDown(subscription.cancel);
+
+    await nativeEvent('sheetMessage', {
+      'message': {'busy': false},
+    });
+    await tester.pump();
+    expect(messages, [
+      {'busy': false},
+    ]);
+  });
+
   testWidgets('in a sheet engine, NativeSheetContent reports its height above the home indicator', variant: ios, (
     tester,
   ) async {
