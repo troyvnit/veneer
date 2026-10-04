@@ -388,6 +388,10 @@ NativeSheet.close(context, result);
   payload). `NativeSheet.release(entrypoint)` frees it, for example on sign-out.
 - A sheet's engine can call `showNativeSheet` itself: the new sheet is presented natively over
   it, and goes away with it.
+- Plugin UI (contact pickers, calendar editors, share sheets) appears over an open sheet even
+  when the plugin presents from the window's root view controller: Veneer sends a presentation
+  UIKit would refuse there to the sheet on top. `VeneerPlugin.forwardsPresentationsOverSheets`
+  turns it off.
 - For a `NativeSheetDetent.content()` detent, wrap the sheet's content in `NativeSheetContent`:
   UIKit sizes the sheet to it.
 - Inside, a `NativeNavigationBar` is a real `UINavigationBar` placed per Apple's sheet

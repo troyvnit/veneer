@@ -237,6 +237,16 @@ final class NativeSheetPresenter {
     return true
   }
 
+  /// Where a presentation aimed at [controller] should go instead: the
+  /// topmost view controller over a native sheet [controller] presents, or
+  /// nil when [controller] isn't presenting one.
+  func presentationTarget(for controller: UIViewController) -> UIViewController? {
+    guard let presented = controller.presentedViewController, !presented.isBeingDismissed,
+      sessions.values.contains(where: { $0.controller === presented })
+    else { return nil }
+    return Self.topmost(presented)
+  }
+
   /// The session whose sheet shows [controller] (called from the sheet's own
   /// engine, to dismiss itself).
   func session(showing controller: UIViewController?) -> NativeSheetSession? {

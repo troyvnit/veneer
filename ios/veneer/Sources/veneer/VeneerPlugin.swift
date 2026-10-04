@@ -30,6 +30,13 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
   /// ```
   public static var sheetPluginRegistrant: ((FlutterPluginRegistry) -> Void)?
 
+  /// Whether a presentation aimed at a view controller that already presents
+  /// a native sheet goes to the sheet on top. UIKit refuses those, and
+  /// plugins usually present from the window's root view controller, so
+  /// their pickers and editors would never appear over a sheet. On by
+  /// default; presentations UIKit would accept are never redirected.
+  public static var forwardsPresentationsOverSheets = true
+
   /// Live instances by id, for the FFI entry point to route each engine's
   /// frames to its own overlay.
   private static var instances: [Int: WeakPlugin] = [:]
@@ -74,6 +81,7 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
   }
 
   public static func register(with registrar: FlutterPluginRegistrar) {
+    _ = UIViewController.veneerForwardPresentations
     let channel = FlutterMethodChannel(name: "veneer", binaryMessenger: registrar.messenger())
     let instance = VeneerPlugin(registrar: registrar, channel: channel)
     registrar.addMethodCallDelegate(instance, channel: channel)

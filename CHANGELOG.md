@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.7.2
+
+- **Plugin UI over sheets:** a presentation aimed at a view controller that already presents a
+  native sheet now goes to the sheet on top. Plugins usually present from the window's root view
+  controller (contact pickers, calendar editors, share sheets), and UIKit refuses that while a
+  sheet is up, so their UI never appeared. Presentations UIKit would accept are untouched;
+  `VeneerPlugin.forwardsPresentationsOverSheets = false` turns it off.
+
 ## 0.7.1
 
 - **Sheet appearance:** inside a native sheet, `NativeSheet.appeared` turns true once the sheet has
