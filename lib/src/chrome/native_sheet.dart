@@ -979,6 +979,11 @@ class _RenderContentSizedBox extends RenderProxyBox {
         parentUsesSize: true,
       );
     }
+    // A sheet's engine lays out once before its view has a size: content
+    // squeezed to no width measures absurdly tall, and a sheet presented at
+    // that height (then shrinking) leaves a sheet it covers stacked behind
+    // the tall one, hidden.
+    if (size.width <= 0) return;
     if (_reported == null || (_reported! - natural).abs() >= 0.5) {
       _reported = natural;
       // Heights feed the sheet's layout, so report after this frame.

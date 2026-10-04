@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.1
+
+- **Fix:** a content-sized sheet presented over another sheet no longer hides it. The sheet's
+  engine lays out once before its view has a width, and `NativeSheetContent` reported that
+  squeezed, screen-tall height; the sheet slid up at full height and then shrank, leaving the
+  sheet under it stacked behind the tall one. Measurements now wait for a real width.
+
 ## 0.6.0
 
 - **Sheet requests:** a native sheet can ask the app that presented it for something while it's

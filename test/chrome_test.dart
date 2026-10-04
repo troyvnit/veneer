@@ -460,6 +460,34 @@ void main() {
     expect(sent('sheetContentHeight').last['height'], 260);
   });
 
+  testWidgets('NativeSheetContent reports nothing until its view has a width', variant: ios, (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(0, 852);
+    tester.view.display.size = const Size(393, 852);
+    addTearDown(tester.view.reset);
+    addTearDown(tester.view.display.reset);
+    VeneerBridge.instance.isSheetEngine = true;
+    addTearDown(() => VeneerBridge.instance.isSheetEngine = false);
+
+    // Squeezed to no width, wrapping content grows as tall as the screen.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeSheetContent(
+          child: LayoutBuilder(
+            builder: (context, constraints) => SizedBox(height: constraints.maxWidth > 0 ? 120 : 852),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(sent('sheetContentHeight'), isEmpty);
+
+    tester.view.physicalSize = const Size(393, 852);
+    await tester.pump();
+    await tester.pump();
+    expect(sent('sheetContentHeight').map((call) => call['height']), [120]);
+  });
+
   testWidgets('NativeSheetContent measures past a sheet that is still too short for it', variant: ios, (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(393, 300);
