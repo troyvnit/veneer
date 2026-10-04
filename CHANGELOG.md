@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.3
+
+- **Flutter sheet stacking matches UIKit:** a Flutter-drawn sheet at its large detent now meets the
+  status bar, as UIKit's does, instead of stopping 10pt lower. A sheet that comes up over another
+  sheet stops 10pt lower, so the one behind shows above it. The sheet behind keeps its top edge and
+  shrinks 9% (was: lifted 10pt and shrank 6%), measured against UIKit sheets on iOS 26.
+
 ## 0.7.2
 
 - **Plugin UI over sheets:** a presentation aimed at a view controller that already presents a

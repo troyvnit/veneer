@@ -605,14 +605,33 @@ void main() {
     );
     await tester.pumpAndSettle();
     final behind = tester.getRect(find.byKey(const Key('back')));
-    expect(behind.top, lessThan(alone.top - 5));
-    expect(behind.width, lessThan(alone.width - 10));
+    expect(behind.top, moreOrLessEquals(alone.top));
+    expect(behind.width, moreOrLessEquals(alone.width * 0.91));
     expect(grabberOpacity(), 0);
 
     navigator.pop();
     await tester.pumpAndSettle();
     expect(tester.getRect(find.byKey(const Key('back'))), alone);
     expect(grabberOpacity(), 1);
+  });
+
+  testWidgets('a large sheet meets the status bar, and one over it stops 10pt lower', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.padding = const FakeViewPadding(top: 59, bottom: 34);
+    tester.view.viewPadding = const FakeViewPadding(top: 59, bottom: 34);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Text('page'))));
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    navigator.push(NativeSheetRoute<void>(builder: (context) => const SizedBox.expand(key: Key('first'))));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byKey(const Key('first'))).top, 59);
+
+    navigator.push(NativeSheetRoute<void>(builder: (context) => const SizedBox.expand(key: Key('second'))));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byKey(const Key('second'))).top, 69);
+    expect(tester.getRect(find.byKey(const Key('first'))).top, moreOrLessEquals(59));
   });
 
   testWidgets('the replica bar fades its content only once scrolled under it', (tester) async {

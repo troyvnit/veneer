@@ -518,6 +518,16 @@ class NativeSheetRoute<T> extends PageRoute<T> {
     if (nextRoute != null) _coveredBySheet = nextRoute is NativeSheetRoute;
   }
 
+  /// Whether this sheet came up over another sheet: like UIKit's, its large
+  /// detent then stops a little lower, so the sheet behind peeks above it.
+  bool _overSheet = false;
+
+  @override
+  void didChangePrevious(Route<dynamic>? previousRoute) {
+    super.didChangePrevious(previousRoute);
+    _overSheet = previousRoute is NativeSheetRoute;
+  }
+
   /// The page behind recedes — scales back with rounded corners — while the
   /// sheet is at its large detent, as in UIKit. A sheet behind steps back on
   /// its own.
@@ -581,10 +591,12 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
   static const _largeRadius = 34.0;
   static const _dimAlpha = 0.28;
 
-  /// Under another sheet, UIKit's sheet shrinks and lifts so its top edge
-  /// peeks above the new one, its grabber hidden.
-  static const _stackedShrink = 0.06;
-  static const _stackedLift = 10.0;
+  /// Under another sheet, UIKit's sheet shrinks about its top edge, which
+  /// stays put and peeks above the new one, its grabber hidden.
+  static const _stackedShrink = 0.09;
+
+  /// How much lower a sheet over another sheet stops at its large detent.
+  static const _overSheetDrop = 10.0;
 
   late final AnimationController _height = AnimationController.unbounded(vsync: this);
   late final CurvedAnimation _present = CurvedAnimation(
@@ -659,8 +671,9 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
   void didChangeDependencies() {
     super.didChangeDependencies();
     final mq = MediaQuery.of(context);
-    // The large detent leaves the status bar and a sliver of the page behind.
-    _large = mq.size.height - mq.padding.top - 10;
+    // The large detent meets the status bar, as in UIKit; over another sheet
+    // it stops lower so that one's top edge shows.
+    _large = mq.size.height - mq.padding.top - (_route._overSheet ? _overSheetDrop : 0);
     _recomputeHeights();
     if (!_initialized) {
       _initialized = true;
@@ -925,73 +938,70 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
           right: inset,
           bottom: inset - displacement,
           height: height,
-          child: Transform.translate(
-            offset: Offset(0, -_stackedLift * stacked),
-            child: Transform.scale(
-              scale: 1 - _stackedShrink * stacked,
-              alignment: Alignment.topCenter,
-              child: Semantics(
-                scopesRoute: true,
-                explicitChildNodes: true,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onVerticalDragStart: (_) => _dragStart(),
-                  onVerticalDragUpdate: (d) => _dragBy(d.delta.dy),
-                  onVerticalDragEnd: (d) => _dragEnd(d.primaryVelocity ?? 0),
-                  onVerticalDragCancel: () => _dragEnd(0),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: radius,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: dark ? 0.45 : 0.14 * (1 - t) + 0.04),
-                          blurRadius: 40,
-                          offset: const Offset(0, 8),
+          child: Transform.scale(
+            scale: 1 - _stackedShrink * stacked,
+            alignment: Alignment.topCenter,
+            child: Semantics(
+              scopesRoute: true,
+              explicitChildNodes: true,
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onVerticalDragStart: (_) => _dragStart(),
+                onVerticalDragUpdate: (d) => _dragBy(d.delta.dy),
+                onVerticalDragEnd: (d) => _dragEnd(d.primaryVelocity ?? 0),
+                onVerticalDragCancel: () => _dragEnd(0),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: radius,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: dark ? 0.45 : 0.14 * (1 - t) + 0.04),
+                        blurRadius: 40,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: _sizesToContent
+                            ? _ContentSizedBox(maxHeight: _large, onMeasured: _contentMeasured, child: content)
+                            : content,
+                      ),
+                      // The sheet's rim: a hairline that keeps its rounded top
+                      // edge visible against a dark page behind, as UIKit's does.
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: ShapeDecoration(
+                              shape: RoundedSuperellipseBorder(
+                                borderRadius: radius,
+                                side: BorderSide(color: style.border, width: 1 / mq.devicePixelRatio * 2),
+                              ),
+                            ),
+                          ),
                         ),
-                      ],
-                    ),
-                    child: Stack(
-                      children: [
-                        Positioned.fill(
-                          child: _sizesToContent
-                              ? _ContentSizedBox(maxHeight: _large, onMeasured: _contentMeasured, child: content)
-                              : content,
-                        ),
-                        // The sheet's rim: a hairline that keeps its rounded top
-                        // edge visible against a dark page behind, as UIKit's does.
-                        Positioned.fill(
-                          child: IgnorePointer(
-                            child: DecoratedBox(
-                              decoration: ShapeDecoration(
-                                shape: RoundedSuperellipseBorder(
-                                  borderRadius: radius,
-                                  side: BorderSide(color: style.border, width: 1 / mq.devicePixelRatio * 2),
+                      ),
+                      if (grabber)
+                        Positioned(
+                          top: _grabberTop,
+                          left: 0,
+                          right: 0,
+                          child: Center(
+                            child: Opacity(
+                              opacity: 1 - stacked,
+                              child: Container(
+                                width: _grabberSize.width,
+                                height: _grabberSize.height,
+                                decoration: BoxDecoration(
+                                  color: style.secondaryLabel.withValues(alpha: 0.35),
+                                  borderRadius: BorderRadius.circular(_grabberSize.height / 2),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                        if (grabber)
-                          Positioned(
-                            top: _grabberTop,
-                            left: 0,
-                            right: 0,
-                            child: Center(
-                              child: Opacity(
-                                opacity: 1 - stacked,
-                                child: Container(
-                                  width: _grabberSize.width,
-                                  height: _grabberSize.height,
-                                  decoration: BoxDecoration(
-                                    color: style.secondaryLabel.withValues(alpha: 0.35),
-                                    borderRadius: BorderRadius.circular(_grabberSize.height / 2),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
               ),
