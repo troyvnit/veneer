@@ -207,7 +207,10 @@ final class NativeSheetPresenter {
     }
     let show = { [weak presenter, weak controller] in
       guard let presenter, let controller, controller.presentingViewController == nil else { return }
-      presenter.present(controller, animated: true, completion: warmNext)
+      presenter.present(controller, animated: true) {
+        VeneerPlugin.deliverSheetAppeared(to: controller)
+        warmNext()
+      }
     }
     if session.sizesToContent {
       // Let the content measure itself before the sheet comes up; it slides

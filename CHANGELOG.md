@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1
+
+- **Sheet appearance:** inside a native sheet, `NativeSheet.appeared` turns true once the sheet has
+  finished sliding up, and `NativeSheet.untilAppeared()` waits for it (at once outside native
+  sheets). UIKit won't present over a sheet mid-transition, so wait for it before showing native
+  UI, such as a payment sheet or a system picker, over a sheet as it opens.
+
 ## 0.7.0
 
 - **Messages to sheets:** `showNativeSheet(controller: NativeSheetController())` lets the app

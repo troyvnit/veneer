@@ -461,6 +461,29 @@ void main() {
     expect(controller.isOpen, isFalse);
   });
 
+  testWidgets('in a sheet engine, appeared turns true once the sheet has slid up', variant: ios, (tester) async {
+    VeneerBridge.instance.isSheetEngine = true;
+    addTearDown(() => VeneerBridge.instance.isSheetEngine = false);
+    var waited = false;
+    unawaited(NativeSheet.untilAppeared().then((_) => waited = true));
+
+    await nativeEvent('sheetPresented', {'payload': null});
+    await tester.pump();
+    expect((NativeSheet.appeared.value, waited), (false, false));
+
+    await nativeEvent('sheetAppeared', {});
+    await tester.pump();
+    expect((NativeSheet.appeared.value, waited), (true, true));
+
+    await nativeEvent('sheetHidden', {});
+    expect(NativeSheet.appeared.value, isFalse);
+  });
+
+  test('outside a native sheet, untilAppeared completes at once', () async {
+    await NativeSheet.untilAppeared();
+    expect(NativeSheet.appeared.value, isFalse);
+  });
+
   testWidgets('in a sheet engine, messages from the app arrive in NativeSheet.messages', variant: ios, (tester) async {
     VeneerBridge.instance.isSheetEngine = true;
     addTearDown(() => VeneerBridge.instance.isSheetEngine = false);

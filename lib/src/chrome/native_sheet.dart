@@ -391,6 +391,29 @@ abstract final class NativeSheet {
   /// native sheets.
   static ValueListenable<bool> get shown => VeneerBridge.instance.sheetShown;
 
+  /// Inside a native sheet: whether it has finished sliding up. UIKit won't
+  /// present over a sheet mid-transition, so wait for this before showing
+  /// native UI over it (a payment sheet, a system picker) as it opens.
+  /// Always false outside native sheets; see [untilAppeared].
+  static ValueListenable<bool> get appeared => VeneerBridge.instance.sheetAppeared;
+
+  /// Completes once the native sheet running this code has finished sliding
+  /// up, or at once outside native sheets (a Flutter sheet doesn't hold up
+  /// UIKit presentations).
+  static Future<void> untilAppeared() {
+    final appeared = VeneerBridge.instance.sheetAppeared;
+    if (!isNativeSheet || appeared.value) return Future.value();
+    final done = Completer<void>();
+    void check() {
+      if (!appeared.value) return;
+      appeared.removeListener(check);
+      done.complete();
+    }
+
+    appeared.addListener(check);
+    return done.future;
+  }
+
   /// Inside a native sheet: the payload of each presentation as the sheet
   /// comes up — for a kept-alive sheet, every reopening. Empty outside
   /// native sheets.

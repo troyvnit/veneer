@@ -59,6 +59,9 @@ class VeneerBridge {
   /// sheet's engine keeps running while hidden.
   final ValueNotifier<bool> sheetShown = ValueNotifier(false);
 
+  /// In a native sheet's engine: whether its sheet has finished sliding up.
+  final ValueNotifier<bool> sheetAppeared = ValueNotifier(false);
+
   final StreamController<Object?> _sheetPresentations = StreamController.broadcast();
 
   /// In a native sheet's engine: the payload of each presentation, as the
@@ -109,6 +112,7 @@ class VeneerBridge {
     _tabBarCovered = false;
     _chromeHiddenSent = null;
     sheetShown.value = false;
+    sheetAppeared.value = false;
     sheetRequestHandler = null;
   }
 
@@ -487,9 +491,13 @@ class VeneerBridge {
         sheetMaximumHeight.value = (args['height']! as num).toDouble();
       case 'sheetPresented':
         sheetShown.value = true;
+        sheetAppeared.value = false;
         _sheetPresentations.add(args['payload']);
+      case 'sheetAppeared':
+        sheetAppeared.value = true;
       case 'sheetHidden':
         sheetShown.value = false;
+        sheetAppeared.value = false;
       case 'sheetMessage':
         _sheetMessages.add(args['message']);
       case 'sheetDetentChanged':

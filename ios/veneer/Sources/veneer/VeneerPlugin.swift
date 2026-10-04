@@ -305,6 +305,13 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
     }
   }
 
+  /// Tells the engine showing [controller] its sheet has finished sliding up.
+  static func deliverSheetAppeared(to controller: UIViewController) {
+    for plugin in instances.values.compactMap({ $0.plugin }) where plugin.registrar.viewController === controller {
+      plugin.channel.invokeMethod("sheetAppeared", arguments: nil)
+    }
+  }
+
   /// Tells a kept-alive sheet's engine its sheet closed while it runs on.
   static func deliverSheetHidden(to controller: UIViewController) {
     for plugin in instances.values.compactMap({ $0.plugin }) where plugin.registrar.viewController === controller {
