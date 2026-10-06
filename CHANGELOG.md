@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.2
+
+- **Colour emoji in the composer replicas:** emoji that ask for colour presentation (U+FE0F), such
+  as ❤️, ☀️, ⚠️, keycaps and ZWJ sequences like ❤️‍🔥, now draw in the platform's colour emoji font.
+  Before, an app text font with its own glyph for the base character (e.g. ❤) drew them in black.
+  Highlights and the keyboard's composing underline still apply.
+
 ## 0.9.1
 
 - **Tab bar handoff:** when `NativeChromeScope`s overlap — a route replacing the page holding one with

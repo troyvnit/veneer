@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart' show CupertinoSheetRoute;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
@@ -989,7 +990,9 @@ class _FallbackComposerState extends State<_FallbackComposer> implements _Compos
 }
 
 /// The fallbacks' text: [highlights] drawn in [highlightColor], as the
-/// native composers draw them.
+/// native composers draw them, and emoji that ask for colour presentation
+/// (U+FE0F) drawn in the colour emoji font, as UIKit does — otherwise a text
+/// font with its own glyph (e.g. ❤ in many brand fonts) draws them in black.
 class _HighlightingTextController extends TextEditingController {
   _HighlightingTextController.fromValue(super.value) : super.fromValue();
 
@@ -1000,26 +1003,70 @@ class _HighlightingTextController extends TextEditingController {
   TextSpan buildTextSpan({required BuildContext context, TextStyle? style, required bool withComposing}) {
     final color = highlightColor;
     final tokens = highlights.where((t) => t.isNotEmpty).toList();
-    if (color == null || tokens.isEmpty || (withComposing && value.isComposingRangeValid)) {
+    final composing = withComposing && value.isComposingRangeValid;
+    final highlighting = color != null && tokens.isNotEmpty && !composing;
+    if (!highlighting && !text.contains('\uFE0F')) {
       return super.buildTextSpan(context: context, style: style, withComposing: withComposing);
     }
-    final ranges = _highlightRanges(text, tokens);
-    if (ranges.isEmpty) return TextSpan(style: style, text: text);
-    final children = <TextSpan>[];
-    var cursor = 0;
-    for (final range in ranges) {
-      if (range.start > cursor) children.add(TextSpan(text: text.substring(cursor, range.start)));
-      children.add(
-        TextSpan(
-          text: text.substring(range.start, range.end),
-          style: TextStyle(color: color),
-        ),
-      );
-      cursor = range.end;
+
+    final segments = <(TextRange, TextStyle?)>[];
+    if (composing) {
+      final range = value.composing;
+      segments
+        ..add((TextRange(start: 0, end: range.start), null))
+        ..add((range, const TextStyle(decoration: TextDecoration.underline)))
+        ..add((TextRange(start: range.end, end: text.length), null));
+    } else {
+      var cursor = 0;
+      for (final range in highlighting ? _highlightRanges(text, tokens) : const <TextRange>[]) {
+        segments
+          ..add((TextRange(start: cursor, end: range.start), null))
+          ..add((range, TextStyle(color: color)));
+        cursor = range.end;
+      }
+      segments.add((TextRange(start: cursor, end: text.length), null));
     }
-    if (cursor < text.length) children.add(TextSpan(text: text.substring(cursor)));
-    return TextSpan(style: style, children: children);
+
+    return TextSpan(
+      style: style,
+      children: [
+        for (final (range, segmentStyle) in segments)
+          if (!range.isCollapsed) ..._colorEmojiSpans(range.textInside(text), segmentStyle),
+      ],
+    );
   }
+}
+
+/// Emoji sequences that carry U+FE0F, with any ZWJ partners and keycap.
+final RegExp _colorEmojiSequence = RegExp(
+  r'(?:[^\s\uFE0F\u200D][\uFE0F\u{1F3FB}-\u{1F3FF}]?\u200D)*'
+  r'[^\s\uFE0F\u200D]\uFE0F\u20E3?'
+  r'(?:\u200D[^\s\uFE0F\u200D][\uFE0F\u{1F3FB}-\u{1F3FF}]?)*',
+  unicode: true,
+);
+
+const _colorEmojiFonts = ['Apple Color Emoji', 'Noto Color Emoji'];
+
+/// [text] in [style], with its colour-presentation emoji in the platform's
+/// colour emoji font.
+List<TextSpan> _colorEmojiSpans(String text, TextStyle? style) {
+  if (!text.contains('\uFE0F')) return [TextSpan(text: text, style: style)];
+  final emojiStyle = (style ?? const TextStyle()).copyWith(
+    fontFamily: switch (defaultTargetPlatform) {
+      TargetPlatform.iOS || TargetPlatform.macOS => _colorEmojiFonts.first,
+      _ => _colorEmojiFonts.last,
+    },
+    fontFamilyFallback: _colorEmojiFonts,
+  );
+  final spans = <TextSpan>[];
+  var cursor = 0;
+  for (final match in _colorEmojiSequence.allMatches(text)) {
+    if (match.start > cursor) spans.add(TextSpan(text: text.substring(cursor, match.start), style: style));
+    spans.add(TextSpan(text: match[0], style: emojiStyle));
+    cursor = match.end;
+  }
+  if (cursor < text.length) spans.add(TextSpan(text: text.substring(cursor), style: style));
+  return spans;
 }
 
 /// Where [tokens] occur in [text], longest first so a token inside a longer

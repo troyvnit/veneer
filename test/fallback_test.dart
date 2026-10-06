@@ -795,6 +795,46 @@ void main() {
     expect(tinted, ['@Kat QA Technician'], reason: 'the longer mention wins over the one inside it');
   });
 
+  testWidgets('composer replica draws colour-presentation emoji in the emoji font', (tester) async {
+    final controller = NativeComposerController();
+    const tint = Color(0xFF5B5BD6);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          resizeToAvoidBottomInset: false,
+          body: NativePromptComposer(
+            controller: controller,
+            tintColor: tint,
+            highlights: const ['@Kat'],
+            child: const SizedBox.expand(),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'I ❤️ @Kat ❤️‍🔥 and ❤');
+    await tester.pump();
+
+    final field = tester.widget<TextField>(find.byType(TextField));
+    final context = tester.element(find.byType(TextField));
+    Map<String, TextStyle?> styles(bool withComposing) => {
+      for (final child
+          in field.controller!.buildTextSpan(context: context, withComposing: withComposing).children!.cast<TextSpan>())
+        child.text!: child.style,
+    };
+
+    final plain = styles(false);
+    expect(plain['❤️']?.fontFamily, isNotNull);
+    expect(plain['❤️‍🔥']?.fontFamily, plain['❤️']?.fontFamily);
+    expect(plain['@Kat']?.color, tint);
+    expect(plain[' and ❤']?.fontFamily, isNull, reason: 'no U+FE0F, text presentation stays');
+
+    field.controller!.value = field.controller!.value.copyWith(composing: const TextRange(start: 0, end: 1));
+    final composing = styles(true);
+    expect(composing['I']?.decoration, TextDecoration.underline);
+    expect(composing['❤️']?.fontFamily, isNotNull);
+  });
+
   testWidgets('a style\'s shadows replace the default under fallback surfaces', (tester) async {
     const shadows = [BoxShadow(color: Color(0x14000000), offset: Offset(0, 8), blurRadius: 16, spreadRadius: -4)];
     final style = VeneerFallbackStyle.iosLight.copyWith(shadows: shadows);
