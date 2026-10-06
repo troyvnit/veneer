@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.0
+
+- **Search field:** `NativeSearchField` is a real `UISearchTextField` on Liquid Glass, positioned by
+  Flutter layout like a `GlassShape`. UIKit draws the magnifier, placeholder, clear button and caret
+  and owns the keyboard; text syncs both ways through a `TextEditingController`, with `onChanged`,
+  `onSubmitted` and `onFocusChanged`, and `NativeSearchFieldState.focus()` / `unfocus()`. Off iOS 26
+  it renders a Flutter field of the same height.
+- **Segment bar:** `GlassSegmentBar` is one glass capsule holding a row of icon (or emoji) buttons,
+  with a highlight that springs to the selected segment, reporting taps through `onSelected`. Off
+  iOS 26 it renders the same capsule in Flutter.
+- **Icon fallbacks:** `leaf`, `fork.knife`, `soccerball`, `airplane` and `flag` now map to Material
+  icons off iOS 26.
+
 ## 0.8.0
 
 - **Voice clip attachments:** `NativeComposerAttachment(audio: NativeComposerAudio(...))` shows the

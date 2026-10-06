@@ -63,6 +63,12 @@ final class VeneerOverlayView: UIView {
     glassLayer.onShapeMenu = { [weak self] id, index in
       self?.onEvent?("shapeMenu", ["id": id, "index": index])
     }
+    glassLayer.onShapeSearch = { [weak self] id, kind, value in
+      self?.onEvent?("shapeSearch", ["id": id, "kind": kind, "value": value])
+    }
+    glassLayer.onShapeSegment = { [weak self] id, index in
+      self?.onEvent?("shapeSegment", ["id": id, "index": index])
+    }
     addSubview(glassLayer)
     glassLayer.contextMenus = contextMenus
     contextMenus.onEvent = { [weak self] method, payload in self?.onEvent?(method, payload) }

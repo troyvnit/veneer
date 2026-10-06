@@ -43,7 +43,7 @@ behaviour, so one codebase serves every platform.
 - [Components](#components)
   - [Tab bar](#tab-bar) · [Navigation bar](#navigation-bar) · [Composer](#composer) ·
     [Prompt composer](#prompt-composer) · [Sheets](#sheets) · [Menus](#menus) ·
-    [Glass shapes](#glass-shapes) · [Icons](#icons)
+    [Glass shapes](#glass-shapes) · [Search field](#search-field) · [Segment bar](#segment-bar) · [Icons](#icons)
 - [Android and older iOS](#android-and-older-ios)
 - [Limitations](#limitations)
 - [Example app](#example-app)
@@ -462,6 +462,49 @@ Stack(children: [
   neighbours. Groups stack by `zIndex`; shapes outside a group join their route's group.
 - Glass honours Flutter clips (`ClipRect`, `ClipRRect`, `ClipOval`, scroll viewports).
 - Glass always draws above Flutter content: Flutter widgets placed under a shape are refracted by it.
+
+### Search field
+
+```dart
+final search = GlobalKey<NativeSearchFieldState>();
+
+NativeSearchField(
+  key: search,
+  placeholder: 'Search all emoji',
+  controller: queryController,
+  onChanged: (query) => setState(() => this.query = query),
+  onSubmitted: (_) => search.currentState?.unfocus(),
+)
+```
+
+- A real `UISearchTextField` inside a glass capsule, positioned by Flutter layout like a
+  `GlassShape`: UIKit draws the magnifier, placeholder, clear button and caret, and owns the keyboard.
+- Text flows both ways through the `controller`: typing updates it, and setting `controller.text`
+  (e.g. clearing it) updates the native field. `onChanged`, `onSubmitted` and `onFocusChanged` report
+  the user's edits; `NativeSearchFieldState.focus()` / `unfocus()` move the keyboard.
+- Off iOS 26 it renders a Flutter field of the same height on the fallback surface.
+
+### Segment bar
+
+```dart
+GlassSegmentBar(
+  segments: const [
+    GlassSegment(icon: NativeIcon.symbol('clock'), label: 'Recent'),
+    GlassSegment(icon: NativeIcon.symbol('face.smiling'), label: 'Smileys'),
+    GlassSegment(icon: NativeIcon.symbol('leaf'), label: 'Nature'),
+  ],
+  selectedIndex: section,
+  onSelected: jumpToSection,
+)
+```
+
+- One glass capsule holding a row of native buttons, with a highlight capsule that springs to the
+  selected segment — like an emoji keyboard's category bar.
+- Segments show an icon, or a short label (e.g. an emoji) when there is no icon; with an icon the
+  label is its accessibility label. `foreground`, `selectedForeground` and `selectionColor` default
+  to the system's secondary label, label and an adaptive light capsule.
+- The bar is `segments.length * segmentWidth` wide plus its padding. Off iOS 26 it renders the same
+  capsule in Flutter.
 
 ### Icons
 

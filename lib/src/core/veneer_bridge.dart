@@ -76,6 +76,8 @@ class VeneerBridge {
 
   final Map<int, VoidCallback> _shapeTapHandlers = {};
   final Map<int, ValueChanged<int>> _shapeMenuHandlers = {};
+  final Map<int, VeneerSearchHandlers> _shapeSearchHandlers = {};
+  final Map<int, ValueChanged<int>> _shapeSegmentHandlers = {};
   final Map<int, VeneerContextMenuHandlers> _contextMenuHandlers = {};
   ValueChanged<int>? _tabSelectedHandler;
   VoidCallback? _tabActionHandler;
@@ -103,6 +105,8 @@ class VeneerBridge {
     _ffiBuffer = null;
     _shapeTapHandlers.clear();
     _shapeMenuHandlers.clear();
+    _shapeSearchHandlers.clear();
+    _shapeSegmentHandlers.clear();
     _contextMenuHandlers.clear();
     _tabSelectedHandler = null;
     _tabActionHandler = null;
@@ -197,8 +201,24 @@ class VeneerBridge {
     }
   }
 
-  Future<void> configureShape(Map<String, Object?> config, VoidCallback? onTap, {ValueChanged<int>? onMenu}) async {
+  Future<void> configureShape(
+    Map<String, Object?> config,
+    VoidCallback? onTap, {
+    ValueChanged<int>? onMenu,
+    VeneerSearchHandlers? onSearch,
+    ValueChanged<int>? onSegment,
+  }) async {
     final id = config['id']! as int;
+    if (onSegment != null) {
+      _shapeSegmentHandlers[id] = onSegment;
+    } else {
+      _shapeSegmentHandlers.remove(id);
+    }
+    if (onSearch != null) {
+      _shapeSearchHandlers[id] = onSearch;
+    } else {
+      _shapeSearchHandlers.remove(id);
+    }
     if (onMenu != null) {
       _shapeMenuHandlers[id] = onMenu;
     } else {
@@ -216,8 +236,16 @@ class VeneerBridge {
   Future<void> removeShape(int id) async {
     _shapeTapHandlers.remove(id);
     _shapeMenuHandlers.remove(id);
+    _shapeSearchHandlers.remove(id);
+    _shapeSegmentHandlers.remove(id);
     if (!_attached) return;
     await _channel.invokeMethod<void>('removeShape', {'id': id});
+  }
+
+  /// Drives a search shape's native field: `focus`, `blur` or `clear`.
+  Future<void> searchCommand(int id, String command) async {
+    if (!_attached) return;
+    await _channel.invokeMethod<void>('searchCommand', {'id': id, 'command': command});
   }
 
   /// A long-press context menu region; its geometry rides the glass frames.
@@ -452,6 +480,18 @@ class VeneerBridge {
         _shapeTapHandlers[args['id']]?.call();
       case 'shapeMenu':
         _shapeMenuHandlers[args['id']]?.call(args['index']! as int);
+      case 'shapeSegment':
+        _shapeSegmentHandlers[args['id']]?.call(args['index']! as int);
+      case 'shapeSearch':
+        final handlers = _shapeSearchHandlers[args['id']];
+        switch (args['kind']) {
+          case 'text':
+            handlers?.onChanged(args['value'] as String? ?? '');
+          case 'submit':
+            handlers?.onSubmitted(args['value'] as String? ?? '');
+          case 'focus':
+            handlers?.onFocusChanged(args['value'] == true);
+        }
       case 'contextMenuItem':
         _contextMenuHandlers[args['id']]?.onSelected(args['index']! as int);
       case 'contextMenuShown':
@@ -530,6 +570,19 @@ TextSelection? _selection(Map<Object?, Object?> args) {
 }
 
 /// Callbacks from the native composer.
+class VeneerSearchHandlers {
+  const VeneerSearchHandlers({required this.onChanged, required this.onSubmitted, required this.onFocusChanged});
+
+  /// The text changed as the user typed, cleared or pasted.
+  final ValueChanged<String> onChanged;
+
+  /// The keyboard's search key was pressed.
+  final ValueChanged<String> onSubmitted;
+
+  /// The field gained (true) or lost (false) the keyboard.
+  final ValueChanged<bool> onFocusChanged;
+}
+
 class VeneerContextMenuHandlers {
   const VeneerContextMenuHandlers({required this.onSelected, required this.onOpenChanged});
 

@@ -135,6 +135,12 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
       overlay?.glassLayer.configure(GlassShapeConfig(args))
       result(nil)
 
+    case "searchCommand":
+      if let id = (args["id"] as? NSNumber)?.intValue, let command = args["command"] as? String {
+        overlay?.glassLayer.searchCommand(id: id, command: command)
+      }
+      result(nil)
+
     case "removeShape":
       if let id = (args["id"] as? NSNumber)?.intValue { overlay?.glassLayer.remove(id: id) }
       result(nil)

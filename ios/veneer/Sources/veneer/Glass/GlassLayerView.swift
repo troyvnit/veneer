@@ -15,6 +15,10 @@ struct GlassShapeConfig {
   var foreground: UIColor?
   /// Dart menu items (`NativeMenu`); tapping opens a `UIMenu`.
   var menu: Any?
+  /// Turns the shape into a search field on its glass.
+  var search: GlassSearchConfig?
+  /// Turns the shape into a row of tappable segments with a highlight.
+  var segments: GlassSegmentsConfig?
 
   init(_ args: [String: Any]) {
     id = (args["id"] as? NSNumber)?.intValue ?? -1
@@ -28,6 +32,50 @@ struct GlassShapeConfig {
     label = args["label"] as? String
     foreground = (args["foreground"] as? NSNumber).map(UIColor.init(argb:))
     menu = args["menu"]
+    search = (args["search"] as? [String: Any]).map(GlassSearchConfig.init)
+    segments = (args["segments"] as? [String: Any]).map(GlassSegmentsConfig.init)
+  }
+}
+
+@available(iOS 26.0, *)
+struct GlassSegmentsConfig {
+  struct Item {
+    var icon: NativeIconDescriptor?
+    var label: String?
+  }
+
+  var items: [Item]
+  var selected: Int
+  var iconSize: CGFloat
+  var padding: CGFloat
+  var foreground: UIColor?
+  var selectedForeground: UIColor?
+  var selectionColor: UIColor?
+  /// Identifies the item contents, so buttons are rebuilt only when they change.
+  var signature: String
+
+  init(_ args: [String: Any]) {
+    let raw = args["items"] as? [[String: Any]] ?? []
+    items = raw.map { Item(icon: NativeIconDescriptor($0["icon"]), label: $0["label"] as? String) }
+    selected = (args["selected"] as? NSNumber)?.intValue ?? -1
+    iconSize = CGFloat((args["iconSize"] as? NSNumber)?.doubleValue ?? 20)
+    padding = CGFloat((args["padding"] as? NSNumber)?.doubleValue ?? 4)
+    foreground = (args["foreground"] as? NSNumber).map(UIColor.init(argb:))
+    selectedForeground = (args["selectedForeground"] as? NSNumber).map(UIColor.init(argb:))
+    selectionColor = (args["selectionColor"] as? NSNumber).map(UIColor.init(argb:))
+    signature = raw.map { "\($0["icon"] ?? "")|\($0["label"] ?? "")" }.joined(separator: ";")
+      + "|\(iconSize)"
+  }
+}
+
+@available(iOS 26.0, *)
+struct GlassSearchConfig {
+  var placeholder: String
+  var text: String
+
+  init(_ args: [String: Any]) {
+    placeholder = args["placeholder"] as? String ?? ""
+    text = args["text"] as? String ?? ""
   }
 }
 
@@ -71,6 +119,10 @@ final class GlassLayerView: UIView {
   var onShapeTapped: ((Int) -> Void)?
   /// A shape's menu item was picked: shape id, item index.
   var onShapeMenu: ((Int, Int) -> Void)?
+  /// A search shape's field changed: shape id, `text` / `submit` / `focus`, value.
+  var onShapeSearch: ((Int, String, Any) -> Void)?
+  /// A segment of a segment bar was tapped: shape id, segment index.
+  var onShapeSegment: ((Int, Int) -> Void)?
   /// Context-menu regions ride the same frames as shapes.
   weak var contextMenus: ContextMenuRegions?
 
@@ -144,11 +196,17 @@ final class GlassLayerView: UIView {
       let view = GlassShapeView(id: config.id)
       view.onTap = { [weak self] id in self?.onShapeTapped?(id) }
       view.onMenu = { [weak self] id, index in self?.onShapeMenu?(id, index) }
+      view.onSearch = { [weak self] id, kind, value in self?.onShapeSearch?(id, kind, value) }
+      view.onSegment = { [weak self] id, index in self?.onShapeSegment?(id, index) }
       shapes[config.id] = view
       return view
     }()
     place(shape, group: config.group, clip: shape.clipId)
     shape.apply(config)
+  }
+
+  func searchCommand(id: Int, command: String) {
+    shapes[id]?.searchCommand(command)
   }
 
   func remove(id: Int) {

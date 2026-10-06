@@ -11,6 +11,10 @@
 ///   * [showNativeSheet] — real UIKit sheets hosting Flutter content;
 ///   * [GlassShape] and [GlassGroup] — Liquid Glass positioned by Flutter
 ///     layout, merging within groups and honouring Flutter clips.
+///   * [NativeSearchField] — a real `UISearchTextField` on glass, positioned
+///     by Flutter layout.
+///   * [GlassSegmentBar] — a row of icons on one glass capsule with a sliding
+///     selection highlight.
 ///
 /// Icons everywhere are [NativeIcon]s — SF Symbols, IconData, SVG or images,
 /// all rendered by UIKit. On Android and iOS 15–25 every widget renders a
@@ -31,7 +35,9 @@ export 'src/core/native_icon.dart';
 export 'src/core/native_menu.dart' show NativeMenuItem;
 export 'src/core/veneer_bridge.dart' show SheetRequestHandler, VeneerBridge, VeneerTransport;
 export 'src/glass/glass_group.dart';
+export 'src/glass/glass_segment_bar.dart';
 export 'src/glass/glass_shape.dart';
+export 'src/glass/native_search_field.dart';
 
 abstract final class Veneer {
   /// Whether the native layer is available: iOS 26 or later. Elsewhere
