@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.1
+
+- **Tab bar handoff:** when `NativeChromeScope`s overlap — a route replacing the page holding one with
+  another, or a route with its own scope pushed over one — the newest scope drives the native tab bar.
+  An older scope going away no longer removes the newer one's bar or its tap handlers, and when the
+  newest goes, the one before it takes the bar back with its own tabs and covered state.
+
 ## 0.9.0
 
 - **Search field:** `NativeSearchField` is a real `UISearchTextField` on Liquid Glass, positioned by

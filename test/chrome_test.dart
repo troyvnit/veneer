@@ -366,6 +366,58 @@ void main() {
     expect(sent('setChromeHidden').last['hidden'], isFalse);
   });
 
+  testWidgets('replacing the tab bar page with another keeps the new bar', variant: ios, (tester) async {
+    final navigator = GlobalKey<NavigatorState>();
+    final picked = <String>[];
+    Widget scope(String name) => NativeChromeScope(
+      tabs: [NativeTabItem(title: name, icon: const NativeIcon.symbol('house'))],
+      selectedIndex: 0,
+      onTabSelected: (_) => picked.add(name),
+      child: const SizedBox(),
+    );
+    await tester.pumpWidget(MaterialApp(navigatorKey: navigator, home: scope('old')));
+    await tester.pumpAndSettle();
+
+    calls.clear();
+    navigator.currentState!.pushReplacement(MaterialPageRoute<void>(builder: (_) => scope('new')));
+    await tester.pumpAndSettle();
+
+    final tabBarCalls = calls.where((c) => c.method == 'setTabBar' || c.method == 'removeTabBar').toList();
+    expect(tabBarCalls.last.method, 'setTabBar');
+    expect((((tabBarCalls.last.arguments as Map)['items'] as List).single as Map)['title'], 'new');
+    expect(sent('setChromeHidden').lastOrNull?['hidden'] ?? false, isFalse);
+    await nativeEvent('tabSelected', {'index': 0});
+    expect(picked, ['new']);
+  });
+
+  testWidgets('a scope inside a route over another scope hands the bar back when it goes', variant: ios, (
+    tester,
+  ) async {
+    final navigator = GlobalKey<NavigatorState>();
+    final picked = <String>[];
+    Widget scope(String name) => NativeChromeScope(
+      tabs: [NativeTabItem(title: name, icon: const NativeIcon.symbol('house'))],
+      selectedIndex: 0,
+      onTabSelected: (_) => picked.add(name),
+      child: const SizedBox(),
+    );
+    await tester.pumpWidget(MaterialApp(navigatorKey: navigator, home: scope('first')));
+    await tester.pumpAndSettle();
+    navigator.currentState!.push(MaterialPageRoute<void>(builder: (_) => scope('second')));
+    await tester.pumpAndSettle();
+
+    calls.clear();
+    navigator.currentState!.pop();
+    await tester.pumpAndSettle();
+
+    final tabBarCalls = calls.where((c) => c.method == 'setTabBar' || c.method == 'removeTabBar').toList();
+    expect(tabBarCalls.last.method, 'setTabBar');
+    expect((((tabBarCalls.last.arguments as Map)['items'] as List).single as Map)['title'], 'first');
+    expect(sent('setChromeHidden').lastOrNull?['hidden'] ?? false, isFalse);
+    await nativeEvent('tabSelected', {'index': 0});
+    expect(picked, ['first']);
+  });
+
   testWidgets('a fresh attach shows chrome a previous isolate left hidden', variant: ios, (tester) async {
     await tester.pumpWidget(
       MaterialApp(

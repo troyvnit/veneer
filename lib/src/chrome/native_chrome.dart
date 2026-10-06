@@ -124,9 +124,19 @@ class NativeChromeScope extends StatefulWidget {
 class _NativeChromeScopeState extends State<NativeChromeScope> {
   final VeneerBridge _bridge = VeneerBridge.instance;
 
+  // There is one native tab bar. Scopes can overlap — a route replacing the
+  // page holding a scope with another one, or a route with its own scope
+  // pushed over it — so the newest live scope drives the bar, and when it
+  // goes the one before it takes the bar back. An older scope going away
+  // leaves a newer one's bar alone.
+  static final List<_NativeChromeScopeState> _live = [];
+
+  bool get _owns => identical(_live.lastOrNull, this);
+
   @override
   void initState() {
     super.initState();
+    _live.add(this);
     _bridge.chromeBottomInset.addListener(_onInset);
     _bridge.chromeTopInset.addListener(_onInset);
     _push();
@@ -141,7 +151,7 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
   String? _lastSent;
 
   void _push() {
-    if (!_bridge.isSupported) return;
+    if (!_bridge.isSupported || !_owns) return;
     final config = <String, Object?>{
       'items': [for (final t in widget.tabs) t._encode()],
       'action': widget.trailingAction?._encode(),
@@ -178,20 +188,32 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
   void _updateCovered() {
     // A route pushed over this page hides the bar, as UIKit's
     // hidesBottomBarWhenPushed does; it slides back as the route pops.
-    final covered = !isRouteOnTop(context);
-    if (covered != _covered && _bridge.isSupported) {
-      _covered = covered;
-      _bridge.setTabBarCovered(covered);
-    }
+    // Only the owning scope's page decides; the bridge drops repeats.
+    _covered = !isRouteOnTop(context);
+    if (_owns && _bridge.isSupported) _bridge.setTabBarCovered(_covered);
+  }
+
+  void _takeOver() {
+    _lastSent = null;
+    _push();
+    if (_bridge.isSupported) _bridge.setTabBarCovered(_covered);
   }
 
   @override
   void dispose() {
+    final owned = _owns;
+    _live.remove(this);
     _routes.dispose();
     _bridge.chromeBottomInset.removeListener(_onInset);
     _bridge.chromeTopInset.removeListener(_onInset);
-    if (_covered) _bridge.setTabBarCovered(false);
-    _bridge.removeTabBar();
+    if (owned) {
+      if (_live.lastOrNull case final next?) {
+        next._takeOver();
+      } else {
+        if (_covered) _bridge.setTabBarCovered(false);
+        _bridge.removeTabBar();
+      }
+    }
     super.dispose();
   }
 
