@@ -218,6 +218,66 @@ void main() {
     expect([command['selectionStart'], command['selectionEnd']], [11, 11]);
   });
 
+  testWidgets('prompt composer: an attachment summary is sent with the config', variant: ios, (tester) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: NativePromptComposer(
+          attachmentSummary: NativeComposerAttachmentSummary(
+            icon: NativeIcon.symbol('paperclip'),
+            foregroundColor: Color(0xFF000000),
+          ),
+          child: SizedBox(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(sent('setComposer').single['attachmentSummary'], {
+      'icon': const NativeIcon.symbol('paperclip').encode(),
+      'backgroundColor': null,
+      'foregroundColor': 0xFF000000,
+    });
+  });
+
+  testWidgets('prompt composer: an audio attachment sends its clip state', variant: ios, (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativePromptComposer(
+          attachments: [
+            NativeComposerAttachment(
+              id: 'clip',
+              onTap: () {},
+              audio: const NativeComposerAudio(
+                waveform: [0.2, 0.123456, 1.5],
+                progress: 0.5,
+                playing: true,
+                duration: '0:10',
+                backgroundColor: Color(0x0A000000),
+              ),
+            ),
+          ],
+          child: const SizedBox(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final attachment = (sent('setComposer').single['attachments']! as List).single as Map;
+    expect(attachment['tappable'], isTrue);
+    expect(attachment['audio'], {
+      'waveform': [0.2, 0.123, 1.0],
+      'progress': 0.5,
+      'playing': true,
+      'duration': '0:10',
+      'playIcon': null,
+      'pauseIcon': null,
+      'removeIcon': null,
+      'backgroundColor': 0x0A000000,
+      'waveColor': null,
+      'labelColor': null,
+    });
+  });
+
   testWidgets('prompt composer: config, menus, side actions and attachment removal', variant: ios, (tester) async {
     final events = <String>[];
     var removed = 0;

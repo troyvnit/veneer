@@ -54,6 +54,12 @@ final class NativePromptComposerView: ComposerBaseView {
     static let cornerRadius: CGFloat = 24
     static let attachmentTop: CGFloat = 12
     static let attachmentHeight: CGFloat = 60
+    static let summaryHeight: CGFloat = 24
+    static let summaryIconSize: CGFloat = 16
+    static let summarySymbolSize: CGFloat = 13
+    static let summaryGap: CGFloat = 4
+    /// Between the pill and the text before it.
+    static let summarySpacing: CGFloat = 8
     /// Glass closer than this merges (`UIGlassContainerEffect.spacing`);
     /// under the side spacing, so buttons at rest stand apart.
     static let glassMergeDistance: CGFloat = 8
@@ -70,6 +76,9 @@ final class NativePromptComposerView: ComposerBaseView {
   private let primaryButton = UIButton(configuration: .filled())
   private let sendSpinner = UIActivityIndicatorView(style: .medium)
   private let attachmentStrip = AttachmentStripView()
+  /// The attachments folded into `[📎 3]` while the prompt isn't focused.
+  private let summaryPill = UIButton(configuration: .plain())
+  private var summarySpec: [String: Any]?
   private var sideButtons: [SideGlassButton] = []
 
   private var leadingSpec: [String: Any]?
@@ -113,9 +122,16 @@ final class NativePromptComposerView: ComposerBaseView {
       self?.onEvent?("composerAttachmentTapped", ["id": id])
     }
 
+    summaryPill.alpha = 0
+    summaryPill.isUserInteractionEnabled = false
+    summaryPill.addAction(UIAction { [weak self] _ in
+      guard let self, self.textView.isEditable else { return }
+      self.focus()
+    }, for: .touchUpInside)
+
     sendSpinner.hidesWhenStopped = true
     sendSpinner.isUserInteractionEnabled = false
-    for v in [attachmentStrip, textView, leadingButton, primaryButton, sendSpinner] as [UIView] {
+    for v in [attachmentStrip, summaryPill, textView, leadingButton, primaryButton, sendSpinner] as [UIView] {
       capsule.contentView.addSubview(v)
     }
     recordingBar.edgeCenter = Metrics.edgeCenter
@@ -211,10 +227,54 @@ final class NativePromptComposerView: ComposerBaseView {
     let ids = attachments.map { $0["id"] as? String ?? "" }
     if ids != attachmentIds { animate = true }
     attachmentIds = ids
+    attachmentStrip.accent = accent
     attachmentStrip.update(attachments)
+
+    let summary = args["attachmentSummary"] as? [String: Any]
+    if (summary == nil) != (summarySpec == nil) { animate = true }
+    summarySpec = summary
+    configureSummaryPill()
 
     if !animate { applySideState() }
     return animate
+  }
+
+  private func configureSummaryPill() {
+    let foreground = (summarySpec?["foregroundColor"] as? NSNumber).map(UIColor.init(argb:)) ?? .label
+    var config = UIButton.Configuration.plain()
+    config.image = (icon(summarySpec?["icon"], symbolSize: Metrics.summarySymbolSize, imageSize: Metrics.summaryIconSize)
+      ?? UIImage(systemName: "paperclip"))?.withRenderingMode(.alwaysTemplate)
+    config.preferredSymbolConfigurationForImage = .init(pointSize: Metrics.summarySymbolSize, weight: .medium)
+    config.imagePadding = Metrics.summaryGap
+    config.contentInsets = NSDirectionalEdgeInsets(top: 2, leading: 4, bottom: 2, trailing: 8)
+    config.cornerStyle = .capsule
+    config.baseForegroundColor = foreground
+    config.background.backgroundColor =
+      (summarySpec?["backgroundColor"] as? NSNumber).map(UIColor.init(argb:)) ?? .quaternarySystemFill
+    var title = AttributedString("\(attachmentIds.count)")
+    title.font = .systemFont(ofSize: 15, weight: .medium)
+    config.attributedTitle = title
+    summaryPill.configuration = config
+    summaryPill.accessibilityLabel = "\(attachmentIds.count) attachments"
+  }
+
+  /// Attachments fold into the pill while the prompt isn't focused.
+  private var attachmentsCollapsed: Bool {
+    summarySpec != nil && !attachmentIds.isEmpty && !isEditingText && !isRecording
+  }
+
+  private var summaryReserve: CGFloat {
+    attachmentsCollapsed ? ceil(summaryPill.intrinsicContentSize.width) + Metrics.summarySpacing : 0
+  }
+
+  override func textViewDidBeginEditing(_ textView: UITextView) {
+    super.textViewDidBeginEditing(textView)
+    if summarySpec != nil, !attachmentIds.isEmpty { animateContentLayout() }
+  }
+
+  override func textViewDidEndEditing(_ textView: UITextView) {
+    super.textViewDidEndEditing(textView)
+    if summarySpec != nil, !attachmentIds.isEmpty { animateContentLayout() }
   }
 
   private func buttonImage(_ raw: Any?, imageSize: CGFloat) -> UIImage? {
@@ -310,7 +370,13 @@ final class NativePromptComposerView: ComposerBaseView {
   private func inlineTextWidth(capsuleWidth: CGFloat) -> CGFloat {
     let actions = sideShown ? 0 : CGFloat(actionButtons.count) * Metrics.actionSpacing
     let primary = primaryVisible ? Metrics.row : Metrics.textInset
-    return capsuleWidth - textLeading - actions - primary
+    return capsuleWidth - textLeading - actions - primary - summaryReserve
+  }
+
+  /// Where the inline text would end without the summary pill: the pill ends here.
+  private func textEnd(capsuleWidth: CGFloat) -> CGFloat {
+    let actions = sideShown ? 0 : CGFloat(actionButtons.count) * Metrics.actionSpacing
+    return capsuleWidth - actions - (primaryVisible ? Metrics.row : Metrics.textInset)
   }
 
   private var oneLineHeight: CGFloat { max(Metrics.row, ceil(lineHeight) + 2 * Metrics.textVerticalInset) }
@@ -318,7 +384,7 @@ final class NativePromptComposerView: ComposerBaseView {
   /// Wraps at the inline width, contains a line break, or has attachments.
   func isMultiline(capsuleWidth: CGFloat) -> Bool {
     if isRecording { return false }
-    if !attachmentIds.isEmpty || text.contains("\n") { return true }
+    if (!attachmentIds.isEmpty && !attachmentsCollapsed) || text.contains("\n") { return true }
     guard !text.isEmpty else { return false }
     let fitted = textView.sizeThatFits(
       CGSize(width: max(1, inlineTextWidth(capsuleWidth: capsuleWidth)), height: .greatestFiniteMagnitude)
@@ -327,7 +393,7 @@ final class NativePromptComposerView: ComposerBaseView {
   }
 
   private var attachmentsBlock: CGFloat {
-    attachmentIds.isEmpty ? 0 : Metrics.attachmentTop + Metrics.attachmentHeight
+    attachmentIds.isEmpty || attachmentsCollapsed ? 0 : Metrics.attachmentTop + Metrics.attachmentHeight
   }
 
   private func multilineTextHeight(capsuleWidth: CGFloat) -> CGFloat {
@@ -390,8 +456,22 @@ final class NativePromptComposerView: ComposerBaseView {
     primaryButton.transform = primaryVisible ? .identity : CGAffineTransform(scaleX: 0.5, y: 0.5)
     sendSpinner.center = primaryButton.center
 
-    attachmentStrip.frame = CGRect(x: 0, y: Metrics.attachmentTop, width: cw, height: Metrics.attachmentHeight)
-    attachmentStrip.alpha = attachmentIds.isEmpty ? 0 : 1
+    attachmentStrip.frame = CGRect(
+      x: 0,
+      y: Metrics.attachmentTop - AttachmentStripView.audioLift,
+      width: cw,
+      height: Metrics.attachmentHeight + AttachmentStripView.audioLift)
+    let collapsed = attachmentsCollapsed
+    attachmentStrip.alpha = attachmentIds.isEmpty || collapsed ? 0 : 1
+    attachmentStrip.isUserInteractionEnabled = !collapsed
+
+    let pillSize = summaryPill.intrinsicContentSize
+    summaryPill.bounds = CGRect(x: 0, y: 0, width: ceil(pillSize.width), height: Metrics.summaryHeight)
+    summaryPill.center = CGPoint(
+      x: textEnd(capsuleWidth: cw) - ceil(pillSize.width) / 2, y: rowTop + Metrics.row / 2)
+    summaryPill.alpha = collapsed ? 1 : 0
+    summaryPill.transform = collapsed ? .identity : CGAffineTransform(scaleX: 0.5, y: 0.5)
+    summaryPill.isUserInteractionEnabled = collapsed
 
     if multiline {
       let textHeight = multilineTextHeight(capsuleWidth: cw)
@@ -412,7 +492,7 @@ final class NativePromptComposerView: ComposerBaseView {
     leadingButton.alpha = recording ? 0 : 1
     textView.alpha = recording ? 0 : 1
     if recording {
-      for v in [primaryButton, attachmentStrip, sendSpinner] + actionButtons as [UIView] { v.alpha = 0 }
+      for v in [primaryButton, attachmentStrip, summaryPill, sendSpinner] + actionButtons as [UIView] { v.alpha = 0 }
     }
     for v in [leadingButton, primaryButton, textView] as [UIView] { v.isUserInteractionEnabled = !recording }
     if recording { for b in actionButtons { b.isUserInteractionEnabled = false } }
@@ -515,23 +595,31 @@ final class SideGlassButton: UIVisualEffectView {
   }
 }
 
-/// Attachments along the top of the multi-line composer: image tiles and
-/// file chips, each with a remove button. Tiles grow in and shrink out.
+/// Attachments along the top of the multi-line composer: image tiles, file
+/// chips and voice clip rows, each with a remove button. Tiles grow in and
+/// shrink out.
 @available(iOS 26.0, *)
 final class AttachmentStripView: UIScrollView {
   var onRemove: ((String) -> Void)?
   var onTap: ((String) -> Void)?
+  var accent: UIColor = .systemBlue {
+    didSet { for tile in tiles.values { tile.accent = accent } }
+  }
 
   private var tiles: [String: AttachmentTileView] = [:]
   private var order: [String] = []
   private static let spacing: CGFloat = 8
   private static let inset: CGFloat = 12
+  /// A voice clip row runs 8 pt from the composer's edges, 4 pt above the
+  /// tiles: the strip starts 4 pt higher so it can clip to its bounds.
+  private static let audioInset: CGFloat = 8
+  static let audioLift: CGFloat = 4
 
   override init(frame: CGRect) {
     super.init(frame: frame)
     showsHorizontalScrollIndicator = false
     alwaysBounceHorizontal = true
-    clipsToBounds = false
+    clipsToBounds = true
     contentInsetAdjustmentBehavior = .never
   }
 
@@ -552,6 +640,7 @@ final class AttachmentStripView: UIScrollView {
         tile.configure(spec)
       } else {
         let tile = AttachmentTileView(id: id)
+        tile.accent = accent
         tile.configure(spec)
         tile.onRemove = { [weak self] in self?.onRemove?(id) }
         tile.onTap = { [weak self] in self?.onTap?(id) }
@@ -567,12 +656,20 @@ final class AttachmentStripView: UIScrollView {
 
   override func layoutSubviews() {
     super.layoutSubviews()
-    var x = Self.inset
+    var x = order.first.flatMap { tiles[$0] }?.isAudio == true ? Self.audioInset : Self.inset
     for id in order {
       guard let tile = tiles[id] else { continue }
-      let size = CGSize(width: tile.preferredWidth, height: bounds.height)
+      let size: CGSize
+      let y: CGFloat
+      if tile.isAudio {
+        size = CGSize(width: max(0, bounds.width - 2 * Self.audioInset), height: AudioClipRowView.height)
+        y = 0
+      } else {
+        size = CGSize(width: tile.preferredWidth, height: bounds.height - Self.audioLift)
+        y = Self.audioLift
+      }
       tile.bounds = CGRect(origin: .zero, size: size)
-      tile.center = CGPoint(x: x + size.width / 2, y: size.height / 2)
+      tile.center = CGPoint(x: x + size.width / 2, y: y + size.height / 2)
       tile.alpha = 1
       tile.transform = .identity
       x += size.width + Self.spacing
@@ -582,12 +679,17 @@ final class AttachmentStripView: UIScrollView {
 }
 
 /// One attachment. Without a title it's a square image tile; with one, a chip
-/// with a thumbnail, the title and a subtitle.
+/// with a thumbnail, the title and a subtitle; with `audio`, a voice clip row.
 @available(iOS 26.0, *)
 final class AttachmentTileView: UIView {
   let id: String
   var onRemove: (() -> Void)?
   var onTap: (() -> Void)?
+  var accent: UIColor = .systemBlue {
+    didSet { audioRow?.accent = accent }
+  }
+  private(set) var isAudio = false
+  private var audioRow: AudioClipRowView?
 
   // A button, not a gesture recognizer: UIKit lets a button's tap win over
   // the capsule's focus tap, as it does for the remove button.
@@ -641,6 +743,14 @@ final class AttachmentTileView: UIView {
   required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
   func configure(_ spec: [String: Any]) {
+    if let audio = spec["audio"] as? [String: Any] {
+      configureAudio(audio, spec: spec)
+      return
+    }
+    isAudio = false
+    audioRow?.isHidden = true
+    thumbnailClip.isHidden = false
+    removeButton.isHidden = false
     let title = spec["title"] as? String
     let subtitle = spec["subtitle"] as? String
     isChip = !(title ?? "").isEmpty
@@ -676,6 +786,25 @@ final class AttachmentTileView: UIView {
     setNeedsLayout()
   }
 
+  private func configureAudio(_ audio: [String: Any], spec: [String: Any]) {
+    isAudio = true
+    let row = audioRow ?? {
+      let row = AudioClipRowView()
+      row.onPlay = { [weak self] in self?.onTap?() }
+      row.onRemove = { [weak self] in self?.onRemove?() }
+      addSubview(row)
+      audioRow = row
+      return row
+    }()
+    row.isHidden = false
+    row.accent = accent
+    row.configure(audio, loading: (spec["loading"] as? Bool) ?? false, tappable: (spec["tappable"] as? Bool) ?? false)
+    for v in [thumbnailClip, titleLabel, subtitleLabel, tapArea, removeButton] as [UIView] { v.isHidden = true }
+    backgroundColor = .clear
+    accessibilityLabel = spec["title"] as? String
+    setNeedsLayout()
+  }
+
   var preferredWidth: CGFloat {
     guard isChip else { return 60 }
     let text = max(titleLabel.intrinsicContentSize.width, subtitleLabel.isHidden ? 0 : subtitleLabel.intrinsicContentSize.width)
@@ -684,6 +813,10 @@ final class AttachmentTileView: UIView {
 
   override func layoutSubviews() {
     super.layoutSubviews()
+    if isAudio {
+      audioRow?.frame = bounds
+      return
+    }
     let h = bounds.height
     if isChip {
       let t = Self.chipThumbnail
@@ -707,6 +840,156 @@ final class AttachmentTileView: UIView {
     spinner.center = CGPoint(x: thumbnailClip.bounds.midX, y: thumbnailClip.bounds.midY)
     let r = Self.removeSize
     removeButton.frame = CGRect(x: bounds.width - r - 5, y: 5, width: r, height: r)
+  }
+}
+
+/// A voice clip in the attachment strip, 56 pt:
+/// `[(play) bars… 0:10 ×]` — a 40 pt circle in the accent, the waveform
+/// filling with the accent as it plays, the duration and a 32 pt remove
+/// button, 8 pt apart inside 8 pt padding, radius 16.
+@available(iOS 26.0, *)
+final class AudioClipRowView: UIView {
+  static let height: CGFloat = 56
+  private static let padding: CGFloat = 8
+  private static let spacing: CGFloat = 8
+  private static let play: CGFloat = 40
+  private static let remove: CGFloat = 32
+  private static let iconSize: CGFloat = 24
+  private static let symbolSize: CGFloat = 17
+  private static let waveHeight: CGFloat = 32
+
+  var onPlay: (() -> Void)?
+  var onRemove: (() -> Void)?
+  var accent: UIColor = .systemBlue {
+    didSet {
+      playButton.configuration?.baseBackgroundColor = accent
+      waveform.progressColor = accent
+    }
+  }
+
+  private let playButton = UIButton(configuration: .filled())
+  private let spinner = UIActivityIndicatorView(style: .medium)
+  private let waveform = AudioWaveformView()
+  private let durationLabel = UILabel()
+  private let removeButton = ExpandedHitButton(configuration: .plain())
+  private var isLoading = false
+  private var isTappable = false
+
+  init() {
+    super.init(frame: .zero)
+    layer.cornerRadius = 16
+    layer.cornerCurve = .continuous
+    playButton.configuration?.cornerStyle = .capsule
+    playButton.configuration?.contentInsets = .zero
+    playButton.configuration?.baseForegroundColor = .white
+    playButton.addAction(UIAction { [weak self] _ in
+      guard let self, self.isTappable, !self.isLoading else { return }
+      self.onPlay?()
+    }, for: .touchUpInside)
+    spinner.color = .white
+    spinner.hidesWhenStopped = true
+    playButton.addSubview(spinner)
+    durationLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+    removeButton.configuration?.contentInsets = .zero
+    removeButton.accessibilityLabel = "Remove"
+    removeButton.addAction(UIAction { [weak self] _ in self?.onRemove?() }, for: .touchUpInside)
+    for v in [playButton, waveform, durationLabel, removeButton] as [UIView] { addSubview(v) }
+  }
+
+  required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+  func configure(_ audio: [String: Any], loading: Bool, tappable: Bool) {
+    isLoading = loading
+    isTappable = tappable
+    let playing = (audio["playing"] as? Bool) ?? false
+    let label = (audio["labelColor"] as? NSNumber).map(UIColor.init(argb:)) ?? .label
+    backgroundColor = (audio["backgroundColor"] as? NSNumber).map(UIColor.init(argb:)) ?? .quaternarySystemFill
+    waveform.color = (audio["waveColor"] as? NSNumber).map(UIColor.init(argb:)) ?? .tertiaryLabel
+    waveform.samples = (audio["waveform"] as? [NSNumber])?.map { CGFloat(truncating: $0) } ?? []
+    waveform.progress = CGFloat((audio["progress"] as? NSNumber)?.doubleValue ?? 0)
+    durationLabel.text = audio["duration"] as? String
+    durationLabel.textColor = label
+    playButton.configuration?.baseBackgroundColor = accent
+    playButton.configuration?.image = loading
+      ? nil
+      : icon(audio[playing ? "pauseIcon" : "playIcon"], symbol: playing ? "pause.fill" : "play.fill")
+    playButton.accessibilityLabel = playing ? "Pause" : "Play"
+    removeButton.configuration?.image = icon(audio["removeIcon"], symbol: "xmark")
+    removeButton.configuration?.baseForegroundColor = label
+    if loading { spinner.startAnimating() } else { spinner.stopAnimating() }
+    setNeedsLayout()
+  }
+
+  private func icon(_ raw: Any?, symbol: String) -> UIImage? {
+    if let d = NativeIconDescriptor(raw) {
+      return NativeIconRenderer.shared.image(for: d, pointSize: d.isSymbol ? Self.symbolSize : Self.iconSize)?
+        .withRenderingMode(.alwaysTemplate)
+    }
+    return UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: Self.symbolSize))
+  }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let w = bounds.width, h = bounds.height, p = Self.padding
+    playButton.frame = CGRect(x: p, y: (h - Self.play) / 2, width: Self.play, height: Self.play)
+    spinner.center = CGPoint(x: Self.play / 2, y: Self.play / 2)
+    removeButton.frame = CGRect(x: w - p - Self.remove, y: (h - Self.remove) / 2, width: Self.remove, height: Self.remove)
+    let hasDuration = !(durationLabel.text ?? "").isEmpty
+    let labelWidth = hasDuration ? ceil(durationLabel.intrinsicContentSize.width) : 0
+    let labelX = removeButton.frame.minX - Self.spacing - labelWidth
+    durationLabel.frame = CGRect(x: labelX, y: 0, width: labelWidth, height: h)
+    let waveX = playButton.frame.maxX + Self.spacing
+    let waveEnd = (hasDuration ? labelX : removeButton.frame.minX) - Self.spacing
+    waveform.frame = CGRect(x: waveX, y: (h - Self.waveHeight) / 2, width: max(0, waveEnd - waveX), height: Self.waveHeight)
+  }
+}
+
+/// 2 pt rounded bars 1 pt apart, centred and at least 2 pt tall, each the
+/// peak of its share of `samples`; bars before `progress` in the accent.
+@available(iOS 26.0, *)
+final class AudioWaveformView: UIView {
+  private static let barWidth: CGFloat = 2
+  private static let gap: CGFloat = 1
+  private static let minHeight: CGFloat = 2
+
+  var samples: [CGFloat] = [] { didSet { if samples != oldValue { setNeedsDisplay() } } }
+  var progress: CGFloat = 0 { didSet { if progress != oldValue { setNeedsDisplay() } } }
+  var color: UIColor = .tertiaryLabel { didSet { if color != oldValue { setNeedsDisplay() } } }
+  var progressColor: UIColor = .systemBlue { didSet { if progressColor != oldValue { setNeedsDisplay() } } }
+
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    isOpaque = false
+    backgroundColor = .clear
+    contentMode = .redraw
+    isUserInteractionEnabled = false
+    registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: AudioWaveformView, _) in
+      view.setNeedsDisplay()
+    }
+  }
+
+  required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+  override func draw(_ rect: CGRect) {
+    let count = Int((bounds.width + Self.gap) / (Self.barWidth + Self.gap))
+    guard count > 0 else { return }
+    let played = progress * bounds.width
+    for i in 0..<count {
+      let height = max(Self.minHeight, sample(i, of: count) * bounds.height)
+      let x = CGFloat(i) * (Self.barWidth + Self.gap)
+      (x + Self.barWidth / 2 <= played ? progressColor : color).setFill()
+      UIBezierPath(
+        roundedRect: CGRect(x: x, y: (bounds.height - height) / 2, width: Self.barWidth, height: height),
+        cornerRadius: Self.barWidth / 2
+      ).fill()
+    }
+  }
+
+  private func sample(_ bar: Int, of count: Int) -> CGFloat {
+    guard !samples.isEmpty else { return 0 }
+    let start = min(bar * samples.count / count, samples.count - 1)
+    let end = min(max(start + 1, (bar + 1) * samples.count / count), samples.count)
+    return min(1, max(0, samples[start..<end].max() ?? 0))
   }
 }
 

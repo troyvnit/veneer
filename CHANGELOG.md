@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.8.0
+
+- **Voice clip attachments:** `NativeComposerAttachment(audio: NativeComposerAudio(...))` shows the
+  attachment as a full-width row in the prompt composer: a play/pause circle in the tint, a waveform
+  that fills with the tint as `progress` moves, the duration and a remove button. It sits 8pt from
+  the composer's edges, 56pt tall, in the space the tile strip already takes. The app plays the clip
+  and rebuilds with new values; the play/pause button calls `onTap`. Drawn natively on iOS 26 and by
+  the Flutter replica elsewhere.
+- **Attachments fold away while unfocused:** with `NativePromptComposer(attachmentSummary: ...)`, the
+  attachments collapse into a `[📎 3]` pill beside the buttons when the prompt loses focus (e.g. a
+  scroll dismissed the keyboard), so the composer goes back to one row. Focusing the prompt, or
+  tapping the pill, shows them again.
+
 ## 0.7.3
 
 - **Flutter sheet stacking matches UIKit:** a Flutter-drawn sheet at its large detent now meets the

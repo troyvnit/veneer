@@ -183,6 +183,106 @@ void main() {
     expect(calls, isEmpty);
   });
 
+  testWidgets('prompt composer replica: many attachments scroll inside the composer', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(400, 800), padding: EdgeInsets.only(bottom: 34)),
+          child: Scaffold(
+            resizeToAvoidBottomInset: false,
+            body: NativePromptComposer(
+              attachments: [
+                for (var i = 0; i < 12; i++)
+                  NativeComposerAttachment(id: '$i', thumbnail: const NativeIcon.symbol('photo')),
+              ],
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final strip = find.byType(ListView);
+    expect(tester.widget<ListView>(strip).clipBehavior, Clip.hardEdge);
+    final capsule = tester.getRect(find.byType(AnimatedContainer).first);
+    final stripRect = tester.getRect(strip);
+    expect(stripRect.left, greaterThanOrEqualTo(capsule.left));
+    expect(stripRect.right, lessThanOrEqualTo(capsule.right));
+  });
+
+  testWidgets('prompt composer replica: unfocused, attachments fold into a count pill', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(400, 800), padding: EdgeInsets.only(bottom: 34)),
+          child: Scaffold(
+            resizeToAvoidBottomInset: false,
+            body: NativePromptComposer(
+              leading: const NativeComposerButton(icon: NativeIcon.symbol('plus'), title: 'Add'),
+              attachmentSummary: const NativeComposerAttachmentSummary(),
+              attachments: const [
+                NativeComposerAttachment(id: 'a', title: 'plan.pdf'),
+                NativeComposerAttachment(id: 'b', title: 'site.jpg'),
+              ],
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    double capsuleHeight() => tester.getSize(find.byType(AnimatedContainer).first).height;
+    expect(capsuleHeight(), 48, reason: 'one row while unfocused');
+    expect(find.text('2'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('2 attachments'));
+    await tester.pumpAndSettle();
+    expect(capsuleHeight(), greaterThan(48), reason: 'focused, the attachments show again');
+    expect(find.text('plan.pdf'), findsOneWidget);
+  });
+
+  testWidgets('prompt composer replica: an audio attachment is a full-width clip row', (tester) async {
+    var toggled = 0;
+    var removed = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(400, 800), padding: EdgeInsets.only(bottom: 34)),
+          child: Scaffold(
+            resizeToAvoidBottomInset: false,
+            body: NativePromptComposer(
+              attachments: [
+                NativeComposerAttachment(
+                  id: 'clip',
+                  onTap: () => toggled++,
+                  onRemove: () => removed++,
+                  audio: const NativeComposerAudio(waveform: [0.4, 0.9, 0.2], progress: 0.3, duration: '0:10'),
+                ),
+              ],
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final capsule = tester.getRect(find.byType(AnimatedContainer).first);
+    final row = tester.getRect(find.ancestor(of: find.text('0:10'), matching: find.byType(Container)).first);
+    expect(row.height, 56);
+    expect(row.left - capsule.left, moreOrLessEquals(8, epsilon: 0.5), reason: 'inside the hairline border');
+    expect(row.top - capsule.top, moreOrLessEquals(8, epsilon: 0.5));
+    expect(capsule.right - row.right, moreOrLessEquals(8, epsilon: 0.5));
+    expect(find.text('0:10'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('Play'));
+    expect(toggled, 1);
+    await tester.tap(find.bySemanticsLabel('Remove'));
+    expect(removed, 1);
+  });
+
   testWidgets('prompt composer replica: voice button becomes send, side actions, attachments', (tester) async {
     final controller = NativeComposerController();
     final sent = <String>[];

@@ -5,7 +5,8 @@ part of 'native_composer.dart';
 ///
 /// Without a [title] it's a square image tile (a photo: pass
 /// `NativeIcon.image`/`imageFile`, or a colour SVG, as [thumbnail]); with
-/// one, a chip with a thumbnail, the title and [subtitle] (a file).
+/// one, a chip with a thumbnail, the title and [subtitle] (a file). With
+/// [audio], a full-width voice clip row instead.
 @immutable
 class NativeComposerAttachment {
   const NativeComposerAttachment({
@@ -16,6 +17,7 @@ class NativeComposerAttachment {
     this.loading = false,
     this.onRemove,
     this.onTap,
+    this.audio,
   });
 
   final String id;
@@ -31,7 +33,12 @@ class NativeComposerAttachment {
 
   /// The attachment itself was tapped, e.g. to preview or play it. Null
   /// leaves the tile inert, so a tap on it focuses the prompt as before.
+  /// On an [audio] row it's the play/pause button.
   final VoidCallback? onTap;
+
+  /// Shows the attachment as a voice clip row: play/pause, waveform,
+  /// duration and remove. The app plays the clip; this only draws it.
+  final NativeComposerAudio? audio;
 
   Map<String, Object?> _encode() => {
     'id': id,
@@ -40,6 +47,93 @@ class NativeComposerAttachment {
     'thumbnail': thumbnail?.encode(),
     'loading': loading,
     'tappable': onTap != null,
+    'audio': audio?._encode(),
+  };
+}
+
+/// How [NativePromptComposer.attachmentSummary] folds the attachments away
+/// while the prompt isn't focused: one pill, `[📎 3]`, beside the buttons, so
+/// the composer stays a single row; focusing shows the attachments again.
+@immutable
+class NativeComposerAttachmentSummary {
+  const NativeComposerAttachmentSummary({this.icon, this.backgroundColor, this.foregroundColor});
+
+  /// Defaults to `paperclip`.
+  final NativeIcon? icon;
+
+  /// Defaults to the quaternary system fill.
+  final Color? backgroundColor;
+
+  /// The icon and count; defaults to the label colour.
+  final Color? foregroundColor;
+
+  Map<String, Object?> _encode() => {
+    'icon': icon?.encode(),
+    'backgroundColor': backgroundColor?.toARGB32(),
+    'foregroundColor': foregroundColor?.toARGB32(),
+  };
+}
+
+/// A voice clip shown in a [NativeComposerAttachment] row, sized like the
+/// tiles' strip: 56 pt tall, 8 pt from the composer's edges.
+///
+/// `[(play)  ▌▌▐▌▌▐▌▐▐▌…  0:10  ×]`: a filled circle in the composer's tint,
+/// bars that fill with the tint as [progress] moves, the [duration] label
+/// and a remove button. Rebuild with new values as playback moves; only
+/// changes reach the native side.
+@immutable
+class NativeComposerAudio {
+  const NativeComposerAudio({
+    this.waveform = const [],
+    this.progress = 0,
+    this.playing = false,
+    this.duration,
+    this.playIcon,
+    this.pauseIcon,
+    this.removeIcon,
+    this.backgroundColor,
+    this.waveColor,
+    this.labelColor,
+  });
+
+  /// Amplitudes from 0 to 1, resampled to the bars that fit. A hundred or so
+  /// is plenty.
+  final List<double> waveform;
+
+  /// Played fraction, 0 to 1.
+  final double progress;
+
+  /// Shows [pauseIcon] instead of [playIcon].
+  final bool playing;
+
+  /// E.g. `0:10`.
+  final String? duration;
+
+  /// Default to `play.fill`, `pause.fill` and `xmark`.
+  final NativeIcon? playIcon;
+  final NativeIcon? pauseIcon;
+  final NativeIcon? removeIcon;
+
+  /// The row's fill; defaults to the quaternary system fill.
+  final Color? backgroundColor;
+
+  /// Unplayed bars; defaults to the tertiary label colour.
+  final Color? waveColor;
+
+  /// The duration and remove glyph; defaults to the label colour.
+  final Color? labelColor;
+
+  Map<String, Object?> _encode() => {
+    'waveform': [for (final v in waveform) (v.clamp(0, 1) * 1000).round() / 1000],
+    'progress': (progress.clamp(0, 1) * 1000).round() / 1000,
+    'playing': playing,
+    'duration': duration,
+    'playIcon': playIcon?.encode(),
+    'pauseIcon': pauseIcon?.encode(),
+    'removeIcon': removeIcon?.encode(),
+    'backgroundColor': backgroundColor?.toARGB32(),
+    'waveColor': waveColor?.toARGB32(),
+    'labelColor': labelColor?.toARGB32(),
   };
 }
 
@@ -84,6 +178,7 @@ class NativePromptComposer extends StatefulWidget {
     this.sideActions = const [],
     this.showSideActions = false,
     this.attachments = const [],
+    this.attachmentSummary,
     this.onSend,
     this.onChanged,
     this.tintColor,
@@ -134,6 +229,11 @@ class NativePromptComposer extends StatefulWidget {
   final bool showSideActions;
 
   final List<NativeComposerAttachment> attachments;
+
+  /// Set to fold [attachments] into a count pill while the prompt isn't
+  /// focused (e.g. after scrolling dismissed the keyboard). Null keeps them
+  /// on show.
+  final NativeComposerAttachmentSummary? attachmentSummary;
 
   /// Called with the text (possibly empty when only attachments are sent).
   final ValueChanged<String>? onSend;
@@ -225,6 +325,7 @@ class _NativePromptComposerState extends _ComposerHostState<NativePromptComposer
     'side': [for (final (i, b) in widget.sideActions.indexed) b._encode('side$i', handlers)],
     'sideShown': widget.showSideActions,
     'attachments': [for (final a in widget.attachments) a._encode()],
+    'attachmentSummary': widget.attachmentSummary?._encode(),
     'tintColor': widget.tintColor?.toARGB32(),
     'highlights': widget.highlights,
     'maxLines': widget.maxLines,
@@ -275,6 +376,10 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
   static const _radius = 24.0;
   static const _attachmentTop = 12.0;
   static const _attachmentHeight = 60.0;
+  static const _audioInset = 8.0;
+  static const _audioLift = 4.0;
+  static const _summaryGap = 8.0;
+  static const _summaryHeight = 24.0;
   static const _duration = Duration(milliseconds: 350);
   static const _curve = Curves.easeOutCubic;
   // A gentle overshoot, like UIKit's spring with a little bounce.
@@ -350,6 +455,16 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
     super.dispose();
   }
 
+  double _summaryWidth(String label) {
+    final painter = TextPainter(
+      text: TextSpan(text: label, style: _FallbackAttachmentSummary.labelStyle),
+      textDirection: Directionality.of(context),
+    )..layout();
+    final width = _FallbackAttachmentSummary.chromeWidth + painter.width;
+    painter.dispose();
+    return width.ceilToDouble();
+  }
+
   int _lines(double width) {
     final painter = TextPainter(
       text: TextSpan(text: _text.text.isEmpty ? ' ' : _text.text, style: _textStyle),
@@ -401,16 +516,18 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
         final primaryVisible = !sideShown || hasContent || stop != null;
         final hasLeading = _c.leading != null;
         final textLeading = hasLeading ? _textLeading : _textInset;
-        final inlineWidth =
-            capsuleWidth -
-            textLeading -
-            (sideShown ? 0 : _c.actions.length * _actionSpacing) -
-            (primaryVisible ? _row : _textInset);
+        final textEnd =
+            capsuleWidth - (sideShown ? 0 : _c.actions.length * _actionSpacing) - (primaryVisible ? _row : _textInset);
+        final summary = _c.attachmentSummary;
+        final collapsed = summary != null && _c.attachments.isNotEmpty && !focused;
+        final summaryLabel = '${_c.attachments.length}';
+        final summaryWidth = collapsed ? _summaryWidth(summaryLabel) : 0.0;
+        final inlineWidth = textEnd - textLeading - (collapsed ? summaryWidth + _summaryGap : 0);
         final multiline =
-            _c.attachments.isNotEmpty ||
+            (_c.attachments.isNotEmpty && !collapsed) ||
             _text.text.contains('\n') ||
             (_text.text.isNotEmpty && _lines(inlineWidth) > 1);
-        final attachmentsBlock = _c.attachments.isEmpty ? 0.0 : _attachmentTop + _attachmentHeight;
+        final attachmentsBlock = _c.attachments.isEmpty || collapsed ? 0.0 : _attachmentTop + _attachmentHeight;
         final lines = multiline ? math.min(_lines(capsuleWidth - 2 * _textInset), _c.maxLines) : 1;
         final textHeight = lines * _lineHeight + 2 * _textVertical;
         final height = multiline ? attachmentsBlock + textHeight + _multiRowExtra : _row;
@@ -467,22 +584,39 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
                 curve: _curve,
                 left: 0,
                 right: 0,
-                top: _attachmentTop,
-                height: _attachmentHeight,
-                child: AnimatedOpacity(
-                  duration: _duration,
-                  opacity: _c.attachments.isEmpty ? 0 : 1,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    children: [
-                      for (final a in _c.attachments)
-                        Padding(
-                          key: ValueKey(a.id),
-                          padding: const EdgeInsets.only(right: 8),
-                          child: _FallbackAttachmentTile(attachment: a, style: style),
-                        ),
-                    ],
+                top: _attachmentTop - _audioLift,
+                height: _attachmentHeight + _audioLift,
+                child: IgnorePointer(
+                  ignoring: collapsed,
+                  child: AnimatedOpacity(
+                    duration: _duration,
+                    opacity: _c.attachments.isEmpty || collapsed ? 0 : 1,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      padding: EdgeInsets.only(
+                        left: _c.attachments.firstOrNull?.audio != null ? _audioInset : 12,
+                        right: 12,
+                      ),
+                      children: [
+                        for (final a in _c.attachments)
+                          Padding(
+                            key: ValueKey(a.id),
+                            padding: const EdgeInsets.only(right: 8),
+                            child: a.audio == null
+                                ? Padding(
+                                    padding: const EdgeInsets.only(top: _audioLift),
+                                    child: _FallbackAttachmentTile(attachment: a, style: style),
+                                  )
+                                : _FallbackAudioTile(
+                                    attachment: a,
+                                    audio: a.audio!,
+                                    width: capsuleWidth - 2 * _audioInset,
+                                    accent: accent,
+                                    style: style,
+                                  ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -523,6 +657,39 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
                     child: Center(child: NativeIconView(leading.icon, size: 24, color: style.label)),
                   ),
                 ),
+              AnimatedPositioned(
+                duration: _duration,
+                curve: _curve,
+                left: textEnd - summaryWidth,
+                top: rowTop + (_row - _summaryHeight) / 2,
+                height: _summaryHeight,
+                child: IgnorePointer(
+                  ignoring: !collapsed,
+                  child: AnimatedOpacity(
+                    duration: _duration,
+                    curve: _curve,
+                    opacity: collapsed ? 1 : 0,
+                    child: AnimatedScale(
+                      duration: _duration,
+                      curve: _curve,
+                      scale: collapsed ? 1 : 0.5,
+                      child: Semantics(
+                        button: true,
+                        label: '$summaryLabel attachments',
+                        excludeSemantics: true,
+                        child: GestureDetector(
+                          onTap: _focus.requestFocus,
+                          child: _FallbackAttachmentSummary(
+                            label: summaryLabel,
+                            summary: summary ?? const NativeComposerAttachmentSummary(),
+                            style: style,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
               for (final (i, b) in _c.actions.indexed)
                 positioned(
                   left: capsuleWidth - _edgeCenter - _actionSpacing * (_c.actions.length - i) - _row / 2,
@@ -787,6 +954,211 @@ class _FallbackAttachmentTile extends StatelessWidget {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The Flutter replica of the native voice clip row: 56 pt, 8 pt padding,
+/// `[40 pt circle · bars · duration · 32 pt remove]` 8 pt apart, radius 16.
+/// Tops the strip, 4 pt above the other tiles, so it's 8 pt from the composer's top.
+class _FallbackAudioTile extends StatelessWidget {
+  const _FallbackAudioTile({
+    required this.attachment,
+    required this.audio,
+    required this.width,
+    required this.accent,
+    required this.style,
+  });
+
+  final NativeComposerAttachment attachment;
+  final NativeComposerAudio audio;
+  final double width;
+  final Color accent;
+  final VeneerFallbackStyle style;
+
+  static const _height = 56.0;
+  static const _play = 40.0;
+  static const _remove = 32.0;
+  static const _icon = 24.0;
+  static const _waveHeight = 32.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = audio.labelColor ?? style.label;
+    final playIcon = audio.playing
+        ? audio.pauseIcon ?? const NativeIcon.symbol('pause.fill', fallback: Icons.pause_rounded)
+        : audio.playIcon ?? const NativeIcon.symbol('play.fill', fallback: Icons.play_arrow_rounded);
+    final removeIcon = audio.removeIcon ?? const NativeIcon.symbol('xmark', fallback: Icons.close_rounded);
+
+    return SizedBox(
+      width: width,
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: Container(
+          height: _height,
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: audio.backgroundColor ?? style.selection,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            spacing: 8,
+            children: [
+              Semantics(
+                button: true,
+                label: audio.playing ? 'Pause' : 'Play',
+                child: GestureDetector(
+                  onTap: attachment.loading ? null : attachment.onTap,
+                  child: Container(
+                    width: _play,
+                    height: _play,
+                    decoration: BoxDecoration(color: accent, shape: BoxShape.circle),
+                    alignment: Alignment.center,
+                    child: attachment.loading
+                        ? const SizedBox.square(
+                            dimension: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : NativeIconView(playIcon, size: _icon, color: Colors.white),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: SizedBox(
+                  height: _waveHeight,
+                  child: CustomPaint(
+                    painter: _WaveformPainter(
+                      samples: audio.waveform,
+                      progress: audio.progress,
+                      color: audio.waveColor ?? style.placeholder,
+                      progressColor: accent,
+                    ),
+                  ),
+                ),
+              ),
+              if (audio.duration case final duration?)
+                Text(
+                  duration,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 18 / 13,
+                    color: label,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              Semantics(
+                button: true,
+                label: 'Remove',
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: attachment.onRemove,
+                  child: SizedBox.square(
+                    dimension: _remove,
+                    child: Center(
+                      child: NativeIconView(removeIcon, size: _icon, color: label),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 2 pt rounded bars, 1 pt apart, centred, at least 2 pt tall; the played
+/// fraction in [progressColor].
+class _WaveformPainter extends CustomPainter {
+  _WaveformPainter({required this.samples, required this.progress, required this.color, required this.progressColor});
+
+  final List<double> samples;
+  final double progress;
+  final Color color;
+  final Color progressColor;
+
+  static const barWidth = 2.0;
+  static const gap = 1.0;
+  static const minHeight = 2.0;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final count = ((size.width + gap) / (barWidth + gap)).floor();
+    if (count <= 0) return;
+    final played = progress * size.width;
+    final paint = Paint();
+    for (var i = 0; i < count; i++) {
+      final amplitude = _sampleAt(i, count);
+      final height = math.max(minHeight, amplitude * size.height);
+      final x = i * (barWidth + gap);
+      paint.color = x + barWidth / 2 <= played ? progressColor : color;
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x, (size.height - height) / 2, barWidth, height),
+          const Radius.circular(barWidth / 2),
+        ),
+        paint,
+      );
+    }
+  }
+
+  double _sampleAt(int bar, int count) {
+    if (samples.isEmpty) return 0;
+    final start = bar * samples.length ~/ count;
+    final end = math.max(start + 1, (bar + 1) * samples.length ~/ count);
+    var peak = 0.0;
+    for (var i = start; i < end && i < samples.length; i++) {
+      peak = math.max(peak, samples[i]);
+    }
+    return peak.clamp(0, 1);
+  }
+
+  @override
+  bool shouldRepaint(_WaveformPainter old) =>
+      old.progress != progress ||
+      old.color != color ||
+      old.progressColor != progressColor ||
+      !identical(old.samples, samples);
+}
+
+/// The folded attachments: `[📎 3]`, a 24 pt capsule, 4 pt before the icon
+/// and 8 pt after the count.
+class _FallbackAttachmentSummary extends StatelessWidget {
+  const _FallbackAttachmentSummary({required this.label, required this.summary, required this.style});
+
+  final String label;
+  final NativeComposerAttachmentSummary summary;
+  final VeneerFallbackStyle style;
+
+  static const _icon = 16.0;
+  static const _gap = 4.0;
+  static const _padding = EdgeInsets.fromLTRB(4, 2, 8, 2);
+  static const labelStyle = TextStyle(fontSize: 15, height: 20 / 15, fontWeight: FontWeight.w500);
+  static double get chromeWidth => _padding.horizontal + _icon + _gap;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = summary.foregroundColor ?? style.label;
+    return Container(
+      padding: _padding,
+      decoration: BoxDecoration(
+        color: summary.backgroundColor ?? style.selection,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: _gap,
+        children: [
+          NativeIconView(
+            summary.icon ?? const NativeIcon.symbol('paperclip', fallback: Icons.attach_file_rounded),
+            size: _icon,
+            color: foreground,
+          ),
+          Text(label, maxLines: 1, style: labelStyle.copyWith(color: foreground)),
         ],
       ),
     );
