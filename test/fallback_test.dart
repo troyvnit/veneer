@@ -126,6 +126,34 @@ void main() {
     expect(archived, 1);
   });
 
+  testWidgets('navigation bar replica: a lone text button is a capsule hugging its label, tinted when prominent', (
+    tester,
+  ) async {
+    var uploads = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeNavigationBar(
+          trailing: [NativeBarButton(title: 'Upload', prominent: true, tint: Colors.green, onPressed: () => uploads++)],
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    final button = find.bySemanticsLabel('Upload');
+    final label = tester.getSize(find.text('Upload')).width;
+    expect(tester.getSize(button).width, greaterThan(label), reason: 'the capsule fits the whole label');
+    expect(tester.getSize(button).width, greaterThan(44));
+    expect(tester.widget<Text>(find.text('Upload')).style?.color, const Color(0xFFFFFFFF));
+    final decoration = tester
+        .widgetList<Container>(find.ancestor(of: find.text('Upload'), matching: find.byType(Container)))
+        .map((c) => c.decoration)
+        .whereType<BoxDecoration>()
+        .first;
+    expect(decoration.color, Colors.green);
+
+    await tester.tap(button);
+    expect(uploads, 1);
+  });
+
   test('a sheet request in the fallback calls the app handler directly', () async {
     NativeSheet.setRequestHandler((name, arguments) async => '$name:$arguments');
     addTearDown(() => NativeSheet.setRequestHandler(null));

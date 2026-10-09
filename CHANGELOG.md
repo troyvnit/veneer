@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.3
+
+- **Bar button replicas (Android, iOS 15–25):** a lone text button in `NativeNavigationBar`'s trailing
+  items is a capsule that fits its label, instead of a 44 pt circle that clipped it. `prominent`
+  buttons draw as tinted glass (`tint`, then the bar's `tintColor`, then the accent) with a white
+  label, as UIKit's `.prominent` style does.
+
 ## 0.9.2
 
 - **Colour emoji in the composer replicas:** emoji that ask for colour presentation (U+FE0F), such

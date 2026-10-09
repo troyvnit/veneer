@@ -411,6 +411,12 @@ class _FallbackNavigationBar extends StatelessWidget {
     final title = bar.title;
     final background = Theme.of(context).scaffoldBackgroundColor;
 
+    // A prominent button is tinted glass with a white label, as
+    // `UIBarButtonItem.Style.prominent` draws it.
+    Color? fill(NativeBarButton b) => b.prominent ? b.tint ?? bar.tintColor ?? style.accent : null;
+    Color labelColor(NativeBarButton b) => b.prominent ? const Color(0xFFFFFFFF) : foreground;
+
+    // A titled button, or a lone text button: a capsule hugging its label.
     Widget titledButton(NativeBarButton b) => Semantics(
       button: true,
       label: b.title,
@@ -422,16 +428,21 @@ class _FallbackNavigationBar extends StatelessWidget {
           child: Container(
             height: item,
             padding: const EdgeInsets.symmetric(horizontal: titledPadding),
-            decoration: style.surfaceDecoration(radius: BorderRadius.circular(item / 2)),
+            decoration: style.surfaceDecoration(radius: BorderRadius.circular(item / 2), color: fill(b)),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               spacing: titledGap,
               children: [
-                NativeIconView(b.icon!, size: b.iconSize ?? 24, color: foreground),
+                if (b.icon case final icon? when b.showsTitle)
+                  NativeIconView(icon, size: b.iconSize ?? 24, color: labelColor(b)),
                 Text(
                   b.title!,
                   maxLines: 1,
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: foreground).merge(b.titleStyle),
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    color: labelColor(b),
+                  ).merge(b.showsTitle ? b.titleStyle : null),
                 ),
               ],
             ),
@@ -440,7 +451,7 @@ class _FallbackNavigationBar extends StatelessWidget {
       ),
     );
 
-    Widget iconButton(NativeBarButton b, {double width = item}) => Semantics(
+    Widget iconButton(NativeBarButton b, {double width = item, Color? color}) => Semantics(
       button: true,
       label: b.title,
       excludeSemantics: true,
@@ -456,9 +467,9 @@ class _FallbackNavigationBar extends StatelessWidget {
                   ? Text(
                       b.title!,
                       maxLines: 1,
-                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: foreground),
+                      style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: color ?? foreground),
                     )
-                  : NativeIconView(b.icon!, size: 24, color: foreground),
+                  : NativeIconView(b.icon!, size: 24, color: color ?? foreground),
             ),
           ),
         ),
@@ -541,16 +552,16 @@ class _FallbackNavigationBar extends StatelessWidget {
           const SizedBox(width: spacing),
         ] else
           const Spacer(),
-        // Per group: one button is a 44 pt circle, like the leading one;
-        // several share a capsule.
+        // Per group: one icon button is a 44 pt circle, like the leading one,
+        // and one text or titled button a capsule; several share a capsule.
         for (final (i, group) in groups.indexed) ...[
           if (i > 0) const SizedBox(width: spacing),
-          if (group.length == 1 && group.single.showsTitle)
+          if (group.length == 1 && (group.single.showsTitle || group.single.icon == null))
             titledButton(group.single)
           else if (group.length == 1)
             DecoratedBox(
-              decoration: style.surfaceDecoration(shape: BoxShape.circle),
-              child: iconButton(group.single),
+              decoration: style.surfaceDecoration(shape: BoxShape.circle, color: fill(group.single)),
+              child: iconButton(group.single, color: labelColor(group.single)),
             )
           else
             Container(
