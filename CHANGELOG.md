@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.10.0
+
+- **Full-screen sheets:** `showNativeSheet(fullScreen: true)` presents a page that fills the screen
+  (UIKit's `.fullScreen` on iOS 26; a Flutter sheet at full height elsewhere), with no detents and no
+  drag to dismiss. `NativeSheet.enterFullScreen(context)` turns an open sheet into one while keeping its
+  content running and its state: a native sheet's engine moves to a full-screen presentation behind a
+  cross-fade, a Flutter sheet grows to fill the screen. `NativeSheetRoute` takes `fullScreen` and
+  reports `isFullScreen`. A kept-alive sheet comes back in the presentation it's asked for. Asked while
+  the sheet is still coming up, or while something is presented over it, the move waits until it can.
+- **Closing a sheet that's still coming up:** `NativeSheetController.close` (and `NativeSheet.close`) asked
+  mid-presentation now closes it once it's up, instead of being dropped by UIKit; a sheet still measuring
+  its content just ends.
+- **Cleanup before a sheet's engine ends:** `NativeSheet.setClosingHandler` runs inside a native sheet
+  once it has closed, and its engine waits for it (up to 3 s) before ending — so work that has to reach
+  native code, like stopping a camera, isn't cut off.
+- **Plugins per sheet kind (iOS):** `VeneerPlugin.sheetEntrypointPluginRegistrant` is told the Dart
+  entrypoint each sheet engine runs, so an app can register heavy plugins (a call's WebRTC, say) only in
+  the engines that use them. It takes precedence over `sheetPluginRegistrant`.
+
 ## 0.9.3
 
 - **Bar button replicas (Android, iOS 15–25):** a lone text button in `NativeNavigationBar`'s trailing

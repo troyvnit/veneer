@@ -64,7 +64,7 @@ final class NativeSheetPresenter {
     _ = anchor
     let engine = group.makeEngine(with: options)
     Self.muteStatusBarStyle(of: engine)
-    Self.registerPlugins(with: engine)
+    Self.registerPlugins(with: engine, entrypoint: entrypoint)
     return engine
   }
 
@@ -88,11 +88,18 @@ final class NativeSheetPresenter {
     }
   }
 
-  /// `VeneerPlugin.sheetPluginRegistrant` when the app sets one; otherwise
-  /// the app's `GeneratedPluginRegistrant`, found at runtime so apps need no
-  /// extra setup for plugins to work inside sheets.
-  private static func registerPlugins(with engine: FlutterEngine) {
-    if let registrant = VeneerPlugin.sheetPluginRegistrant {
+  /// `VeneerPlugin.sheetEntrypointPluginRegistrant` or
+  /// `sheetPluginRegistrant` when the app sets one; otherwise the app's
+  /// `GeneratedPluginRegistrant`, found at runtime so apps need no extra
+  /// setup for plugins to work inside sheets.
+  private static func registerPlugins(with engine: FlutterEngine, entrypoint: String) {
+    let registrant: ((FlutterPluginRegistry) -> Void)?
+    if let byEntrypoint = VeneerPlugin.sheetEntrypointPluginRegistrant {
+      registrant = { byEntrypoint($0, entrypoint) }
+    } else {
+      registrant = VeneerPlugin.sheetPluginRegistrant
+    }
+    if let registrant {
       registrant(engine)
       let key = "VeneerPlugin"
       if !engine.hasPlugin(key), let registrar = engine.registrar(forPlugin: key) {
@@ -140,8 +147,8 @@ final class NativeSheetPresenter {
 
   /// `{id, entrypoint, libraryUri, arguments, detents: [{type, value}],
   ///   initialDetent, grabber, largestUndimmedDetent, dismissible,
-  ///   expandsOnScroll, cornerRadius, retain}`, from the engine of plugin
-  ///   [owner].
+  ///   expandsOnScroll, cornerRadius, retain, fullScreen}`, from the engine
+  ///   of plugin [owner].
   func present(
     _ args: [String: Any], owner: Int, from presenter: UIViewController?,
     onRequest: @escaping (Any?, @escaping FlutterResult) -> Void,
@@ -173,8 +180,10 @@ final class NativeSheetPresenter {
       controller = FlutterViewController(engine: engine, nibName: nil, bundle: nil)
       controller.isViewOpaque = false
       controller.view.backgroundColor = .clear
-      controller.modalPresentationStyle = .pageSheet
     }
+    // A kept-alive controller may have gone full screen last time.
+    controller.modalPresentationStyle = (args["fullScreen"] as? Bool) == true ? .fullScreen : .pageSheet
+    controller.additionalSafeAreaInsets.top = 0
     let keeps = retain && !showingKept
 
     let session = NativeSheetSession(
@@ -205,10 +214,13 @@ final class NativeSheetPresenter {
       guard let self, arguments.isEmpty, !keeps else { return }
       self.prewarm(entrypoint: entrypoint, libraryURI: libraryURI)
     }
-    let show = { [weak presenter, weak controller] in
-      guard let presenter, let controller, controller.presentingViewController == nil else { return }
+    let show = { [weak self, weak presenter, weak controller, weak session] in
+      guard let presenter, let controller, controller.presentingViewController == nil,
+        self?.sessions[sessionKey] === session
+      else { return }
       presenter.present(controller, animated: true) {
         VeneerPlugin.deliverSheetAppeared(to: controller)
+        session?.presentationDidComplete()
         warmNext()
       }
     }
@@ -403,10 +415,132 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
     show?()
   }
 
+  /// Moves the sheet to a full-screen presentation, keeping its controller
+  /// and engine: UIKit can't restyle a presented controller, so it's taken
+  /// down and presented again without animation, under a snapshot of the
+  /// sheet that then fades away. While the sheet is still coming up, or
+  /// something is presented over it, it tries again shortly. False once the
+  /// sheet is full screen or closed.
+  func enterFullScreen() -> Bool {
+    guard !finished, !dismissalPending, controller.modalPresentationStyle != .fullScreen else { return false }
+    guard let presenter = controller.presentingViewController, controller.presentedViewController == nil,
+      !controller.isBeingPresented, !controller.isBeingDismissed
+    else {
+      fullScreenPending = true
+      scheduleFullScreenRetry()
+      return true
+    }
+    fullScreenPending = false
+    movingToFullScreen = true
+    let window = controller.view.window
+    let snapshot = window?.snapshotView(afterScreenUpdates: false)
+    if let window, let snapshot {
+      snapshot.frame = window.bounds
+      window.addSubview(snapshot)
+    }
+    let controller = self.controller
+    presenter.dismiss(animated: false) { [weak self] in
+      // Ended while it was off screen (a close that gave up waiting): stay
+      // down rather than bring back a sheet with no session.
+      guard let self, !self.finished else {
+        self?.movingToFullScreen = false
+        snapshot?.removeFromSuperview()
+        return
+      }
+      controller.modalPresentationStyle = .fullScreen
+      controller.additionalSafeAreaInsets.top = 0
+      presenter.present(controller, animated: false) { [weak self] in
+        self?.movingToFullScreen = false
+        if let snapshot {
+          snapshot.superview?.bringSubviewToFront(snapshot)
+          // A frame for Flutter to lay out at the new size, then the fade.
+          UIView.animate(
+            withDuration: 0.35, delay: 0.05, options: [.curveEaseInOut],
+            animations: { snapshot.alpha = 0 },
+            completion: { _ in snapshot.removeFromSuperview() })
+        }
+        self?.presentationDidComplete()
+      }
+    }
+    return true
+  }
+
+  static let fullScreenRetryDelay: TimeInterval = 0.25
+  static let fullScreenRetryLimit = 20
+  static let dismissRetryDelay: TimeInterval = 0.1
+  static let dismissRetryLimit = 30
+
+  /// Between taking the sheet down and presenting it again full screen: it
+  /// has no presenting controller then, but it hasn't closed.
+  private var movingToFullScreen = false
+
+  /// A close asked for while the sheet couldn't be dismissed (coming up, or
+  /// moving to full screen): carried out once it's up.
+  private var dismissalPending = false
+  private var dismissRetries = 0
+
+  /// A move to full screen that's waiting for the sheet to finish coming up
+  /// or for what's presented over it to go: retried on those events, and
+  /// polled a few times for presentations Veneer doesn't see end.
+  private var fullScreenPending = false
+  private var fullScreenRetries = 0
+
+  private func scheduleFullScreenRetry() {
+    guard fullScreenRetries < Self.fullScreenRetryLimit else { return }
+    fullScreenRetries += 1
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.fullScreenRetryDelay) { [weak self] in
+      guard let self, self.fullScreenPending else { return }
+      _ = self.enterFullScreen()
+    }
+  }
+
+  /// The sheet finished coming up (presented, or moved to full screen):
+  /// what waited for that goes ahead — a close first.
+  func presentationDidComplete() {
+    if dismissalPending {
+      dismissRetries = 0
+      dismiss(result: result)
+    } else {
+      retryPendingFullScreen()
+    }
+  }
+
+  /// The sheet came up, or a sheet over it went: a pending move to full
+  /// screen can go ahead.
+  func retryPendingFullScreen() {
+    guard fullScreenPending else { return }
+    fullScreenRetries = 0
+    DispatchQueue.main.async { [weak self] in _ = self?.enterFullScreen() }
+  }
+
   /// Dismisses with a result for the presenting app.
   func dismiss(result: Any?) {
+    guard !finished else { return }
     self.result = result
-    controller.presentingViewController?.dismiss(animated: true) { [weak self] in self?.finish() }
+    // UIKit drops a dismissal asked for mid-presentation, and a sheet moving
+    // to full screen is briefly down: close it once it's up (or after a
+    // while, regardless). One that never came up (still measuring) just ends.
+    if movingToFullScreen || controller.isBeingPresented {
+      dismissalPending = true
+      scheduleDismissRetry()
+      return
+    }
+    dismissalPending = false
+    guard let presenter = controller.presentingViewController else { return finish() }
+    presenter.dismiss(animated: true) { [weak self] in self?.finish() }
+  }
+
+  private func scheduleDismissRetry() {
+    guard dismissRetries < Self.dismissRetryLimit else {
+      dismissalPending = false
+      controller.presentingViewController?.dismiss(animated: false)
+      return finish()
+    }
+    dismissRetries += 1
+    DispatchQueue.main.asyncAfter(deadline: .now() + Self.dismissRetryDelay) { [weak self] in
+      guard let self, self.dismissalPending else { return }
+      self.dismiss(result: self.result)
+    }
   }
 
   private func finish() {
@@ -417,6 +551,7 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
     for child in children { child.finish() }
     children = []
     parent?.children.removeAll { $0 === self }
+    parent?.retryPendingFullScreen()
     onFirstContentHeight = nil
     Self.detachMeasuring(controller)
     onEvent("sheetDismissed", ["id": id, "result": result ?? NSNull()])
@@ -425,13 +560,19 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
       onFinish?()
       return
     }
-    VeneerPlugin.tearDownSheet(controller)
     onFinish?()
-    // The engine is single-use: free it now rather than whenever the last
-    // reference to the controller goes.
+    // The engine is single-use: free it once its app has cleaned up, rather
+    // than whenever the last reference to the controller goes.
     let engine = self.engine
-    DispatchQueue.main.async { engine.destroyContext() }
+    let controller = self.controller
+    VeneerPlugin.deliverSheetClosing(to: controller, timeout: Self.closingTimeout) {
+      VeneerPlugin.tearDownSheet(controller)
+      DispatchQueue.main.async { engine.destroyContext() }
+    }
   }
+
+  /// The longest a closed sheet's engine waits for its app's cleanup.
+  static let closingTimeout: TimeInterval = 3
 
   // MARK: - UISheetPresentationControllerDelegate
 

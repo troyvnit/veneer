@@ -456,6 +456,10 @@ class VeneerBridge {
     await _channel.invokeMethod<void>('releaseSheet', {'entrypoint': entrypoint, 'libraryUri': libraryUri});
   }
 
+  /// Inside a native sheet: run once it has closed, before its engine ends
+  /// (`NativeSheet.setClosingHandler`).
+  Future<void> Function()? sheetClosingHandler;
+
   /// In an engine that presents native sheets: answers their requests
   /// (`NativeSheet.request`), set through `NativeSheet.setRequestHandler`.
   SheetRequestHandler? sheetRequestHandler;
@@ -468,6 +472,9 @@ class VeneerBridge {
   /// From inside a native sheet: dismisses it with [result].
   Future<bool> dismissSheet(Object? result) async =>
       await _channel.invokeMethod<bool>('dismissSheet', {'result': result}) ?? false;
+
+  /// From inside a native sheet: moves it to a full-screen presentation.
+  Future<bool> fullScreenSheet() async => await _channel.invokeMethod<bool>('fullScreenSheet') ?? false;
 
   Future<Map<String, Object?>> stats() async => await _channel.invokeMapMethod<String, Object?>('getStats') ?? const {};
 
@@ -538,6 +545,12 @@ class VeneerBridge {
       case 'sheetHidden':
         sheetShown.value = false;
         sheetAppeared.value = false;
+      case 'sheetClosing':
+        try {
+          await sheetClosingHandler?.call();
+        } catch (error, stack) {
+          FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack, library: 'veneer'));
+        }
       case 'sheetMessage':
         _sheetMessages.add(args['message']);
       case 'sheetDetentChanged':

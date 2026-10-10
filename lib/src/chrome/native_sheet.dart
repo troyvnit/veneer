@@ -106,6 +106,11 @@ class NativeSheetDetent {
 /// when there's more than one (override with [showGrabber]); the page behind
 /// dims above [largestUndimmedDetent] (all detents when null); drag down or
 /// tap the dimmed area to dismiss unless [isDismissible] is false.
+///
+/// With [fullScreen], it comes up as a full-screen page instead (UIKit's
+/// `.fullScreen`): no detents, no drag to dismiss, the page behind hidden —
+/// for content like a call that owns the screen. A sheet can also become one
+/// while open, keeping its state: [NativeSheet.enterFullScreen].
 Future<T?> showNativeSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -123,6 +128,7 @@ Future<T?> showNativeSheet<T>({
   Color? backgroundColor,
   bool useRootNavigator = true,
   bool keepAlive = false,
+  bool fullScreen = false,
   NativeSheetController? controller,
 }) async {
   final bridge = VeneerBridge.instance;
@@ -142,6 +148,7 @@ Future<T?> showNativeSheet<T>({
           'dismissible': isDismissible,
           'expandsOnScroll': expandsOnScroll,
           'retain': keepAlive,
+          'fullScreen': fullScreen,
         },
         onDetentChanged: onDetentChanged == null ? null : (i) => onDetentChanged(detents[i]),
         onPresented: (id) {
@@ -166,6 +173,7 @@ Future<T?> showNativeSheet<T>({
     largestUndimmedDetent: largestUndimmedDetent,
     onDetentChanged: onDetentChanged,
     backgroundColor: backgroundColor,
+    fullScreen: fullScreen,
   );
   controller?._route = route;
   try {
@@ -349,6 +357,22 @@ abstract final class NativeSheet {
   /// Whether this code runs inside a native sheet's engine.
   static bool get isNativeSheet => VeneerBridge.instance.isSheetEngine;
 
+  /// Inside a sheet: turns the sheet showing [context] into a full-screen
+  /// page, as if presented with `fullScreen` — for a sheet that leads into
+  /// content that owns the screen, like a call after its lobby. Its content
+  /// keeps running and keeps its state: a native sheet's engine moves to a
+  /// full-screen presentation with a cross-fade, a Flutter sheet grows to
+  /// fill the screen. It can't be dragged away any more; [close] still
+  /// closes it. Does nothing outside a sheet, or when it's already full
+  /// screen.
+  static Future<void> enterFullScreen(BuildContext context) async {
+    if (VeneerBridge.instance.isSheetEngine) {
+      await VeneerBridge.instance.fullScreenSheet();
+      return;
+    }
+    context.getInheritedWidgetOfExactType<_SheetScope>()?.route._fullScreen.value = true;
+  }
+
   /// Inside a sheet: asks the app that presented it, which answers through
   /// [setRequestHandler] — e.g. for a fresh credential, or data only the app
   /// holds. A native sheet's engine shares no memory with the app, so this
@@ -384,6 +408,15 @@ abstract final class NativeSheet {
   /// In the app: answers [request]s from the sheets it presents. One handler
   /// serves every sheet; switch on the request's name. Null removes it.
   static void setRequestHandler(SheetRequestHandler? handler) => VeneerBridge.instance.sheetRequestHandler = handler;
+
+  /// Inside a native sheet: [handler] runs once the sheet has closed, before
+  /// its engine ends, and the engine waits for it (a few seconds at most) —
+  /// for cleanup that has to reach native code, like stopping a camera,
+  /// which would otherwise be cut off with the engine. Not called for a
+  /// kept-alive sheet, which runs on, nor in the Flutter fallback, where the
+  /// sheet runs in the app's engine. Null removes it.
+  static void setClosingHandler(Future<void> Function()? handler) =>
+      VeneerBridge.instance.sheetClosingHandler = handler;
 
   /// Inside a native sheet: whether it's on screen. Turns false when a
   /// kept-alive sheet ([showNativeSheet]'s `keepAlive`) closes, while its app
@@ -447,6 +480,7 @@ class NativeSheetRoute<T> extends PageRoute<T> {
     this.largestUndimmedDetent,
     this.onDetentChanged,
     this.backgroundColor,
+    this.fullScreen = false,
     super.settings,
   }) : assert(detents.isNotEmpty, 'A sheet needs at least one detent');
 
@@ -463,6 +497,15 @@ class NativeSheetRoute<T> extends PageRoute<T> {
   /// A [CupertinoDynamicColor] follows the theme's brightness while the
   /// sheet is open.
   final Color? backgroundColor;
+
+  /// Whether it comes up filling the screen ([NativeSheet.enterFullScreen]
+  /// makes an open sheet do so).
+  final bool fullScreen;
+
+  late final ValueNotifier<bool> _fullScreen = ValueNotifier(fullScreen);
+
+  /// Whether the sheet fills the screen, or is growing to.
+  bool get isFullScreen => _fullScreen.value;
 
   /// 0 below the large detent, 1 at it: how far the page behind recedes.
   final ValueNotifier<double> _recede = ValueNotifier(0);
@@ -555,6 +598,7 @@ class NativeSheetRoute<T> extends PageRoute<T> {
   @override
   void dispose() {
     _recede.dispose();
+    _fullScreen.dispose();
     _messages.close();
     super.dispose();
   }
@@ -580,7 +624,7 @@ class _NativeSheet extends StatefulWidget {
   State<_NativeSheet> createState() => _NativeSheetState();
 }
 
-class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderStateMixin {
+class _NativeSheetState extends State<_NativeSheet> with TickerProviderStateMixin {
   // UIKit's sheet spring: critically damped, about 0.5 s.
   static final _spring = SpringDescription.withDampingRatio(mass: 1, stiffness: 260, ratio: 1);
   static const _presentCurve = Cubic(0.2, 0.9, 0.25, 1);
@@ -599,6 +643,13 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
   static const _overSheetDrop = 10.0;
 
   late final AnimationController _height = AnimationController.unbounded(vsync: this);
+
+  /// 0 as a sheet, 1 filling the screen ([NativeSheet.enterFullScreen]).
+  late final AnimationController _full = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 400),
+    value: _route.isFullScreen ? 1 : 0,
+  );
   late final CurvedAnimation _present = CurvedAnimation(
     parent: widget.route.animation!,
     curve: _presentCurve,
@@ -660,7 +711,16 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
     super.initState();
     _height.addListener(_changed);
     _present.addListener(_changed);
+    _full.addListener(_changed);
     _route.secondaryAnimation?.addListener(_changed);
+    _route._fullScreen.addListener(_fullScreenChanged);
+  }
+
+  void _fullScreenChanged() {
+    if (!_route.isFullScreen) return;
+    _dragging = false;
+    _drag = 0;
+    _full.animateTo(1, curve: Curves.easeInOutCubic);
   }
 
   /// 0 on top, 1 fully stepped back behind a sheet above.
@@ -698,6 +758,8 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
   @override
   void dispose() {
     _route.secondaryAnimation?.removeListener(_changed);
+    _route._fullScreen.removeListener(_fullScreenChanged);
+    _full.dispose();
     _height.dispose();
     _present.dispose();
     super.dispose();
@@ -824,7 +886,7 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
 
   /// Content scrolled to its edge hands the rest of the drag to the sheet.
   bool _onScroll(ScrollNotification n) {
-    if (n.metrics.axis != Axis.vertical || n.depth != 0) return false;
+    if (_route.isFullScreen || n.metrics.axis != Axis.vertical || n.depth != 0) return false;
     final towardsStart = n.metrics.axisDirection == AxisDirection.down ? -1.0 : 1.0;
     if (n is OverscrollNotification && n.dragDetails != null) {
       final down = n.overscroll * towardsStart;
@@ -846,13 +908,15 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
     final mq = MediaQuery.of(context);
     final style = VeneerFallbackStyle.of(context);
     final t = _largeness;
+    final full = _full.value;
+    final draggable = !_route.isFullScreen;
     final hasHomeIndicator = mq.viewPadding.bottom > 0;
-    final inset = _inset;
+    final inset = lerpDouble(_inset, 0, full)!;
     // Concentric with the display corners while floating.
     final floatingRadius = hasHomeIndicator ? 46.0 : 22.0;
-    final topRadius = lerpDouble(floatingRadius, _largeRadius, t)!;
-    final bottomRadius = lerpDouble(floatingRadius, hasHomeIndicator ? 46 : 0, t)!;
-    final height = math.max(0.0, _visibleHeight);
+    final topRadius = lerpDouble(lerpDouble(floatingRadius, _largeRadius, t)!, 0, full)!;
+    final bottomRadius = lerpDouble(lerpDouble(floatingRadius, hasHomeIndicator ? 46 : 0, t)!, 0, full)!;
+    final height = lerpDouble(math.max(0.0, _visibleHeight), mq.size.height, full)!;
     final displacement = (1 - _present.value) * (height + inset + 24) + _drag;
 
     final undimmed = _route.largestUndimmedDetent == null ? null : _resolve(_route.largestUndimmedDetent!);
@@ -873,18 +937,27 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
     };
     final surface =
         chosen ??
-        (dark ? const Color(0xFF1C1C1E) : Colors.white).withValues(alpha: lerpDouble(dark ? 0.78 : 0.82, 1, t));
+        (dark ? const Color(0xFF1C1C1E) : Colors.white).withValues(
+          alpha: lerpDouble(dark ? 0.78 : 0.82, 1, math.max(t, full)),
+        );
     final grabber = _route.showGrabber ?? _route.detents.length > 1;
     final stacked = _stacked;
 
     final radius = BorderRadius.vertical(top: Radius.circular(topRadius), bottom: Radius.circular(bottomRadius));
 
-    // Content starts below the grabber, like a UIKit sheet's safe area.
+    // Content starts below the grabber, like a UIKit sheet's safe area; full
+    // screen, below the status bar.
     final contentTop = grabber ? 14.0 : 6.0;
     Widget content = MediaQuery(
       data: mq.copyWith(
-        padding: mq.padding.copyWith(top: contentTop, bottom: math.max(0, mq.padding.bottom - inset)),
-        viewPadding: mq.viewPadding.copyWith(top: contentTop, bottom: math.max(0, mq.viewPadding.bottom - inset)),
+        padding: mq.padding.copyWith(
+          top: lerpDouble(contentTop, mq.padding.top, full),
+          bottom: math.max(0, mq.padding.bottom - inset),
+        ),
+        viewPadding: mq.viewPadding.copyWith(
+          top: lerpDouble(contentTop, mq.viewPadding.top, full),
+          bottom: math.max(0, mq.viewPadding.bottom - inset),
+        ),
         // The sheet's own inset already lifts its content off the bottom.
         viewInsets: mq.viewInsets.copyWith(bottom: math.max(0, mq.viewInsets.bottom - inset)),
       ),
@@ -946,10 +1019,10 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
               explicitChildNodes: true,
               child: GestureDetector(
                 behavior: HitTestBehavior.translucent,
-                onVerticalDragStart: (_) => _dragStart(),
-                onVerticalDragUpdate: (d) => _dragBy(d.delta.dy),
-                onVerticalDragEnd: (d) => _dragEnd(d.primaryVelocity ?? 0),
-                onVerticalDragCancel: () => _dragEnd(0),
+                onVerticalDragStart: draggable ? (_) => _dragStart() : null,
+                onVerticalDragUpdate: draggable ? (d) => _dragBy(d.delta.dy) : null,
+                onVerticalDragEnd: draggable ? (d) => _dragEnd(d.primaryVelocity ?? 0) : null,
+                onVerticalDragCancel: draggable ? () => _dragEnd(0) : null,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     borderRadius: radius,
@@ -976,20 +1049,23 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
                             decoration: ShapeDecoration(
                               shape: RoundedSuperellipseBorder(
                                 borderRadius: radius,
-                                side: BorderSide(color: style.border, width: 1 / mq.devicePixelRatio * 2),
+                                side: BorderSide(
+                                  color: style.border.withValues(alpha: style.border.a * (1 - full)),
+                                  width: 1 / mq.devicePixelRatio * 2,
+                                ),
                               ),
                             ),
                           ),
                         ),
                       ),
-                      if (grabber)
+                      if (grabber && full < 1)
                         Positioned(
                           top: _grabberTop,
                           left: 0,
                           right: 0,
                           child: Center(
                             child: Opacity(
-                              opacity: 1 - stacked,
+                              opacity: (1 - stacked) * (1 - full),
                               child: Container(
                                 width: _grabberSize.width,
                                 height: _grabberSize.height,
@@ -1010,7 +1086,7 @@ class _NativeSheetState extends State<_NativeSheet> with SingleTickerProviderSta
         ),
         // The page behind recedes onto black: like UIKit, the status bar
         // turns light over it. Last, so adding it never remounts the sheet.
-        if (t * _present.value >= 0.5)
+        if (t * _present.value >= 0.5 && full < 0.5)
           const Positioned.fill(
             child: AnnotatedRegion<SystemUiOverlayStyle>(
               value: SystemUiOverlayStyle(

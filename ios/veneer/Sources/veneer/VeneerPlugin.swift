@@ -30,6 +30,12 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
   /// ```
   public static var sheetPluginRegistrant: ((FlutterPluginRegistry) -> Void)?
 
+  /// Like [sheetPluginRegistrant], also told the Dart entrypoint the sheet's
+  /// engine runs, so an app can give one kind of sheet plugins the others
+  /// don't need (a call's media plugins, say). Takes precedence over
+  /// [sheetPluginRegistrant].
+  public static var sheetEntrypointPluginRegistrant: ((FlutterPluginRegistry, String) -> Void)?
+
   /// Whether a presentation aimed at a view controller that already presents
   /// a native sheet goes to the sheet on top. UIKit refuses those, and
   /// plugins usually present from the window's root view controller, so
@@ -270,6 +276,10 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
       session?.dismiss(result: args["result"])
       result(session != nil)
 
+    case "fullScreenSheet":
+      // From inside a sheet: move the sheet showing this engine to full screen.
+      result(NativeSheetPresenter.shared.session(showing: registrar.viewController)?.enterFullScreen() ?? false)
+
     case "getStats":
       var snapshot = stats.snapshot()
       overlay?.glassLayer.diagnostics.forEach { snapshot[$0.key] = $0.value }
@@ -324,6 +334,28 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
     for plugin in instances.values.compactMap({ $0.plugin }) where plugin.registrar.viewController === controller {
       plugin.channel.invokeMethod("sheetAppeared", arguments: nil)
     }
+  }
+
+  /// Asks the engine showing [controller] to finish its own cleanup now its
+  /// sheet has closed (`NativeSheet.setClosingHandler`); [done] runs once
+  /// it answers, or after [timeout].
+  static func deliverSheetClosing(to controller: UIViewController, timeout: TimeInterval, done: @escaping () -> Void) {
+    let plugins = instances.values.compactMap({ $0.plugin }).filter { $0.registrar.viewController === controller }
+    var completed = false
+    let complete = {
+      guard !completed else { return }
+      completed = true
+      done()
+    }
+    guard !plugins.isEmpty else { return complete() }
+    var remaining = plugins.count
+    for plugin in plugins {
+      plugin.channel.invokeMethod("sheetClosing", arguments: nil) { _ in
+        remaining -= 1
+        if remaining == 0 { complete() }
+      }
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + timeout, execute: complete)
   }
 
   /// Tells a kept-alive sheet's engine its sheet closed while it runs on.

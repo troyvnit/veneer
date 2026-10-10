@@ -913,6 +913,91 @@ void main() {
     expect(controller.isRecording, isFalse);
   });
 
+  testWidgets('a sheet entering full screen keeps its content, fills the screen and stops dragging', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.padding = const FakeViewPadding(top: 59, bottom: 34);
+    tester.view.viewPadding = const FakeViewPadding(top: 59, bottom: 34);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Text('page'))));
+    var mounts = 0;
+    late double safeTop;
+    Object? result = 'open';
+    unawaited(
+      showNativeSheet<Object?>(
+        context: tester.element(find.text('page')),
+        detents: const [NativeSheetDetent.medium, NativeSheetDetent.large],
+        builder: (context) {
+          safeTop = MediaQuery.paddingOf(context).top;
+          return _MountCounter(key: const Key('content'), onMount: () => mounts++);
+        },
+      ).then((r) => result = r),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byKey(const Key('content'))).top, greaterThan(300));
+
+    await NativeSheet.enterFullScreen(tester.element(find.byKey(const Key('content'))));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byKey(const Key('content'))), const Rect.fromLTWH(0, 0, 393, 852));
+    expect(safeTop, 59);
+    expect(mounts, 1);
+
+    await tester.dragFrom(const Offset(200, 400), const Offset(0, 500));
+    await tester.pumpAndSettle();
+    expect(result, 'open');
+    expect(tester.getRect(find.byKey(const Key('content'))).top, 0);
+
+    await NativeSheet.close(tester.element(find.byKey(const Key('content'))), 'left');
+    await tester.pumpAndSettle();
+    expect(result, 'left');
+    expect(find.byKey(const Key('content')), findsNothing);
+  });
+
+  testWidgets('a full-screen sheet comes up filling the screen', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 852);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Text('page'))));
+    unawaited(
+      showNativeSheet<void>(
+        context: tester.element(find.text('page')),
+        fullScreen: true,
+        builder: (context) => const SizedBox.expand(key: Key('call')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.byKey(const Key('call'))), const Rect.fromLTWH(0, 0, 393, 852));
+  });
+
+  testWidgets('inside a native sheet engine, entering full screen asks the native side', (tester) async {
+    VeneerBridge.instance.isSheetEngine = true;
+    addTearDown(() => VeneerBridge.instance.isSheetEngine = false);
+    await tester.pumpWidget(const MaterialApp(home: Text('sheet')));
+    await NativeSheet.enterFullScreen(tester.element(find.text('sheet')));
+    expect(calls.map((c) => c.method), contains('fullScreenSheet'));
+  });
+
+  test('a closed native sheet answers once its closing handler has finished', () async {
+    final cleanup = Completer<void>();
+    var replied = false;
+    NativeSheet.setClosingHandler(() => cleanup.future);
+    addTearDown(() => NativeSheet.setClosingHandler(null));
+
+    final reply = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.handlePlatformMessage(
+      'veneer',
+      const StandardMethodCodec().encodeMethodCall(const MethodCall('sheetClosing', <String, Object?>{})),
+      (_) => replied = true,
+    );
+    await Future<void>.delayed(Duration.zero);
+    expect(replied, isFalse);
+
+    cleanup.complete();
+    await reply;
+    expect(replied, isTrue);
+  });
+
   testWidgets('a controller sends a Flutter sheet messages and closes it with a result', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: Text('page'))));
     final controller = NativeSheetController();
@@ -941,7 +1026,7 @@ void main() {
 }
 
 class _MountCounter extends StatefulWidget {
-  const _MountCounter({required this.onMount});
+  const _MountCounter({super.key, required this.onMount});
 
   final VoidCallback onMount;
 
