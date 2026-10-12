@@ -20,6 +20,8 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
   var clipId = 0
 
   private var glass = UIGlassEffect(style: .regular)
+  /// No glass at all (`GlassStyle.none`): the effect stays nil while shown.
+  private var plain = false
   private let stack = UIStackView()
   private let imageView = UIImageView()
   private let label = UILabel()
@@ -70,7 +72,8 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
     g.tintColor = c.tint
     g.isInteractive = c.interactive && c.search == nil && c.segments == nil
     glass = g
-    if isShown { effect = g }
+    plain = c.plain
+    if isShown { effect = plain ? nil : g }
 
     let menu = NativeMenu.make(c.menu, id: "\(id)") { [weak self] item in
       guard let self, let index = Int(item.components(separatedBy: ".menu").last ?? "") else { return }
@@ -131,7 +134,7 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
     isShown = visible
     if !visible { searchField?.resignFirstResponder() }
     UIView.animate(withDuration: visible ? 0.3 : 0.2) {
-      self.effect = visible ? self.glass : nil
+      self.effect = visible && !self.plain ? self.glass : nil
       self.stack.alpha = visible ? 1 : 0
       self.searchField?.alpha = visible ? 1 : 0
       self.segmentHost?.alpha = visible ? 1 : 0

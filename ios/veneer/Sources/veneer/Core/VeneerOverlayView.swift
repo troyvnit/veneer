@@ -127,6 +127,26 @@ final class VeneerOverlayView: UIView {
     superview.bringSubviewToFront(self)
   }
 
+  /// Flutter adds a platform view's clipping and overlay layers to the
+  /// FlutterView whenever its composition changes, often on a frame that
+  /// moves no glass and so sends no geometry. Until the overlay is back on
+  /// top those layers take every touch over their area, so it is checked at
+  /// a low rate between frames too.
+  private var stackOrderLink: CADisplayLink?
+
+  private func updateStackOrderLink() {
+    guard window != nil, superview != nil else {
+      stackOrderLink?.invalidate()
+      stackOrderLink = nil
+      return
+    }
+    guard stackOrderLink == nil else { return }
+    let link = CADisplayLink(target: StackOrderTarget(self), selector: #selector(StackOrderTarget.tick))
+    link.preferredFrameRateRange = CAFrameRateRange(minimum: 10, maximum: 15, preferred: 15)
+    link.add(to: .main, forMode: .common)
+    stackOrderLink = link
+  }
+
   // MARK: - Chrome: tab bar
 
   /// The engine behind this overlay is going away (a dismissed sheet):
@@ -388,6 +408,7 @@ final class VeneerOverlayView: UIView {
     // Context menus go on the FlutterView itself: touches reach Flutter
     // through it, and UIKit recognizes the long press on the same view.
     if let superview { contextMenus.attach(to: superview) } else { contextMenus.detach() }
+    updateStackOrderLink()
   }
 
   /// A sheet's view can be laid out before UIKit presents it (to measure
@@ -396,6 +417,7 @@ final class VeneerOverlayView: UIView {
   override func didMoveToWindow() {
     super.didMoveToWindow()
     if window != nil { updateKeyboardDismissal() }
+    updateStackOrderLink()
   }
 
   /// The keyboard's current top: from the last notification normally, from
@@ -493,4 +515,14 @@ extension UIColor {
       alpha: CGFloat((v >> 24) & 0xFF) / 255
     )
   }
+}
+
+/// Display-link target that doesn't keep the overlay alive.
+@available(iOS 26.0, *)
+private final class StackOrderTarget: NSObject {
+  weak var overlay: VeneerOverlayView?
+
+  init(_ overlay: VeneerOverlayView) { self.overlay = overlay }
+
+  @objc func tick() { overlay?.keepOnTop() }
 }

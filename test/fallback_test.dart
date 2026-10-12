@@ -472,6 +472,56 @@ void main() {
     expect(picked, 'delete');
   });
 
+  testWidgets('menu anchor replica: a tap on the child opens the menu, with checkmark, subtitle and dimmed rows', (
+    tester,
+  ) async {
+    var picked = '';
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: NativeMenuAnchor(
+            items: [
+              NativeMenuItem(title: 'Complete', checked: true, onSelected: () => picked = 'complete'),
+              NativeMenuItem(title: 'Follow up', subtitle: 'Needs another visit', onSelected: () => picked = 'follow'),
+              NativeMenuItem(title: 'Upload', enabled: false, onSelected: () => picked = 'upload'),
+            ],
+            child: const Text('Status'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Status'));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.check), findsOneWidget);
+    expect(find.text('Needs another visit'), findsOneWidget);
+
+    await tester.tap(find.text('Upload'));
+    await tester.pumpAndSettle();
+    expect(picked, isEmpty, reason: 'a disabled row cannot be picked');
+    expect(find.text('Follow up'), findsOneWidget, reason: 'the menu stays open');
+
+    await tester.tap(find.text('Follow up'));
+    await tester.pumpAndSettle();
+    expect(picked, 'follow');
+    expect(find.text('Complete'), findsNothing);
+  });
+
+  testWidgets('menu anchor with no items leaves the child its own taps', (tester) async {
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: NativeMenuAnchor(
+            items: const [],
+            child: GestureDetector(onTap: () => taps++, child: const Text('Status')),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Status'));
+    expect(taps, 1);
+  });
+
   testWidgets('glass shape replica: label, icon and tap', (tester) async {
     var taps = 0;
     await tester.pumpWidget(

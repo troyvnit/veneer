@@ -5,6 +5,9 @@ struct GlassShapeConfig {
   var id: Int
   var group: Int
   var clear: Bool
+  /// `GlassStyle.none`: no glass, only the hit region (e.g. a menu button
+  /// over Flutter content).
+  var plain: Bool
   var tint: UIColor?
   var interactive: Bool
   /// `nil` means capsule.
@@ -24,6 +27,7 @@ struct GlassShapeConfig {
     id = (args["id"] as? NSNumber)?.intValue ?? -1
     group = (args["group"] as? NSNumber)?.intValue ?? 0
     clear = (args["style"] as? String) == "clear"
+    plain = (args["style"] as? String) == "none"
     tint = (args["tint"] as? NSNumber).map(UIColor.init(argb:))
     interactive = (args["interactive"] as? Bool) ?? false
     cornerRadius = (args["cornerRadius"] as? NSNumber).map { CGFloat($0.doubleValue) }

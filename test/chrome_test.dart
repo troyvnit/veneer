@@ -819,6 +819,37 @@ void main() {
     expect(picked, 1);
   });
 
+  testWidgets('menu anchor sends a glass-less shape over its child, and picks come back', (tester) async {
+    var picked = -1;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: NativeMenuAnchor(
+            items: [
+              NativeMenuItem(title: 'Complete', checked: true, onSelected: () => picked = 0),
+              NativeMenuItem(title: 'Follow up', subtitle: 'Another visit', onSelected: () => picked = 1),
+              NativeMenuItem(title: 'Upload', enabled: false, onSelected: () => picked = 2),
+            ],
+            child: const SizedBox(width: 120, height: 32, child: Text('Status')),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final config = sent('configureShape').last;
+    expect(config['style'], 'none');
+    expect(config['icon'], isNull);
+    expect(config['label'], isNull);
+    expect(config['menu'], [
+      {'title': 'Complete', 'icon': null, 'destructive': false, 'checked': true},
+      {'title': 'Follow up', 'icon': null, 'destructive': false, 'subtitle': 'Another visit'},
+      {'title': 'Upload', 'icon': null, 'destructive': false, 'enabled': false},
+    ]);
+    expect(find.text('Status'), findsOneWidget, reason: 'Flutter still draws the trigger');
+    await nativeEvent('shapeMenu', {'id': config['id'], 'index': 1});
+    expect(picked, 1);
+  });
+
   testWidgets('context menu registers its region, picks come back, and the child hides while it is up', (tester) async {
     var picked = -1;
     await tester.pumpWidget(

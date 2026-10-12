@@ -337,8 +337,8 @@ class ComposerBaseView: UIView, UITextViewDelegate {
   func textDidChangeLayout() {}
 }
 
-/// `UIMenu` from Dart menu items: `[{title, icon, destructive}]`. Picking item
-/// `i` reports button id `"<id>.menu<i>"`.
+/// `UIMenu` from Dart menu items: `[{title, subtitle?, icon, destructive,
+/// checked?, enabled?}]`. Picking item `i` reports button id `"<id>.menu<i>"`.
 @available(iOS 26.0, *)
 enum NativeMenu {
   static func make(_ raw: Any?, id: String, iconSize: CGFloat = 20, onSelect: @escaping (String) -> Void) -> UIMenu? {
@@ -354,7 +354,12 @@ enum NativeMenu {
         NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : iconSize)
       }
       let action = UIAction(title: item["title"] as? String ?? "", image: image) { _ in onSelect("\(id).menu\(i)") }
-      if (item["destructive"] as? Bool) == true { action.attributes = .destructive }
+      action.subtitle = item["subtitle"] as? String
+      var attributes: UIMenuElement.Attributes = []
+      if (item["destructive"] as? Bool) == true { attributes.insert(.destructive) }
+      if (item["enabled"] as? Bool) == false { attributes.insert(.disabled) }
+      action.attributes = attributes
+      if (item["checked"] as? Bool) == true { action.state = .on }
       sections[sections.count - 1].append(action)
     }
     sections.removeAll { $0.isEmpty }

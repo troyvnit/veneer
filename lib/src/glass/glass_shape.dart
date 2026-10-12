@@ -12,7 +12,15 @@ import '../core/veneer_bridge.dart';
 import 'glass_coordinator.dart';
 import 'glass_group.dart';
 
-enum GlassStyle { regular, clear }
+enum GlassStyle {
+  regular,
+  clear,
+
+  /// No glass: an invisible native hit region over Flutter content, e.g. to
+  /// open a [GlassShape.menu] from a Flutter-drawn button
+  /// ([NativeMenuAnchor]).
+  none,
+}
 
 /// A native Liquid Glass shape positioned by Flutter layout.
 ///
@@ -208,6 +216,7 @@ class _FallbackGlassShapeState extends State<_FallbackGlassShape> {
   @override
   Widget build(BuildContext context) {
     final shape = widget.shape;
+    if (shape.style == GlassStyle.none) return _FallbackHitRegion(shape);
     final style = VeneerFallbackStyle.of(context);
     final clear = shape.style == GlassStyle.clear;
     final fill = shape.tint ?? (clear ? style.surface.withValues(alpha: 0.6) : style.surface);
@@ -262,6 +271,28 @@ class _FallbackGlassShapeState extends State<_FallbackGlassShape> {
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+/// [GlassStyle.none] off iOS 26: nothing drawn, only the tap or menu.
+class _FallbackHitRegion extends StatelessWidget {
+  const _FallbackHitRegion(this.shape);
+
+  final GlassShape shape;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasMenu = shape.menu?.isNotEmpty ?? false;
+    final onTap = hasMenu ? () => showFallbackMenu(context, shape.menu!) : shape.onTap;
+    return Semantics(
+      button: onTap != null,
+      label: shape.label,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: SizedBox(width: shape.width ?? double.infinity, height: shape.height ?? double.infinity),
       ),
     );
   }

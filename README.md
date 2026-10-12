@@ -419,8 +419,25 @@ NativeBarButton(
 ```
 
 `menu` on `NativeBarButton`, `NativeComposerButton` and `GlassShape` opens a native `UIMenu` that
-grows out of the button. `NativeMenuItem.divider()` separates sections. Off iOS 26 a Flutter
-menu with iOS metrics opens instead.
+grows out of the button. `NativeMenuItem.divider()` separates sections. An item can carry a
+`subtitle`, a checkmark (`checked`, the current choice in a picker) or be dimmed (`enabled: false`).
+Off iOS 26 a Flutter menu with iOS metrics opens instead.
+
+**Menus from a Flutter-drawn trigger** — a text row with a chevron, a filled pill:
+
+```dart
+NativeMenuAnchor(
+  items: [
+    for (final status in statuses)
+      NativeMenuItem(title: status.label, checked: status == current, onSelected: () => pick(status)),
+  ],
+  child: statusRow,
+)
+```
+
+A tap on the child opens the native `UIMenu` growing out of it. An invisible native button
+(`GlassShape(style: GlassStyle.none)`) sits over the child and takes the tap, so the child draws the
+trigger but gets no touches of its own. Off iOS 26 a tap opens the Flutter menu next to it.
 
 **Context menus** on any Flutter widget:
 

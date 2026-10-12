@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.11.0
+
+- **Richer menu items:** `NativeMenuItem` takes a `subtitle`, `checked` (UIKit's checkmark for the
+  current choice) and `enabled` (dimmed and unpickable when false), natively and in the Flutter menu.
+  Items that use none of them encode exactly as before.
+- **Menus from Flutter triggers:** `NativeMenuAnchor(items:, child:)` opens a native `UIMenu` from a
+  tap on any Flutter widget, growing out of it; the Flutter menu off iOS 26.
+- **Glass-less shapes:** `GlassStyle.none` makes a `GlassShape` an invisible native hit region (a tap
+  or a menu) with no glass, for content Flutter draws.
+- **Fix: native views under platform-view areas stopped taking touches.** Flutter adds a platform
+  view's clipping and overlay layers to the FlutterView when its composition changes, often on a frame
+  that moves no glass. The overlay only moved back on top when glass geometry was sent, so until then
+  those layers took every touch over the platform view (a glass button on a platform-view surface did
+  nothing). The overlay now checks its place at a low rate between frames as well.
+
 ## 0.10.0
 
 - **Full-screen sheets:** `showNativeSheet(fullScreen: true)` presents a page that fills the screen

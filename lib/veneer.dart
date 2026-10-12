@@ -15,6 +15,8 @@
 ///     by Flutter layout.
 ///   * [GlassSegmentBar] — a row of icons on one glass capsule with a sliding
 ///     selection highlight.
+///   * [NativeContextMenu] and [NativeMenuAnchor] — UIKit menus opened from
+///     Flutter content by a long press or a tap.
 ///
 /// Icons everywhere are [NativeIcon]s — SF Symbols, IconData, SVG or images,
 /// all rendered by UIKit. On Android and iOS 15–25 every widget renders a
@@ -27,6 +29,7 @@ import 'src/glass/glass_group.dart';
 export 'src/chrome/native_chrome.dart';
 export 'src/chrome/native_composer.dart';
 export 'src/chrome/native_context_menu.dart';
+export 'src/chrome/native_menu_anchor.dart';
 export 'src/chrome/native_navigation_bar.dart';
 export 'src/chrome/native_sheet.dart' hide veneerSheetAnchor;
 export 'src/core/fallback_scope.dart' show VeneerFallbackScope, useNativeLayer;
