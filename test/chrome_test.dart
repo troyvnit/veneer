@@ -829,6 +829,7 @@ void main() {
               NativeMenuItem(
                 title: 'Kat',
                 icon: const NativeIcon.imageFile('/tmp/kat.png', circular: true),
+                iconSize: 24,
                 onSelected: () {},
               ),
             ],
@@ -844,6 +845,7 @@ void main() {
       'title': 'Kat',
       'icon': {'type': 'imageFile', 'path': '/tmp/kat.png', 'circular': true},
       'destructive': false,
+      'iconSize': 24.0,
     });
   });
 

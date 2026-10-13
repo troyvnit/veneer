@@ -337,8 +337,8 @@ class ComposerBaseView: UIView, UITextViewDelegate {
   func textDidChangeLayout() {}
 }
 
-/// `UIMenu` from Dart menu items: `[{title, subtitle?, icon, destructive,
-/// checked?, enabled?}]`. Picking item `i` reports button id `"<id>.menu<i>"`.
+/// `UIMenu` from Dart menu items: `[{title, subtitle?, icon, iconSize?,
+/// destructive, checked?, enabled?}]`. Picking item `i` reports button id `"<id>.menu<i>"`.
 /// A `title` heads the menu, as UIKit draws a menu's title.
 @available(iOS 26.0, *)
 enum NativeMenu {
@@ -353,8 +353,9 @@ enum NativeMenu {
         if !(sections.last?.isEmpty ?? true) { sections.append([]) }
         continue
       }
+      let size = (item["iconSize"] as? NSNumber).map { CGFloat($0.doubleValue) } ?? iconSize
       let image = NativeIconDescriptor(item["icon"]).flatMap {
-        NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : iconSize)
+        NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : size)
       }
       let action = UIAction(title: item["title"] as? String ?? "", image: image) { _ in onSelect("\(id).menu\(i)") }
       action.subtitle = item["subtitle"] as? String

@@ -20,6 +20,7 @@ class NativeMenuItem {
     this.destructive = false,
     this.checked = false,
     this.enabled = true,
+    this.iconSize,
   }) : isDivider = false;
 
   /// Separates the items before it from those after, as UIKit's inline menu
@@ -32,6 +33,7 @@ class NativeMenuItem {
       destructive = false,
       checked = false,
       enabled = true,
+      iconSize = null,
       isDivider = true;
 
   final String title;
@@ -51,6 +53,10 @@ class NativeMenuItem {
   /// False shows the item dimmed; it can't be picked.
   final bool enabled;
 
+  /// Side of [icon] in points, for images and glyphs; null uses the menu's
+  /// 20. SF Symbols keep the menu's own symbol size.
+  final double? iconSize;
+
   final bool isDivider;
 
   Map<String, Object?> encode() => isDivider
@@ -62,6 +68,7 @@ class NativeMenuItem {
           if (subtitle != null) 'subtitle': subtitle,
           if (checked) 'checked': true,
           if (!enabled) 'enabled': false,
+          if (iconSize != null) 'iconSize': iconSize,
         };
 }
 
@@ -169,7 +176,7 @@ class _FallbackMenuRow extends StatelessWidget {
             ],
           ),
         ),
-        if (item.icon case final icon?) NativeIconView(icon, size: 20, color: color),
+        if (item.icon case final icon?) NativeIconView(icon, size: item.iconSize ?? 20, color: color),
       ],
     );
   }

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.12.1
+
+- **Menu image size:** `NativeMenuItem.iconSize` sets an image or glyph icon's side in points instead of the
+  menu's 20 — e.g. 24 for avatars, natively and in the Flutter menu.
+
 ## 0.12.0
 
 - **Glass behind Flutter content:** `GlassBackground(child:, style:, tint:, cornerRadius:, onTap:)` is
