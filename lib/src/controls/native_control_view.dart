@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/scheduler.dart';
@@ -23,12 +25,12 @@ class NativeControlView extends StatefulWidget {
 
 class _NativeControlViewState extends State<NativeControlView> {
   MethodChannel? _channel;
-  Map<String, Object?>? _sent;
+  String? _sent;
 
   @override
   void didUpdateWidget(NativeControlView old) {
     super.didUpdateWidget(old);
-    if (!mapEquals(widget.config, _sent)) _send();
+    if (jsonEncode(widget.config) != _sent) _send();
   }
 
   @override
@@ -55,7 +57,7 @@ class _NativeControlViewState extends State<NativeControlView> {
   void _send() {
     final channel = _channel;
     if (channel == null) return;
-    _sent = widget.config;
+    _sent = jsonEncode(widget.config);
     channel.invokeMethod<void>('update', widget.config);
   }
 

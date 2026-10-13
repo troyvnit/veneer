@@ -2,12 +2,12 @@ import Flutter
 import UIKit
 
 /// Platform views for leaf UIKit controls — `UISwitch`, `UISlider`,
-/// `UISegmentedControl` — laid out by Flutter like any widget. Each view
+/// `UISegmentedControl`, a menu button — laid out by Flutter like any widget. Each view
 /// talks on `veneer/<kind>_<id>`: Dart sends `update` with the full
 /// configuration, the control reports user changes back.
 final class NativeControlFactory: NSObject, FlutterPlatformViewFactory {
   enum Kind: String, CaseIterable {
-    case `switch`, slider, segmented
+    case `switch`, slider, segmented, menu, navbar
 
     var viewType: String { "veneer/\(rawValue)" }
   }
@@ -32,8 +32,27 @@ final class NativeControlFactory: NSObject, FlutterPlatformViewFactory {
     case .switch: return NativeSwitchView(frame: frame, channel: channel, config: config)
     case .slider: return NativeSliderView(frame: frame, channel: channel, config: config)
     case .segmented: return NativeSegmentedView(frame: frame, channel: channel, config: config)
+    case .menu:
+      guard #available(iOS 26.0, *) else { return EmptyControlView(frame: frame) }
+      return NativeMenuButtonView(frame: frame, channel: channel, config: config)
+    case .navbar:
+      guard #available(iOS 26.0, *) else { return EmptyControlView(frame: frame) }
+      // Platform views are always created on the main thread.
+      return MainActor.assumeIsolated { NativeNavigationBarView(frame: frame, channel: channel, config: config) }
     }
   }
+}
+
+/// Dart only asks for the menu button on iOS 26; anything older gets an empty view.
+private final class EmptyControlView: NSObject, FlutterPlatformView {
+  private let host: UIView
+
+  init(frame: CGRect) {
+    host = UIView(frame: frame)
+    host.isUserInteractionEnabled = false
+  }
+
+  func view() -> UIView { host }
 }
 
 /// Centres a control of fixed intrinsic size in the frame Flutter gives it.
@@ -184,6 +203,69 @@ private final class NativeSegmentedView: NSObject, FlutterPlatformView {
   @objc private func changed() {
     channel.invokeMethod("valueChanged", arguments: ["index": control.selectedSegmentIndex])
   }
+}
+
+/// An invisible button over Flutter content that opens a `UIMenu` on tap:
+/// `{menu, menuTitle?}`, reporting `menuItem {index}`. For menus inside
+/// content the overlay can't follow, such as a Flutter-drawn sheet.
+@available(iOS 26.0, *)
+private final class NativeMenuButtonView: NSObject, FlutterPlatformView {
+  private let button = UIButton(type: .custom)
+  private let host: ControlHost
+  private let channel: FlutterMethodChannel
+
+  init(frame: CGRect, channel: FlutterMethodChannel, config: [String: Any]) {
+    self.channel = channel
+    host = ControlHost(frame: frame, control: button)
+    host.stretches = true
+    super.init()
+    button.showsMenuAsPrimaryAction = true
+    // Keep the Dart order even when the menu opens upward.
+    button.preferredMenuElementOrder = .fixed
+    apply(config)
+    channel.setMethodCallHandler { [weak self] call, result in
+      if call.method == "update", let config = call.arguments as? [String: Any] { self?.apply(config) }
+      result(nil)
+    }
+  }
+
+  func view() -> UIView { host }
+
+  private func apply(_ config: [String: Any]) {
+    button.menu = NativeMenu.make(config["menu"], id: "menu", title: config["menuTitle"] as? String) {
+      [weak self] item in
+      guard let index = Int(item.components(separatedBy: ".menu").last ?? "") else { return }
+      self?.channel.invokeMethod("menuItem", arguments: ["index": index])
+    }
+  }
+}
+
+/// The overlay's `UINavigationBar` (`NativeNavigationBarHost`) in a
+/// platform view, for bars inside content the overlay can't follow, such as
+/// a Flutter-drawn sheet. Takes the same configuration and reports the same
+/// `navItemPressed {id}` events.
+@available(iOS 26.0, *)
+@MainActor
+private final class NativeNavigationBarView: NSObject, FlutterPlatformView {
+  private let container: UIView
+  private let host = NativeNavigationBarHost()
+  private let channel: FlutterMethodChannel
+
+  init(frame: CGRect, channel: FlutterMethodChannel, config: [String: Any]) {
+    self.channel = channel
+    container = UIView(frame: frame)
+    container.backgroundColor = .clear
+    super.init()
+    host.attach(to: container)
+    host.onEvent = { [weak self] method, payload in self?.channel.invokeMethod(method, arguments: payload) }
+    host.update(config)
+    channel.setMethodCallHandler { [weak self] call, result in
+      if call.method == "update", let config = call.arguments as? [String: Any] { self?.host.update(config) }
+      result(nil)
+    }
+  }
+
+  func view() -> UIView { container }
 }
 
 /// `UIAlertController` alerts: `{title, message?, tint?, actions: [{title,

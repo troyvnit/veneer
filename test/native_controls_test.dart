@@ -150,6 +150,96 @@ void main() {
     expect(picks, [1]);
   });
 
+  testWidgets('menu anchor inside a Flutter-drawn sheet: a platform-view UIMenu button', variant: ios, (tester) async {
+    VeneerBridge.instance.debugIsSupportedOverride = true;
+    var picked = -1;
+    await pumpLtr(
+      tester,
+      VeneerFallbackScope(
+        child: Center(
+          child: NativeMenuAnchor(
+            title: 'Add',
+            items: [
+              NativeMenuItem(title: 'Take a photo', onSelected: () => picked = 0),
+              NativeMenuItem(title: 'Upload a file', onSelected: () => picked = 1),
+            ],
+            child: const SizedBox(width: 60, height: 32),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final view = tester.widget<UiKitView>(find.byType(UiKitView));
+    expect(view.viewType, 'veneer/menu');
+    expect((view.creationParams! as Map)['menuTitle'], 'Add');
+    expect(((view.creationParams! as Map)['menu']! as List).map((item) => (item as Map)['title']), [
+      'Take a photo',
+      'Upload a file',
+    ]);
+    expect(tester.getSize(find.byType(UiKitView)), const Size(60, 32));
+    expect(veneerCalls.where((call) => call.method == 'configureShape'), isEmpty);
+
+    await nativeEvent('veneer/menu_$nextViewId', 'menuItem', {'index': 1});
+    expect(picked, 1);
+  });
+
+  testWidgets('menu anchor outside a fallback scope stays on the overlay', variant: ios, (tester) async {
+    VeneerBridge.instance.debugIsSupportedOverride = true;
+    await pumpLtr(
+      tester,
+      Center(
+        child: NativeMenuAnchor(
+          items: [NativeMenuItem(title: 'Share', onSelected: () {})],
+          child: const SizedBox(width: 60, height: 32),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(UiKitView), findsNothing);
+    expect(veneerCalls.where((call) => call.method == 'configureShape'), isNotEmpty);
+  });
+
+  testWidgets('navigation bar inside a Flutter-drawn sheet: the real bar as a platform view', variant: ios, (
+    tester,
+  ) async {
+    VeneerBridge.instance.debugIsSupportedOverride = true;
+    var closed = 0;
+    late EdgeInsets contentPadding;
+    await pumpLtr(
+      tester,
+      MediaQuery(
+        data: const MediaQueryData(size: Size(400, 800)),
+        child: VeneerFallbackScope(
+          child: NativeNavigationBar(
+            leading: NativeBarButton(icon: const NativeIcon.symbol('xmark'), onPressed: () => closed++),
+            title: const NativeBarTitle(title: 'New Event'),
+            child: Builder(
+              builder: (context) {
+                contentPadding = MediaQuery.paddingOf(context);
+                return const SizedBox.expand();
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final view = tester.widget<UiKitView>(find.byType(UiKitView));
+    expect(view.viewType, 'veneer/navbar');
+    final config = view.creationParams! as Map;
+    expect((config['leading'] as Map)['id'], 'leading');
+    expect((config['title'] as Map)['title'], 'New Event');
+    expect(config['hidden'], isFalse);
+    expect(find.text('New Event'), findsNothing, reason: 'the native bar draws the title, not the replica');
+    expect(contentPadding.top, greaterThan(40), reason: 'content still starts below the bar');
+    expect(veneerCalls.where((call) => call.method == 'setNavigationBar'), isEmpty);
+
+    await nativeEvent('veneer/navbar_$nextViewId', 'navItemPressed', {'id': 'leading'});
+    expect(closed, 1);
+  });
+
   testWidgets('native alert: sent to UIKit, answers with the picked index', variant: ios, (tester) async {
     VeneerBridge.instance.debugIsSupportedOverride = true;
     late BuildContext context;

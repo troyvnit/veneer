@@ -91,6 +91,8 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
       let button = menuButton ?? {
         let b = UIButton(type: .custom)
         b.showsMenuAsPrimaryAction = true
+        // Keep the Dart order even when the menu opens upward.
+        b.preferredMenuElementOrder = .fixed
         b.frame = contentView.bounds
         b.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         contentView.addSubview(b)

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.13.1
+
+- **Native menus inside Flutter-drawn sheets:** inside a `VeneerFallbackScope` (such as a Flutter-drawn sheet,
+  where the overlay can't follow), `NativeMenuAnchor` now opens UIKit's `UIMenu` from a platform-view button
+  instead of the Flutter replica.
+- **Native navigation bars inside Flutter-drawn sheets:** there, `NativeNavigationBar` is now the real
+  `UINavigationBar` as a platform view — glass bar buttons, title and menus — instead of the replica. Content
+  padding and the fade under the bar stay as before; UIKit's scroll edge effect itself needs the overlay.
+- **Fix: menus opening upward kept their order.** UIKit reverses a button's menu when it opens upward (the
+  first item nearest the button); `GlassShape` and `NativeMenuAnchor` menus now keep the order they were
+  given.
+
 ## 0.13.0
 
 - **Alerts:** `showNativeAlert(context:, title:, message:, actions:, tint:)` presents UIKit's

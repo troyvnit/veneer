@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../controls/native_control_view.dart';
 import '../core/fallback_scope.dart';
 import '../core/fallback_style.dart';
 import '../core/native_icon.dart';
@@ -263,14 +264,9 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
     }
   }
 
-  void _push() {
-    if (!_native) return;
-    if (_visible) {
-      _active = this;
-    } else if (_active != this) {
-      return; // another bar owns the native view
-    }
-    final handlers = <String, VoidCallback?>{};
+  /// The bar's wire configuration; registers each button's callback in
+  /// [handlers] under the id the native side reports.
+  Map<String, Object?> _config(Map<String, VoidCallback?> handlers, {required bool visible}) {
     Map<String, Object?> button(String id, NativeBarButton b) {
       handlers[id] = b.onPressed;
       return {
@@ -291,8 +287,8 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
 
     final title = widget.title;
     if (title != null) handlers['title'] = title.onPressed;
-    final config = <String, Object?>{
-      'hidden': !_visible,
+    return <String, Object?>{
+      'hidden': !visible,
       'leading': widget.leading == null ? null : button('leading', widget.leading!),
       'title': title == null
           ? null
@@ -313,6 +309,17 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
       'tintColor': widget.tintColor?.toARGB32(),
       'edgeEffect': widget.scrollEdgeEffect.name,
     };
+  }
+
+  void _push() {
+    if (!_native) return;
+    if (_visible) {
+      _active = this;
+    } else if (_active != this) {
+      return; // another bar owns the native view
+    }
+    final handlers = <String, VoidCallback?>{};
+    final config = _config(handlers, visible: _visible);
     // Pages rebuild every frame while the keyboard animates; only send real
     // changes. Callbacks are refreshed locally either way.
     final encoded = jsonEncode(config);
@@ -322,6 +329,19 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
     }
     _lastSent = encoded;
     _bridge.setNavigationBar({...config, 'scrolled': _isScrolled}, (id) => handlers[id]?.call());
+  }
+
+  /// The real `UINavigationBar` as a platform view, for content the overlay
+  /// can't follow (a [VeneerFallbackScope], such as a Flutter-drawn sheet).
+  Widget _embeddedBar() {
+    final handlers = <String, VoidCallback?>{};
+    return NativeControlView(
+      kind: 'navbar',
+      config: _config(handlers, visible: true),
+      onEvent: (method, arguments) {
+        if (method == 'navItemPressed') handlers[arguments['id']]?.call();
+      },
+    );
   }
 
   @override
@@ -338,7 +358,14 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
   @override
   Widget build(BuildContext context) {
     final child = NotificationListener<Notification>(onNotification: _onScroll, child: widget.child);
-    if (!_native) return _FallbackNavigationBar(widget, scrolled: _isScrolled, child: child);
+    if (!_native) {
+      return _FallbackNavigationBar(
+        widget,
+        scrolled: _isScrolled,
+        nativeBar: _bridge.isSupported ? _embeddedBar() : null,
+        child: child,
+      );
+    }
     // Content starts below the bar and scrolls under it. Inside a
     // NativeChromeScope this is already applied; elsewhere (a pushed page,
     // a native sheet) the bar supplies it.
@@ -375,10 +402,14 @@ EdgeInsets _capsulePadding(NativeBarTitle title) =>
     _hasLargeIcon(title) ? const EdgeInsets.only(left: 2, right: 8) : const EdgeInsets.only(left: 14, right: 16);
 
 class _FallbackNavigationBar extends StatelessWidget {
-  const _FallbackNavigationBar(this.bar, {required this.scrolled, required this.child});
+  const _FallbackNavigationBar(this.bar, {required this.scrolled, required this.child, this.nativeBar});
 
   final bool scrolled;
   final Widget child;
+
+  /// The real bar as a platform view, drawn in place of the replica controls
+  /// (iOS 26 inside a [VeneerFallbackScope]); the padding and fade stay.
+  final Widget? nativeBar;
 
   /// Adjacent buttons with the same [NativeBarButton.group].
   static List<List<NativeBarButton>> _groups(List<NativeBarButton> buttons) {
@@ -618,16 +649,19 @@ class _FallbackNavigationBar extends StatelessWidget {
                 ),
               ),
             ),
-          Positioned(
-            left: margin,
-            right: margin,
-            top: top,
-            height: item,
-            child: Material(type: MaterialType.transparency, child: row),
-          ),
+          if (nativeBar case final nativeBar?)
+            Positioned(left: 0, right: 0, top: mq.padding.top, height: barBottom - mq.padding.top, child: nativeBar)
+          else
+            Positioned(
+              left: margin,
+              right: margin,
+              top: top,
+              height: item,
+              child: Material(type: MaterialType.transparency, child: row),
+            ),
           // The system's plain title: centred on the bar, clear of the
           // buttons on both sides.
-          if (title != null && !title.capsule)
+          if (title != null && !title.capsule && nativeBar == null)
             Positioned(
               left: margin,
               right: margin,
