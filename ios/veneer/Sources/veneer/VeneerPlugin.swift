@@ -92,6 +92,9 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
     let instance = VeneerPlugin(registrar: registrar, channel: channel)
     registrar.addMethodCallDelegate(instance, channel: channel)
     registrar.register(GlassBackgroundFactory(messenger: registrar.messenger()), withId: GlassBackgroundFactory.viewType)
+    for kind in NativeControlFactory.Kind.allCases {
+      registrar.register(NativeControlFactory(kind: kind, messenger: registrar.messenger()), withId: kind.viewType)
+    }
     guard #available(iOS 26.0, *) else { return }
     // Engine independent: sheet engines come and go, the app's assets stay.
     NativeIconRenderer.shared.assetPath = { asset, package in
@@ -203,6 +206,9 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
     case "composerCommand":
       overlay?.composerCommand(args)
       result(nil)
+
+    case "showAlert":
+      NativeAlert.present(args, from: registrar.viewController, result: result)
 
     case "setChromeHidden":
       overlay?.setChromeHidden((args["hidden"] as? Bool) ?? false)

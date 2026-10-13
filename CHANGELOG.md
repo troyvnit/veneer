@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.0
+
+- **Alerts:** `showNativeAlert(context:, title:, message:, actions:, tint:)` presents UIKit's
+  `UIAlertController` over whatever the app or sheet shows and answers with the picked action's index
+  (`NativeAlertAction` with `normal`/`cancel`/`destructive` styles and a `preferred` action);
+  `CupertinoAlertDialog` off iOS 26.
+- **Leaf controls:** `NativeSwitch`, `NativeSlider` and `NativeSegmentedControl` (text segments) are UIKit's
+  `UISwitch`, `UISlider` and `UISegmentedControl` as platform views laid out by Flutter, so they also work
+  inside Flutter-drawn sheets. They're controlled like Flutter's: a parent that keeps its value puts the
+  control back. Cupertino controls off iOS 26.
+
 ## 0.12.1
 
 - **Menu image size:** `NativeMenuItem.iconSize` sets an image or glyph icon's side in points instead of the

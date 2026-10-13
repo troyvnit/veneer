@@ -537,6 +537,29 @@ GlassSegmentBar(
 - The bar is `segments.length * segmentWidth` wide plus its padding. Off iOS 26 it renders the same
   capsule in Flutter.
 
+### Controls and alerts
+
+```dart
+NativeSwitch(value: notify, onChanged: (v) => setState(() => notify = v), activeColor: brand);
+NativeSlider(value: speed, min: 0, max: 4, onChanged: setSpeed);
+NativeSegmentedControl(labels: const ['Member', 'Admin'], selectedIndex: role, onValueChanged: setRole);
+
+final picked = await showNativeAlert(
+  context: context,
+  title: 'Delete this item?',
+  tint: brand,
+  actions: const [
+    NativeAlertAction(title: 'Delete', style: NativeAlertActionStyle.destructive, preferred: true),
+    NativeAlertAction(title: 'Cancel', style: NativeAlertActionStyle.cancel),
+  ],
+);
+```
+
+The controls are UIKit's own, as platform views Flutter lays out (so they work in Flutter-drawn sheets).
+They're controlled: the value shown is the one you pass. `showNativeAlert` presents a
+`UIAlertController` and answers with the index of the action picked. Off iOS 26 they're Flutter's
+Cupertino controls and `CupertinoAlertDialog`.
+
 ### Icons
 
 Every icon parameter takes a `NativeIcon`, rendered natively:
@@ -593,7 +616,7 @@ A Flutter sheet given a `backgroundColor` stays solid at every detent; pass a
 - **Context menus:** the lifted preview is a still snapshot, so animated content freezes while
   the menu is up.
 - **Accessibility:** not yet audited with VoiceOver.
-- **Not yet native:** toolbars, search, and leaf controls such as switches and sliders.
+- **Not yet native:** toolbars.
 
 ## Example app
 

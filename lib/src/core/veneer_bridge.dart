@@ -255,6 +255,10 @@ class VeneerBridge {
     await _channel.invokeMethod<void>('configureContextMenu', config);
   }
 
+  /// Presents a `UIAlertController` over the engine's view controller and
+  /// answers with the picked action's index.
+  Future<int?> showAlert(Map<String, Object?> config) => _channel.invokeMethod<int>('showAlert', config);
+
   Future<void> removeContextMenu(int id) async {
     _contextMenuHandlers.remove(id);
     if (!_attached) return;
