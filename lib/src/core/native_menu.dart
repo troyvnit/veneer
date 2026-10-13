@@ -81,11 +81,12 @@ List<Map<String, Object?>>? encodeMenu(String id, List<NativeMenuItem>? menu, Ma
 /// trailing edge for a button in the trailing half), below it (above it in
 /// the lower half of the screen), an opaque surface, and dividers drawn as
 /// the thin section bands between groups.
-Future<void> showFallbackMenu(BuildContext context, List<NativeMenuItem> items) async {
+Future<void> showFallbackMenu(BuildContext context, List<NativeMenuItem> items, {String? title}) async {
   const width = 250.0;
   const rowHeight = 44.0;
   const subtitledRowHeight = 58.0;
   const sectionGap = 8.0;
+  const titleHeight = 36.0;
   final box = context.findRenderObject()! as RenderBox;
   final overlay = Overlay.of(context).context.findRenderObject()! as RenderBox;
   final rect = Rect.fromPoints(
@@ -97,7 +98,7 @@ Future<void> showFallbackMenu(BuildContext context, List<NativeMenuItem> items) 
   final above = rect.center.dy > screen.height / 2;
   double heightOf(NativeMenuItem item) =>
       item.isDivider ? sectionGap : (item.subtitle == null ? rowHeight : subtitledRowHeight);
-  final height = items.fold<double>(0, (sum, item) => sum + heightOf(item));
+  final height = items.fold<double>(title == null ? 0 : titleHeight, (sum, item) => sum + heightOf(item));
   // UIKit indents every row when any of them carries a checkmark.
   final hasChecks = items.any((item) => item.checked);
   final top = above ? rect.top - height - 8 : rect.bottom + 8;
@@ -117,6 +118,7 @@ Future<void> showFallbackMenu(BuildContext context, List<NativeMenuItem> items) 
     constraints: const BoxConstraints.tightFor(width: width),
     shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(14)),
     items: [
+      if (title != null) _MenuTitle(title: title, color: style.secondaryLabel, height: titleHeight),
       for (final (i, item) in items.indexed)
         if (item.isDivider)
           _MenuSectionGap(color: band, height: sectionGap)
@@ -171,6 +173,42 @@ class _FallbackMenuRow extends StatelessWidget {
       ],
     );
   }
+}
+
+/// A menu's title, as UIKit draws it above the items.
+class _MenuTitle extends PopupMenuEntry<int> {
+  const _MenuTitle({required this.title, required this.color, required this.height});
+
+  final String title;
+  final Color color;
+
+  @override
+  final double height;
+
+  @override
+  bool represents(int? value) => false;
+
+  @override
+  State<_MenuTitle> createState() => _MenuTitleState();
+}
+
+class _MenuTitleState extends State<_MenuTitle> {
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: widget.height,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: Text(
+          widget.title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 13, color: widget.color),
+        ),
+      ),
+    ),
+  );
 }
 
 /// The band between menu sections.

@@ -819,6 +819,34 @@ void main() {
     expect(picked, 1);
   });
 
+  testWidgets('menu anchor sends its title with the menu', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: NativeMenuAnchor(
+            title: 'Uploaded by',
+            items: [
+              NativeMenuItem(
+                title: 'Kat',
+                icon: const NativeIcon.imageFile('/tmp/kat.png', circular: true),
+                onSelected: () {},
+              ),
+            ],
+            child: const SizedBox(width: 120, height: 32),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final config = sent('configureShape').last;
+    expect(config['menuTitle'], 'Uploaded by');
+    expect((config['menu']! as List).single, {
+      'title': 'Kat',
+      'icon': {'type': 'imageFile', 'path': '/tmp/kat.png', 'circular': true},
+      'destructive': false,
+    });
+  });
+
   testWidgets('menu anchor sends a glass-less shape over its child, and picks come back', (tester) async {
     var picked = -1;
     await tester.pumpWidget(

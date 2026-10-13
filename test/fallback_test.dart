@@ -506,6 +506,24 @@ void main() {
     expect(find.text('Complete'), findsNothing);
   });
 
+  testWidgets('menu anchor replica heads the menu with its title', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: NativeMenuAnchor(
+            title: 'Uploaded by',
+            items: [NativeMenuItem(title: 'Kat', onSelected: () {})],
+            child: const Text('Uploader'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Uploader'));
+    await tester.pumpAndSettle();
+    expect(find.text('Uploaded by'), findsOneWidget);
+    expect(tester.getTopLeft(find.text('Uploaded by')).dy, lessThan(tester.getTopLeft(find.text('Kat')).dy));
+  });
+
   testWidgets('menu anchor with no items leaves the child its own taps', (tester) async {
     var taps = 0;
     await tester.pumpWidget(

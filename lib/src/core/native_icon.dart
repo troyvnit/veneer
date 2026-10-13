@@ -59,10 +59,12 @@ sealed class NativeIcon {
 
   /// A raster image (PNG, JPEG, HEIC…) from the app's assets, drawn in its
   /// own colours — for photos, thumbnails and avatars rather than glyphs.
-  const factory NativeIcon.image(String asset, {String? package}) = _ImageAssetIcon;
+  /// [circular] fills the box and crops it to a circle, as for an avatar.
+  const factory NativeIcon.image(String asset, {String? package, bool circular}) = _ImageAssetIcon;
 
-  /// A raster image file on disk, e.g. a photo the user picked.
-  const factory NativeIcon.imageFile(String path) = _ImageFileIcon;
+  /// A raster image file on disk, e.g. a photo the user picked or a cached
+  /// avatar. [circular] fills the box and crops it to a circle.
+  const factory NativeIcon.imageFile(String path, {bool circular}) = _ImageFileIcon;
 
   /// Wire format for the native side (`NativeIconDescriptor`).
   Map<String, Object?> encode();
@@ -179,32 +181,40 @@ final class _SvgStringIcon extends NativeIcon {
 }
 
 final class _ImageAssetIcon extends NativeIcon {
-  const _ImageAssetIcon(this.asset, {this.package});
+  const _ImageAssetIcon(this.asset, {this.package, this.circular = false});
   final String asset;
   final String? package;
+  final bool circular;
 
   @override
-  Map<String, Object?> encode() => {'type': 'imageAsset', 'asset': asset, 'package': package};
+  Map<String, Object?> encode() => {
+    'type': 'imageAsset',
+    'asset': asset,
+    'package': package,
+    if (circular) 'circular': true,
+  };
 
   @override
-  bool operator ==(Object other) => other is _ImageAssetIcon && other.asset == asset && other.package == package;
+  bool operator ==(Object other) =>
+      other is _ImageAssetIcon && other.asset == asset && other.package == package && other.circular == circular;
 
   @override
-  int get hashCode => Object.hash(asset, package);
+  int get hashCode => Object.hash(asset, package, circular);
 }
 
 final class _ImageFileIcon extends NativeIcon {
-  const _ImageFileIcon(this.path);
+  const _ImageFileIcon(this.path, {this.circular = false});
   final String path;
+  final bool circular;
 
   @override
-  Map<String, Object?> encode() => {'type': 'imageFile', 'path': path};
+  Map<String, Object?> encode() => {'type': 'imageFile', 'path': path, if (circular) 'circular': true};
 
   @override
-  bool operator ==(Object other) => other is _ImageFileIcon && other.path == path;
+  bool operator ==(Object other) => other is _ImageFileIcon && other.path == path && other.circular == circular;
 
   @override
-  int get hashCode => path.hashCode;
+  int get hashCode => Object.hash(path, circular);
 }
 
 /// Renders a [NativeIcon] with Flutter, for the fallback UI where the native
@@ -266,11 +276,19 @@ class NativeIconView extends StatelessWidget {
         fit: fit,
         colorFilter: tint(i.tinted),
       ),
-      final _ImageAssetIcon i => Image.asset(i.asset, package: i.package, width: size, height: size, fit: fit),
-      final _ImageFileIcon i => Image.file(File(i.path), width: size, height: size, fit: fit),
+      final _ImageAssetIcon i => _circular(
+        i.circular,
+        Image.asset(i.asset, package: i.package, width: size, height: size, fit: i.circular ? BoxFit.cover : fit),
+      ),
+      final _ImageFileIcon i => _circular(
+        i.circular,
+        Image.file(File(i.path), width: size, height: size, fit: i.circular ? BoxFit.cover : fit),
+      ),
     };
   }
 }
+
+Widget _circular(bool circular, Widget image) => circular ? ClipOval(child: image) : image;
 
 /// Common SF Symbol names and their closest Material icons.
 const Map<String, IconData> sfSymbolFallbacks = {

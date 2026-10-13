@@ -12,11 +12,14 @@ import '../glass/glass_shape.dart';
 /// no touches of its own. Elsewhere (Android, iOS 15–25) a tap opens the
 /// Flutter replica of a native menu next to [child].
 class NativeMenuAnchor extends StatelessWidget {
-  const NativeMenuAnchor({super.key, required this.items, required this.child});
+  const NativeMenuAnchor({super.key, required this.items, required this.child, this.title});
 
   /// Empty disables the menu; [child] then gets its own touches.
   final List<NativeMenuItem> items;
   final Widget child;
+
+  /// Heads the menu, as UIKit draws a menu's title.
+  final String? title;
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +29,7 @@ class NativeMenuAnchor extends StatelessWidget {
       children: [
         child,
         Positioned.fill(
-          child: GlassShape(style: GlassStyle.none, menu: items),
+          child: GlassShape(style: GlassStyle.none, menu: items, menuTitle: title),
         ),
       ],
     );

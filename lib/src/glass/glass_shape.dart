@@ -54,6 +54,7 @@ class GlassShape extends StatefulWidget {
     this.foreground,
     this.onTap,
     this.menu,
+    this.menuTitle,
   });
 
   /// Null fills the incoming constraints on that axis.
@@ -77,6 +78,9 @@ class GlassShape extends StatefulWidget {
 
   /// Tapping opens this menu instead of calling [onTap].
   final List<NativeMenuItem>? menu;
+
+  /// Heads [menu], as UIKit draws a menu's title.
+  final String? menuTitle;
 
   @override
   State<GlassShape> createState() => _GlassShapeState();
@@ -117,6 +121,7 @@ class _GlassShapeState extends State<GlassShape> {
         old.label != widget.label ||
         old.foreground != widget.foreground ||
         (old.onTap == null) != (widget.onTap == null) ||
+        old.menuTitle != widget.menuTitle ||
         _menuKey(old.menu) != _menuKey(widget.menu)) {
       _configure();
     }
@@ -141,6 +146,7 @@ class _GlassShapeState extends State<GlassShape> {
             'label': widget.label,
             'foreground': widget.foreground?.toARGB32(),
             'menu': encodeMenu('$_id', widget.menu, {}),
+            'menuTitle': widget.menuTitle,
           },
           widget.onTap == null ? null : () => widget.onTap?.call(),
           onMenu: (index) {
@@ -249,7 +255,7 @@ class _FallbackGlassShapeState extends State<_FallbackGlassShape> {
           builder: (context, c) {
             final radius = shape.cornerRadius ?? math.min(c.maxWidth, c.maxHeight) / 2;
             final hasMenu = shape.menu?.isNotEmpty ?? false;
-            final onTap = hasMenu ? () => showFallbackMenu(context, shape.menu!) : shape.onTap;
+            final onTap = hasMenu ? () => showFallbackMenu(context, shape.menu!, title: shape.menuTitle) : shape.onTap;
             return GestureDetector(
               onTapDown: onTap == null ? null : (_) => setState(() => _pressed = true),
               onTapUp: onTap == null ? null : (_) => setState(() => _pressed = false),
@@ -285,7 +291,7 @@ class _FallbackHitRegion extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasMenu = shape.menu?.isNotEmpty ?? false;
-    final onTap = hasMenu ? () => showFallbackMenu(context, shape.menu!) : shape.onTap;
+    final onTap = hasMenu ? () => showFallbackMenu(context, shape.menu!, title: shape.menuTitle) : shape.onTap;
     return Semantics(
       button: onTap != null,
       label: shape.label,

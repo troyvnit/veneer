@@ -75,7 +75,7 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
     plain = c.plain
     if isShown { effect = plain ? nil : g }
 
-    let menu = NativeMenu.make(c.menu, id: "\(id)") { [weak self] item in
+    let menu = NativeMenu.make(c.menu, id: "\(id)", title: c.menuTitle) { [weak self] item in
       guard let self, let index = Int(item.components(separatedBy: ".menu").last ?? "") else { return }
       self.onMenu?(self.id, index)
     }

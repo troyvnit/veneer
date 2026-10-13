@@ -39,11 +39,14 @@ struct NativeIconDescriptor: Hashable {
   var original = false
   /// Mirror in right-to-left layouts (`IconData.matchTextDirection`).
   var mirrored = false
+  /// Raster images only: fill the box and crop to a circle (avatars).
+  var circular = false
 
   init?(_ value: Any?) {
     guard let map = value as? [String: Any], let type = map["type"] as? String else { return nil }
     original = (map["tinted"] as? Bool) == false
     mirrored = (map["mirror"] as? Bool) ?? false
+    circular = (map["circular"] as? Bool) ?? false
     switch type {
     case "symbol":
       guard let name = map["name"] as? String else { return nil }
@@ -133,7 +136,7 @@ final class NativeIconRenderer {
       guard let svg = svg(for: icon.source) else { break }
       image = icon.original ? dynamicImage(svg, size: size) : svg.image(size: size, template: true)
     case .imageAsset, .imageFile:
-      image = fullImage(for: icon).map { Self.fitted($0, in: size) }
+      image = fullImage(for: icon).map { icon.circular ? Self.circleCropped($0, size: size) : Self.fitted($0, in: size) }
     }
     // UIKit flips it only when the view's layout direction is right-to-left.
     if icon.mirrored { image = image?.imageFlippedForRightToLeftLayoutDirection() }
@@ -187,6 +190,19 @@ final class NativeIconRenderer {
     let scale = min(size / s.width, size / s.height)
     let target = CGSize(width: s.width * scale, height: s.height * scale)
     return UIGraphicsImageRenderer(size: CGSize(width: size, height: size)).image { _ in
+      image.draw(in: CGRect(x: (size - target.width) / 2, y: (size - target.height) / 2, width: target.width, height: target.height))
+    }.withRenderingMode(.alwaysOriginal)
+  }
+
+  /// Aspect-fill a `size`×`size` box and crop it to a circle, as an avatar.
+  private static func circleCropped(_ image: UIImage, size: CGFloat) -> UIImage {
+    let s = image.size
+    guard s.width > 0, s.height > 0 else { return image }
+    let scale = max(size / s.width, size / s.height)
+    let target = CGSize(width: s.width * scale, height: s.height * scale)
+    let box = CGRect(x: 0, y: 0, width: size, height: size)
+    return UIGraphicsImageRenderer(size: box.size).image { _ in
+      UIBezierPath(ovalIn: box).addClip()
       image.draw(in: CGRect(x: (size - target.width) / 2, y: (size - target.height) / 2, width: target.width, height: target.height))
     }.withRenderingMode(.alwaysOriginal)
   }

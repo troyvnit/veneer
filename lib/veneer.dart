@@ -11,6 +11,8 @@
 ///   * [showNativeSheet] — real UIKit sheets hosting Flutter content;
 ///   * [GlassShape] and [GlassGroup] — Liquid Glass positioned by Flutter
 ///     layout, merging within groups and honouring Flutter clips.
+///   * [GlassBackground] — Liquid Glass behind Flutter content (a platform
+///     view), for surfaces whose content has to stay Flutter.
 ///   * [NativeSearchField] — a real `UISearchTextField` on glass, positioned
 ///     by Flutter layout.
 ///   * [GlassSegmentBar] — a row of icons on one glass capsule with a sliding
@@ -37,6 +39,7 @@ export 'src/core/fallback_style.dart' show VeneerFallbackStyle;
 export 'src/core/native_icon.dart';
 export 'src/core/native_menu.dart' show NativeMenuItem;
 export 'src/core/veneer_bridge.dart' show SheetRequestHandler, VeneerBridge, VeneerTransport;
+export 'src/glass/glass_background.dart';
 export 'src/glass/glass_group.dart';
 export 'src/glass/glass_segment_bar.dart';
 export 'src/glass/glass_shape.dart';

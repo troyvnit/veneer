@@ -18,6 +18,7 @@ struct GlassShapeConfig {
   var foreground: UIColor?
   /// Dart menu items (`NativeMenu`); tapping opens a `UIMenu`.
   var menu: Any?
+  var menuTitle: String?
   /// Turns the shape into a search field on its glass.
   var search: GlassSearchConfig?
   /// Turns the shape into a row of tappable segments with a highlight.
@@ -36,6 +37,7 @@ struct GlassShapeConfig {
     label = args["label"] as? String
     foreground = (args["foreground"] as? NSNumber).map(UIColor.init(argb:))
     menu = args["menu"]
+    menuTitle = args["menuTitle"] as? String
     search = (args["search"] as? [String: Any]).map(GlassSearchConfig.init)
     segments = (args["segments"] as? [String: Any]).map(GlassSegmentsConfig.init)
   }

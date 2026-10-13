@@ -91,6 +91,7 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
     let channel = FlutterMethodChannel(name: "veneer", binaryMessenger: registrar.messenger())
     let instance = VeneerPlugin(registrar: registrar, channel: channel)
     registrar.addMethodCallDelegate(instance, channel: channel)
+    registrar.register(GlassBackgroundFactory(messenger: registrar.messenger()), withId: GlassBackgroundFactory.viewType)
     guard #available(iOS 26.0, *) else { return }
     // Engine independent: sheet engines come and go, the app's assets stay.
     NativeIconRenderer.shared.assetPath = { asset, package in

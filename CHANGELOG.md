@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.0
+
+- **Glass behind Flutter content:** `GlassBackground(child:, style:, tint:, cornerRadius:, onTap:)` is
+  Liquid Glass under any Flutter widget — a dock, a search field, a pill holding Flutter text — as a
+  platform view (`UIVisualEffectView` + `UIGlassEffect`) composited beneath the child. With `onTap` the
+  glass is interactive and takes the tap natively. Off iOS 26 it is the replica surface.
+- **Menu titles:** `NativeMenuAnchor(title:)` and `GlassShape(menuTitle:)` head the menu with a title
+  (UIKit's menu title; a header row in the Flutter menu).
+- **Round images:** `NativeIcon.image` and `NativeIcon.imageFile` take `circular: true` to fill the box
+  and crop to a circle — for avatars in menus.
+
 ## 0.11.0
 
 - **Richer menu items:** `NativeMenuItem` takes a `subtitle`, `checked` (UIKit's checkmark for the

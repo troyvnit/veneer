@@ -480,6 +480,20 @@ Stack(children: [
 - Glass honours Flutter clips (`ClipRect`, `ClipRRect`, `ClipOval`, scroll viewports).
 - Glass always draws above Flutter content: Flutter widgets placed under a shape are refracted by it.
 
+**Glass behind Flutter content** — for surfaces whose content has to stay Flutter:
+
+```dart
+GlassBackground(
+  cornerRadius: 28,
+  child: Padding(padding: const EdgeInsets.all(12), child: dockContent),
+)
+```
+
+`GlassBackground` is a platform view (`UIVisualEffectView` + `UIGlassEffect`) that Flutter composites
+under its child, so the child can be any widget. It costs more than a shape; use `GlassShape` when the
+content can be native. With `onTap` the glass is interactive and takes the tap itself (give the child
+`IgnorePointer`). Off iOS 26 it is the replica surface.
+
 ### Search field
 
 ```dart

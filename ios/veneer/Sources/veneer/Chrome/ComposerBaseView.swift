@@ -339,9 +339,12 @@ class ComposerBaseView: UIView, UITextViewDelegate {
 
 /// `UIMenu` from Dart menu items: `[{title, subtitle?, icon, destructive,
 /// checked?, enabled?}]`. Picking item `i` reports button id `"<id>.menu<i>"`.
+/// A `title` heads the menu, as UIKit draws a menu's title.
 @available(iOS 26.0, *)
 enum NativeMenu {
-  static func make(_ raw: Any?, id: String, iconSize: CGFloat = 20, onSelect: @escaping (String) -> Void) -> UIMenu? {
+  static func make(
+    _ raw: Any?, id: String, title: String? = nil, iconSize: CGFloat = 20, onSelect: @escaping (String) -> Void
+  ) -> UIMenu? {
     guard let items = raw as? [[String: Any]], !items.isEmpty else { return nil }
     // Dividers split the items into inline sections, as UIKit draws them.
     var sections: [[UIMenuElement]] = [[]]
@@ -363,7 +366,7 @@ enum NativeMenu {
       sections[sections.count - 1].append(action)
     }
     sections.removeAll { $0.isEmpty }
-    if sections.count == 1 { return UIMenu(children: sections[0]) }
-    return UIMenu(children: sections.map { UIMenu(options: .displayInline, children: $0) })
+    if sections.count == 1 { return UIMenu(title: title ?? "", children: sections[0]) }
+    return UIMenu(title: title ?? "", children: sections.map { UIMenu(options: .displayInline, children: $0) })
   }
 }
