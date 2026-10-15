@@ -67,6 +67,88 @@ enum NativeVoiceRecordingFailure {
   unavailable,
 }
 
+/// The clip layout for a composer's recording bar, in place of the default
+/// Slack-style row:
+///
+/// ```
+///        🎙 Recording an audio clip…
+/// (×)  ▌▌▐▌▌▐▌▐▐▌…  00:02  ‖  (✓)
+/// ```
+///
+/// An optional [title] line (18 pt, 8 pt above and 4 pt below), then a 56 pt
+/// row: 40 pt cancel and done circles 8 pt from the edges, 2 pt bars 1 pt
+/// apart scrolling in from the trailing edge, the elapsed time and, when
+/// [pausable], a pause button that turns into resume. Elements sit 8 pt apart,
+/// pause and done 12 pt.
+@immutable
+class NativeComposerRecording {
+  const NativeComposerRecording({
+    this.title,
+    this.titleIcon,
+    this.pausable = false,
+    this.pauseLabel,
+    this.resumeLabel,
+    this.cancelIcon,
+    this.pauseIcon,
+    this.resumeIcon,
+    this.doneIcon,
+    this.titleColor,
+    this.timeColor,
+    this.iconColor,
+    this.waveColor,
+    this.cancelBackgroundColor,
+  });
+
+  /// E.g. "Recording an audio clip…"; no title line without it.
+  final String? title;
+
+  /// Before [title]; defaults to `mic`.
+  final NativeIcon? titleIcon;
+
+  /// Shows the pause/resume button before done.
+  final bool pausable;
+
+  /// VoiceOver labels for the pause/resume button.
+  final String? pauseLabel;
+  final String? resumeLabel;
+
+  /// Default to `xmark`, `pause`, `mic` and `checkmark`.
+  final NativeIcon? cancelIcon;
+  final NativeIcon? pauseIcon;
+  final NativeIcon? resumeIcon;
+  final NativeIcon? doneIcon;
+
+  /// Default to the secondary label colour.
+  final Color? titleColor;
+  final Color? timeColor;
+
+  /// The cancel and pause/resume glyphs; defaults to the label colour.
+  final Color? iconColor;
+
+  /// The bars; defaults to the tertiary label colour.
+  final Color? waveColor;
+
+  /// Behind cancel; defaults to the quaternary system fill.
+  final Color? cancelBackgroundColor;
+
+  Map<String, Object?> _encode() => {
+    'title': title,
+    'titleIcon': titleIcon?.encode(),
+    'pausable': pausable,
+    'pauseLabel': pauseLabel,
+    'resumeLabel': resumeLabel,
+    'cancelIcon': cancelIcon?.encode(),
+    'pauseIcon': pauseIcon?.encode(),
+    'resumeIcon': resumeIcon?.encode(),
+    'doneIcon': doneIcon?.encode(),
+    'titleColor': titleColor?.toARGB32(),
+    'timeColor': timeColor?.toARGB32(),
+    'iconColor': iconColor?.toARGB32(),
+    'waveColor': waveColor?.toARGB32(),
+    'cancelBackgroundColor': cancelBackgroundColor?.toARGB32(),
+  };
+}
+
 /// Where a controller's commands go: the native composer or the Flutter
 /// fallback.
 abstract class _ComposerBackend {
@@ -245,6 +327,7 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
   ValueChanged<NativeVoiceRecordingFailure>? get _onVoiceRecordingFailed;
   String? get _recordingCancelLabel;
   String? get _recordingDoneLabel;
+  NativeComposerRecording? get _recording;
 
   void _onRecording(Map<String, Object?> event) {
     final controller = _controller;
@@ -332,6 +415,7 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
       'interactiveDismissal': _interactiveDismissal,
       'recordingCancelLabel': _recordingCancelLabel,
       'recordingDoneLabel': _recordingDoneLabel,
+      'recording': _recording?._encode(),
     };
     final handlerSet = VeneerComposerHandlers(
       onButton: (id) => handlers[id]?.call(),
@@ -545,6 +629,7 @@ class NativeComposer extends StatefulWidget {
     this.onVoiceRecordingFailed,
     this.recordingCancelLabel,
     this.recordingDoneLabel,
+    this.recording,
     required this.child,
   });
 
@@ -595,6 +680,9 @@ class NativeComposer extends StatefulWidget {
   final String? recordingCancelLabel;
   final String? recordingDoneLabel;
 
+  /// The recording bar's clip layout; null keeps the default row.
+  final NativeComposerRecording? recording;
+
   final Widget child;
 
   @override
@@ -628,6 +716,9 @@ class _NativeComposerState extends _ComposerHostState<NativeComposer> {
 
   @override
   String? get _recordingDoneLabel => widget.recordingDoneLabel;
+
+  @override
+  NativeComposerRecording? get _recording => widget.recording;
 
   @override
   ValueChanged<String>? get _onSend => widget.onSend;

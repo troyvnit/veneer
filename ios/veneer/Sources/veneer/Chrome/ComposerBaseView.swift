@@ -78,8 +78,11 @@ class ComposerBaseView: UIView, UITextViewDelegate {
     textView.tintColor = accent
     highlights = (args["highlights"] as? [String] ?? []).filter { !$0.isEmpty }
     recordingBar.setLabels(cancel: args["recordingCancelLabel"] as? String, done: args["recordingDoneLabel"] as? String)
+    let wasClip = recordingBar.preferredHeight
+    recordingBar.setClip(args["recording"] as? [String: Any])
+    let clipChanged = wasClip != recordingBar.preferredHeight
     applyHighlights()
-    let animate = configure(args) && window != nil && isShown
+    let animate = (configure(args) || (clipChanged && isRecording)) && window != nil && isShown
     contentChanged()
     if animate {
       animateContentLayout()
@@ -198,6 +201,8 @@ class ComposerBaseView: UIView, UITextViewDelegate {
     recordingBar.accent = accent
     recordingBar.onCancel = { [weak self] in self?.cancelRecording() }
     recordingBar.onDone = { [weak self] in self?.finishRecording() }
+    recordingBar.onPause = { [weak self] in self?.pauseRecording() }
+    recordingBar.onResume = { [weak self] in self?.resumeRecording() }
     recorder.onSample = { [weak self] level, elapsed in self?.recordingBar.append(level: level, elapsed: elapsed) }
     recorder.onLimit = { [weak self] in self?.finishRecording() }
     recorder.start { [weak self] failure in
@@ -231,6 +236,18 @@ class ComposerBaseView: UIView, UITextViewDelegate {
       "path": clip.url.path,
       "durationMs": Int((clip.duration * 1000).rounded()),
     ])
+  }
+
+  func pauseRecording() {
+    guard let recorder, isRecording, !recorder.isPaused else { return }
+    recorder.pause()
+    recordingBar.setPaused(true)
+  }
+
+  func resumeRecording() {
+    guard let recorder, isRecording, recorder.isPaused else { return }
+    recorder.resume()
+    recordingBar.setPaused(recorder.isPaused)
   }
 
   func cancelRecording() {

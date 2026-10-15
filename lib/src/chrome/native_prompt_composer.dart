@@ -190,6 +190,7 @@ class NativePromptComposer extends StatefulWidget {
     this.onVoiceRecordingFailed,
     this.recordingCancelLabel,
     this.recordingDoneLabel,
+    this.recording,
     required this.child,
   });
 
@@ -263,6 +264,9 @@ class NativePromptComposer extends StatefulWidget {
   final String? recordingCancelLabel;
   final String? recordingDoneLabel;
 
+  /// The recording bar's clip layout; null keeps the default row.
+  final NativeComposerRecording? recording;
+
   final Widget child;
 
   @override
@@ -296,6 +300,9 @@ class _NativePromptComposerState extends _ComposerHostState<NativePromptComposer
 
   @override
   String? get _recordingDoneLabel => widget.recordingDoneLabel;
+
+  @override
+  NativeComposerRecording? get _recording => widget.recording;
 
   @override
   ValueChanged<String>? get _onSend => widget.onSend;

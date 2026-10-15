@@ -401,6 +401,7 @@ final class NativePromptComposerView: ComposerBaseView {
   }
 
   func preferredHeight(width: CGFloat) -> CGFloat {
+    if isRecording, let height = recordingBar.preferredHeight { return height }
     let cw = capsuleWidth(for: width)
     guard isMultiline(capsuleWidth: cw) else { return Metrics.row }
     return attachmentsBlock + multilineTextHeight(capsuleWidth: cw) + Metrics.multiRowExtra
@@ -486,7 +487,9 @@ final class NativePromptComposerView: ComposerBaseView {
 
     // Recording: the bar takes the row and the content fades under it.
     let recording = isRecording
-    recordingBar.frame = CGRect(x: 0, y: rowTop, width: cw, height: Metrics.row)
+    recordingBar.frame = recordingBar.preferredHeight == nil
+      ? CGRect(x: 0, y: rowTop, width: cw, height: Metrics.row)
+      : CGRect(x: 0, y: 0, width: cw, height: h)
     recordingBar.alpha = recording ? 1 : 0
     recordingBar.isUserInteractionEnabled = recording
     leadingButton.alpha = recording ? 0 : 1

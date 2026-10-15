@@ -143,7 +143,8 @@ final class NativeComposerView: ComposerBaseView {
 
   /// Height for a given width in the current state.
   func preferredHeight(width: CGFloat) -> CGFloat {
-    isExpanded ? Metrics.textTop + textHeight(for: width) + Metrics.row + 4 : Metrics.idleHeight
+    if isRecording, let height = recordingBar.preferredHeight { return height }
+    return isExpanded ? Metrics.textTop + textHeight(for: width) + Metrics.row + 4 : Metrics.idleHeight
   }
 
   /// 9 pt above the keyboard or the tab bar, whichever is higher; 44 pt

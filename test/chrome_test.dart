@@ -944,6 +944,33 @@ void main() {
     expect(clip?.duration, const Duration(milliseconds: 2500));
   });
 
+  testWidgets('voice recording: the clip layout goes native', variant: ios, (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativePromptComposer(
+          recording: const NativeComposerRecording(
+            title: 'Recording an audio clip…',
+            pausable: true,
+            pauseLabel: 'Pause',
+            resumeLabel: 'Resume',
+            waveColor: Color(0x1F000000),
+          ),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    await tester.pump();
+    final recording = sent('setComposer').last['recording'] as Map;
+    expect(recording['title'], 'Recording an audio clip…');
+    expect(recording['pausable'], isTrue);
+    expect(recording['resumeLabel'], 'Resume');
+    expect(recording['waveColor'], 0x1F000000);
+
+    await tester.pumpWidget(const MaterialApp(home: NativePromptComposer(child: SizedBox.expand())));
+    await tester.pump();
+    expect(sent('setComposer').last['recording'], isNull);
+  });
+
   testWidgets('a composer taking over the native view sends its own text', variant: ios, (tester) async {
     final first = NativeComposerController(text: '@');
     final second = NativeComposerController();

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.0
+
+- **Recording bar clip layout:** `recording: NativeComposerRecording(...)` on `NativeComposer` and
+  `NativePromptComposer` swaps the Slack-style recording row for a clip layout: an optional title line
+  (e.g. "Recording an audio clip…"), 40 pt cancel and done circles, 2 pt bars 1 pt apart in `waveColor`, a
+  `00:00` time and, with `pausable`, a pause button that turns into resume and carries on into the same clip.
+  Icons, colours and VoiceOver labels are configurable; without it the bar is unchanged.
+
 ## 0.13.1
 
 - **Native menus inside Flutter-drawn sheets:** inside a `VeneerFallbackScope` (such as a Flutter-drawn sheet,
