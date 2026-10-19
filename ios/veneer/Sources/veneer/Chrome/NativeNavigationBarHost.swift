@@ -33,18 +33,35 @@ final class NativeNavigationBarHost: NSObject {
 
   private var leading: NSLayoutConstraint?
   private var trailing: NSLayoutConstraint?
+  private var top: NSLayoutConstraint?
 
   /// Where UIKit puts the outermost glass items: 20 pt in from the bar's edges.
   private static let systemSideInset: CGFloat = 20
+
+  /// Without a status bar (landscape, say) the safe area reaches the screen's
+  /// edge, and UIKit would sit the glass items flush against it. They keep this
+  /// much room instead.
+  static let edgeTopInset: CGFloat = 8
 
   func attach(to container: UIView) {
     guard bar.superview !== container else { return }
     container.addSubview(bar)
     let leading = bar.leadingAnchor.constraint(equalTo: container.leadingAnchor)
     let trailing = bar.trailingAnchor.constraint(equalTo: container.trailingAnchor)
+    let top = bar.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor)
     self.leading = leading
     self.trailing = trailing
-    NSLayoutConstraint.activate([leading, trailing, bar.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor)])
+    self.top = top
+    NSLayoutConstraint.activate([leading, trailing, top])
+    updateTopInset(in: container)
+  }
+
+  /// Re-applies [edgeTopInset] as the container's safe area changes (a rotation).
+  func updateTopInset(in container: UIView) {
+    let inset: CGFloat = container.safeAreaInsets.top > 0 ? 0 : Self.edgeTopInset
+    guard let top, top.constant != inset else { return }
+    top.constant = inset
+    container.setNeedsLayout()
   }
 
   func detach() {

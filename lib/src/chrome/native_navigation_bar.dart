@@ -432,12 +432,17 @@ class _FallbackNavigationBar extends StatelessWidget {
   static const double titledPadding = 16;
   static const double titledGap = 8;
 
+  /// Without a status bar (landscape, say) the bar would sit flush against the
+  /// screen's edge; it keeps this much room instead, as the native bar does.
+  static const double edgeTopInset = 8;
+
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
     final style = VeneerFallbackStyle.of(context);
     final foreground = bar.tintColor ?? style.label;
-    final top = mq.padding.top + 2;
+    final barTop = mq.padding.top + (mq.padding.top > 0 ? 0 : edgeTopInset);
+    final top = barTop + 2;
     final barBottom = top + item + 6;
     final title = bar.title;
     final background = Theme.of(context).scaffoldBackgroundColor;
@@ -650,7 +655,7 @@ class _FallbackNavigationBar extends StatelessWidget {
               ),
             ),
           if (nativeBar case final nativeBar?)
-            Positioned(left: 0, right: 0, top: mq.padding.top, height: barBottom - mq.padding.top, child: nativeBar)
+            Positioned(left: 0, right: 0, top: barTop, height: barBottom - barTop, child: nativeBar)
           else
             Positioned(
               left: margin,

@@ -481,6 +481,11 @@ final class VeneerOverlayView: UIView {
     layoutComposer()
   }
 
+  override func safeAreaInsetsDidChange() {
+    super.safeAreaInsetsDidChange()
+    navigationBarHost?.updateTopInset(in: self)
+  }
+
   /// Distance from the top of native chrome to the bottom of the screen.
   /// Flutter adds this to MediaQuery padding so scroll views end above the
   /// bar but still scroll underneath it. Not reported while the bar is

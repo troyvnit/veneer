@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.1
+
+- **Navigation bars keep clear of the screen's edge without a status bar:** in landscape, or wherever the
+  top safe area is zero, `NativeNavigationBar` now sits 8 pt below the edge instead of flush against it,
+  natively and in the Flutter replica. Content padding follows.
+
 ## 0.14.0
 
 - **Recording bar clip layout:** `recording: NativeComposerRecording(...)` on `NativeComposer` and
