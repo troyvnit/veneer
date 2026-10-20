@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.2
+
+- **Glass no longer crashes on degenerate transforms:** a glass shape under a transform that maps it to
+  NaN or infinite geometry (a zero-denominator scale, a perspective seen edge-on) used to raise
+  `CALayerInvalidGeometry` when its frame was applied. Such shapes are now sent empty and hidden, and the
+  native side ignores non-finite frames and clips.
+
 ## 0.14.1
 
 - **Navigation bars keep clear of the screen's edge without a status bar:** in landscape, or wherever the

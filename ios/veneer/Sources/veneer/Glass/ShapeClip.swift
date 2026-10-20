@@ -14,10 +14,14 @@ struct ShapeClip: Equatable {
   init() {}
 
   /// Reads `[flags, rect LTWH, rrect LTWH, radii TL TR BR BL]` at `o`.
+  /// Non-finite components drop that part of the clip.
   init(_ buf: UnsafeBufferPointer<Double>, at o: Int) {
     let flags = Int(buf[o])
-    if flags & 1 != 0 { rect = CGRect(x: buf[o + 1], y: buf[o + 2], width: buf[o + 3], height: buf[o + 4]) }
-    if flags & 2 != 0 {
+    let finite = { (range: ClosedRange<Int>) in range.allSatisfy { buf[o + $0].isFinite } }
+    if flags & 1 != 0, finite(1...4) {
+      rect = CGRect(x: buf[o + 1], y: buf[o + 2], width: buf[o + 3], height: buf[o + 4])
+    }
+    if flags & 2 != 0, finite(5...12) {
       rrect = CGRect(x: buf[o + 5], y: buf[o + 6], width: buf[o + 7], height: buf[o + 8])
       radii = (9...12).map { CGFloat(buf[o + $0]) }
     }

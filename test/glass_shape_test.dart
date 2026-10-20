@@ -72,6 +72,23 @@ void main() {
     expect(frame[7], 0, reason: 'visible flag');
   });
 
+  testWidgets('GlassShape under a degenerate transform is sent empty and hidden', variant: ios, (tester) async {
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: Center(
+          child: Transform(transform: Matrix4.zero(), child: const GlassShape(width: 50, height: 50)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump();
+
+    final frame = calls.lastWhere((c) => c.method == 'applyFrame').arguments as Float64List;
+    expect(frame.every((v) => v.isFinite), isTrue);
+    expect(frame.sublist(3, 8), [0, 0, 0, 0, 0]);
+  });
+
   Map<String, Object?> shapeConfig(String label) => calls
       .where((c) => c.method == 'configureShape')
       .map((c) => (c.arguments as Map).cast<String, Object?>())

@@ -280,8 +280,10 @@ final class GlassLayerView: UIView {
       if clipId != 0 { groups[shape.groupId]?.scopes[clipId]?.setClip(ShapeClip(buf, at: o + 7)) }
 
       let frame = CGRect(x: buf[o + 1], y: buf[o + 2], width: buf[o + 3], height: buf[o + 4])
-      if shape.frame != frame { shape.frame = frame }
-      let visible = buf[o + 5] > 0.5 && frame.width > 0 && frame.height > 0
+      // `setFrame:` raises on NaN/infinite geometry; keep the last frame.
+      let finite = (1...4).allSatisfy { buf[o + $0].isFinite }
+      if finite, shape.frame != frame { shape.frame = frame }
+      let visible = finite && buf[o + 5] > 0.5 && frame.width > 0 && frame.height > 0
       if visible != shape.targetVisible {
         shape.targetVisible = visible
         visibilityChanges.append((shape, visible))

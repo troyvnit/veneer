@@ -98,23 +98,32 @@ class GlassCoordinator {
     var o = 2;
     if (hostOffset != null) {
       frame[o] = composerHostId.toDouble();
-      frame[o + 1] = hostOffset.dx;
-      frame[o + 2] = hostOffset.dy;
+      if (hostOffset.isFinite) {
+        frame[o + 1] = hostOffset.dx;
+        frame[o + 2] = hostOffset.dy;
+      }
       o += stride;
     }
     for (final anchor in _anchors.values) {
       frame[o] = anchor.shapeId.toDouble();
       if (anchor.attached && anchor.hasSize) {
         final g = resolveAnchorGeometry(anchor);
+        // A degenerate ancestor transform (a zero-denominator scale, a
+        // perspective seen edge-on) yields a NaN/infinite rect; UIKit throws
+        // on such a frame, so the shape is sent empty and hidden instead.
+        if (!g.rect.isFinite) {
+          o += stride;
+          continue;
+        }
         _put(frame, o + 1, g.rect);
         frame[o + 5] = anchor.shouldShow && g.painted && !g.fullyClipped ? 1 : 0;
         frame[o + 6] = g.clipId.toDouble();
         var flags = 0;
-        if (g.clipRect case final clip?) {
+        if (g.clipRect case final clip? when clip.isFinite) {
           flags |= 1;
           _put(frame, o + 8, clip);
         }
-        if (g.clipRRect case final rr?) {
+        if (g.clipRRect case final rr? when rr.isFinite) {
           flags |= 2;
           _put(frame, o + 12, rr.outerRect);
           // Native corners are circular; elliptical radii use the smaller axis.
