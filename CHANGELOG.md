@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.3
+
+- **Centred titles stay centred:** a long centred `NativeBarTitle` used to slide off the bar's centre into
+  whatever room the buttons left, so with a leading button and no trailing ones the title and subtitle sat
+  right of centre. It now stays on the bar's centre line and truncates within the room on both sides of it,
+  natively and in the Flutter replica. Leading-aligned titles are unchanged.
+
 ## 0.14.2
 
 - **Glass no longer crashes on degenerate transforms:** a glass shape under a transform that maps it to

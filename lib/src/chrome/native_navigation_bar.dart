@@ -696,8 +696,9 @@ class _FallbackNavigationBar extends StatelessWidget {
   }
 }
 
-/// UINavigationBar's title placement: centred on the bar while it fits,
-/// otherwise moved into the space the buttons leave.
+/// The native title placement: a centred title stays on the bar's centre
+/// line, clear of the wider of the two sides; a leading one starts right
+/// after the leading button.
 class _TitleLayout extends SingleChildLayoutDelegate {
   const _TitleLayout({required this.leading, required this.trailing, required this.centred});
 
@@ -707,16 +708,17 @@ class _TitleLayout extends SingleChildLayoutDelegate {
   /// Otherwise leading-aligned, right after the leading button.
   final bool centred;
 
+  double get _centredInset => math.max(leading, trailing);
+
   @override
   BoxConstraints getConstraintsForChild(BoxConstraints constraints) => BoxConstraints(
-    maxWidth: math.max(0, constraints.maxWidth - leading - trailing),
+    maxWidth: math.max(0, constraints.maxWidth - (centred ? _centredInset * 2 : leading + trailing)),
     maxHeight: constraints.maxHeight,
   );
 
   @override
   Offset getPositionForChild(Size size, Size childSize) {
-    final ideal = centred ? (size.width - childSize.width) / 2 : leading;
-    final x = ideal.clamp(leading, math.max(leading, size.width - trailing - childSize.width)).toDouble();
+    final x = centred ? (size.width - childSize.width) / 2 : leading;
     return Offset(x, (size.height - childSize.height) / 2);
   }
 

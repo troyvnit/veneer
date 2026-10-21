@@ -287,6 +287,10 @@ final class BarTitleView: UIView {
   private let subtitleLabel = UILabel()
   private let stack = UIStackView()
   private var leadingAligned = false
+  private var stackLeading: NSLayoutConstraint!
+  private var stackTrailing: NSLayoutConstraint!
+  private var stackCenterX: NSLayoutConstraint!
+  private var stackWidth: NSLayoutConstraint!
 
   /// Needs our own view: a text style, or leading alignment.
   static func isCustom(_ spec: [String: Any]) -> Bool {
@@ -307,9 +311,11 @@ final class BarTitleView: UIView {
     }
     stack.translatesAutoresizingMaskIntoConstraints = false
     addSubview(stack)
+    stackLeading = stack.leadingAnchor.constraint(equalTo: leadingAnchor)
+    stackTrailing = stack.trailingAnchor.constraint(equalTo: trailingAnchor)
+    stackCenterX = stack.centerXAnchor.constraint(equalTo: centerXAnchor)
+    stackWidth = stack.widthAnchor.constraint(equalToConstant: 0)
     NSLayoutConstraint.activate([
-      stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-      stack.trailingAnchor.constraint(equalTo: trailingAnchor),
       stack.centerYAnchor.constraint(equalTo: centerYAnchor),
       heightAnchor.constraint(equalToConstant: 44),
     ])
@@ -321,6 +327,8 @@ final class BarTitleView: UIView {
 
   func configure(_ spec: [String: Any]) {
     leadingAligned = (spec["alignment"] as? String) == "leading"
+    NSLayoutConstraint.deactivate([stackLeading, stackTrailing, stackCenterX, stackWidth])
+    NSLayoutConstraint.activate(leadingAligned ? [stackLeading, stackTrailing] : [stackCenterX, stackWidth])
     let alignment: NSTextAlignment = leadingAligned ? .natural : .center
     stack.alignment = leadingAligned ? .leading : .center
     Self.apply(spec["style"], to: titleLabel, text: spec["title"] as? String,
@@ -357,12 +365,53 @@ final class BarTitleView: UIView {
     }
   }
 
-  /// Leading titles take all the room the bar gives them, so they start at
-  /// the leading edge; centred ones size to their text.
+  override var center: CGPoint {
+    didSet { if center != oldValue { setNeedsLayout() } }
+  }
+
+  override var frame: CGRect {
+    didSet { if frame != oldValue { setNeedsLayout() } }
+  }
+
+  override func didMoveToWindow() {
+    super.didMoveToWindow()
+    setNeedsLayout()
+  }
+
+  /// UIKit moves a long title off the bar's centre into whatever room the
+  /// items leave. A centred title stays on the bar's centre line instead,
+  /// truncating within the room it has on both sides of it.
+  override func layoutSubviews() {
+    if !leadingAligned {
+      var offset: CGFloat = 0
+      var width = bounds.width
+      if let bar = enclosingNavigationBar() {
+        let barMidX = bar.convert(CGPoint(x: bar.bounds.midX, y: 0), to: self).x
+        let halfWidth = min(barMidX, bounds.width - barMidX)
+        if halfWidth > 0 {
+          offset = barMidX - bounds.midX
+          width = halfWidth * 2
+        }
+      }
+      if stackCenterX.constant != offset { stackCenterX.constant = offset }
+      if stackWidth.constant != width { stackWidth.constant = width }
+    }
+    super.layoutSubviews()
+  }
+
+  private func enclosingNavigationBar() -> UINavigationBar? {
+    var view = superview
+    while let current = view {
+      if let bar = current as? UINavigationBar { return bar }
+      view = current.superview
+    }
+    return nil
+  }
+
+  /// Titles take all the room the bar gives them: leading ones start at the
+  /// leading edge, centred ones place their labels on the bar's centre line.
   override var intrinsicContentSize: CGSize {
-    guard !leadingAligned else { return CGSize(width: UIView.layoutFittingExpandedSize.width, height: 44) }
-    let fitted = stack.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
-    return CGSize(width: fitted.width, height: 44)
+    CGSize(width: UIView.layoutFittingExpandedSize.width, height: 44)
   }
 }
 

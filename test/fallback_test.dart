@@ -99,6 +99,33 @@ void main() {
     expect(huddle, 1);
   });
 
+  testWidgets('navigation bar replica: a long centred title stays on the bar centre with only a leading button', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeNavigationBar(
+          leading: const NativeBarButton(icon: NativeIcon.symbol('xmark'), title: 'Close'),
+          title: const NativeBarTitle(
+            title: 'Gutters, wall repair, window pane, siding and the back deck railing',
+            subtitle: 'QTE-10176',
+          ),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    final barCentre = tester.getCenter(find.byType(NativeNavigationBar)).dx;
+    final title = find.textContaining('Gutters');
+    final subtitle = find.text('QTE-10176');
+    expect(tester.getCenter(title).dx, moreOrLessEquals(barCentre, epsilon: 0.5));
+    expect(tester.getCenter(subtitle).dx, moreOrLessEquals(barCentre, epsilon: 0.5));
+    expect(
+      tester.getTopLeft(title).dx,
+      greaterThanOrEqualTo(tester.getTopRight(find.bySemanticsLabel('Close')).dx),
+      reason: 'clear of the leading button',
+    );
+  });
+
   testWidgets('navigation bar replica: a titled button shows its icon and title in a capsule', (tester) async {
     var archived = 0;
     await tester.pumpWidget(
