@@ -108,6 +108,7 @@ class VeneerBridge {
     _shapeSearchHandlers.clear();
     _shapeSegmentHandlers.clear();
     _contextMenuHandlers.clear();
+    _bannerHandlers.clear();
     _tabSelectedHandler = null;
     _tabActionHandler = null;
     _navItemHandler = null;
@@ -258,6 +259,24 @@ class VeneerBridge {
   /// Presents a `UIAlertController` over the engine's view controller and
   /// answers with the picked action's index.
   Future<int?> showAlert(Map<String, Object?> config) => _channel.invokeMethod<int>('showAlert', config);
+
+  // MARK: Banners
+
+  int _nextBannerId = 0;
+  final Map<int, ({VoidCallback? onTap, VoidCallback? onDismissed})> _bannerHandlers = {};
+
+  /// Drops a banner in above everything (`showNativeBanner`); answers whether
+  /// it was shown. Its taps and dismissal come back as `bannerTapped` and
+  /// `bannerDismissed`.
+  Future<bool> showBanner(Map<String, Object?> config, {VoidCallback? onTap, VoidCallback? onDismissed}) async {
+    final id = ++_nextBannerId;
+    _bannerHandlers[id] = (onTap: onTap, onDismissed: onDismissed);
+    final shown = await _channel.invokeMethod<bool>('showBanner', {...config, 'id': id}) ?? false;
+    if (!shown) _bannerHandlers.remove(id);
+    return shown;
+  }
+
+  Future<void> hideBanner() => _channel.invokeMethod<void>('hideBanner');
 
   Future<void> removeContextMenu(int id) async {
     _contextMenuHandlers.remove(id);
@@ -557,6 +576,10 @@ class VeneerBridge {
         }
       case 'sheetMessage':
         _sheetMessages.add(args['message']);
+      case 'bannerTapped':
+        _bannerHandlers[args['id']]?.onTap?.call();
+      case 'bannerDismissed':
+        _bannerHandlers.remove(args['id'])?.onDismissed?.call();
       case 'sheetDetentChanged':
         _sheetDetentHandlers[args['id']! as int]?.call(args['detent']! as int);
       case 'sheetRequest':

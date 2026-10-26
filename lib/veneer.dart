@@ -21,6 +21,9 @@
 ///     Flutter content by a long press or a tap.
 ///   * [NativeSwitch], [NativeSlider], [NativeSegmentedControl] and
 ///     [showNativeAlert] — UIKit's leaf controls and alerts.
+///   * [showNativeBanner] — an in-app notification banner on Liquid Glass,
+///     above the app's chrome and sheets (no Flutter replica: it answers
+///     false elsewhere, so the app draws its own).
 ///
 /// Icons everywhere are [NativeIcon]s — SF Symbols, IconData, SVG or images,
 /// all rendered by UIKit. On Android and iOS 15–25 every widget renders a
@@ -31,6 +34,7 @@ import 'src/core/veneer_bridge.dart';
 import 'src/glass/glass_group.dart';
 
 export 'src/chrome/native_alert.dart';
+export 'src/chrome/native_banner.dart';
 export 'src/chrome/native_chrome.dart';
 export 'src/chrome/native_composer.dart';
 export 'src/chrome/native_context_menu.dart';

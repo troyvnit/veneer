@@ -210,6 +210,16 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
     case "showAlert":
       NativeAlert.present(args, from: registrar.viewController, result: result)
 
+    case "showBanner":
+      result(
+        NativeBannerPresenter.shared.show(args, from: registrar.viewController) { [weak self] method, payload in
+          self?.channel.invokeMethod(method, arguments: payload)
+        })
+
+    case "hideBanner":
+      NativeBannerPresenter.shared.hide()
+      result(nil)
+
     case "setChromeHidden":
       overlay?.setChromeHidden((args["hidden"] as? Bool) ?? false)
       result(nil)

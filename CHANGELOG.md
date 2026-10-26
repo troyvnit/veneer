@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.15.0
+
+- **`showNativeBanner`:** an in-app notification banner on Liquid Glass — icon in a circle with an optional
+  badge, title with a trailing label, subtitle and body — that drops in from the top of the screen in a
+  window of its own, above the app's navigation and tab bars and its native sheets, which Flutter content
+  can't cover. Tap it to act on it, swipe it up to dismiss it; it leaves after its duration, held while
+  touched. `NativeBannerStyle` sets its fonts, colours and metrics. It has no Flutter replica: elsewhere it
+  answers false so the app can draw its own. `hideNativeBanner` slides it away.
+
 ## 0.14.4
 
 - **Scrolled lists in content-sized sheets keep their place:** content in `NativeSheetContent` that fills the
