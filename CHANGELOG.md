@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.4
+
+- **Scrolled lists in content-sized sheets keep their place:** content in `NativeSheetContent` that fills the
+  sheet and is held to its height was measured again on every relayout, laying its scroll views out against
+  a taller viewport for that pass. Their physics clamped the offset to the shorter range, so a list scrolled
+  to its end jumped back on every keystroke in a field below it. Such content is now laid out once at the
+  sheet's height, and measured again only once it no longer fills the sheet.
+
 ## 0.14.3
 
 - **Centred titles stay centred:** a long centred `NativeBarTitle` used to slide off the bar's centre into

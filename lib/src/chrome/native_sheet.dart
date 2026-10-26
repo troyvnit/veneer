@@ -1134,6 +1134,7 @@ class _RenderContentSizedBox extends RenderProxyBox {
   set scrollsFrom(double value) {
     if (value == _scrollsFrom) return;
     _scrollsFrom = value;
+    _heldWithin = null;
     markNeedsLayout();
   }
 
@@ -1141,11 +1142,16 @@ class _RenderContentSizedBox extends RenderProxyBox {
   set maxHeight(double value) {
     if (value == _maxHeight) return;
     _maxHeight = value;
+    _heldWithin = null;
     markNeedsLayout();
   }
 
   ValueChanged<double> onMeasured;
   double? _reported;
+
+  /// The constraints of the last layout that held content filling the whole
+  /// measuring height to the sheet (see [performLayout]).
+  BoxConstraints? _heldWithin;
 
   /// Keeps the second layout's constraints loose (see [performLayout]).
   static const _slack = 0.01;
@@ -1155,6 +1161,20 @@ class _RenderContentSizedBox extends RenderProxyBox {
     final child = this.child;
     size = constraints.biggest;
     if (child == null) return;
+    // Content that filled the whole measuring height and was held to the
+    // sheet would measure the same again, and measuring it lays its scroll
+    // views out against a taller viewport within the frame: their scroll
+    // physics clamp the offset to the shorter range, so a list scrolled to
+    // its end jumps on every keystroke. Laid out once at the sheet's height
+    // instead, re-measured only once it no longer fills the sheet.
+    if (_heldWithin == constraints) {
+      child.layout(
+        BoxConstraints(minWidth: size.width, maxWidth: size.width, maxHeight: size.height + _slack),
+        parentUsesSize: true,
+      );
+      if (child.size.height >= size.height - 0.5) return;
+      _heldWithin = null;
+    }
     child.layout(
       BoxConstraints(minWidth: size.width, maxWidth: size.width, maxHeight: _maxHeight),
       parentUsesSize: true,
@@ -1179,6 +1199,7 @@ class _RenderContentSizedBox extends RenderProxyBox {
         parentUsesSize: true,
       );
     }
+    if (heldToSheet && natural >= _maxHeight - 0.5) _heldWithin = constraints;
     // A sheet's engine lays out once before its view has a size: content
     // squeezed to no width measures absurdly tall, and a sheet presented at
     // that height (then shrinking) leaves a sheet it covers stacked behind

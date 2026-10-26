@@ -771,6 +771,95 @@ void main() {
     expect(sent('navigationBarScrolled').single['scrolled'], isFalse);
   });
 
+  testWidgets('NativeSheetContent holding a scrolled list keeps its offset as the content relays out', variant: ios, (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 790);
+    tester.view.display.size = const Size(393, 852);
+    addTearDown(tester.view.reset);
+    addTearDown(tester.view.display.reset);
+    VeneerBridge.instance.isSheetEngine = true;
+    addTearDown(() => VeneerBridge.instance.isSheetEngine = false);
+    final controller = ScrollController();
+    addTearDown(controller.dispose);
+
+    var label = 'a';
+    late StateSetter relabel;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeSheetContent(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ListView(
+                  controller: controller,
+                  children: [for (var i = 0; i < 30; i++) SizedBox(height: 60, child: Text('row $i'))],
+                ),
+              ),
+              StatefulBuilder(
+                builder: (context, setState) {
+                  relabel = setState;
+                  return Text(label);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    controller.jumpTo(controller.position.maxScrollExtent);
+    await tester.pump();
+    final scrolledTo = controller.offset;
+    final offsets = <double>[];
+    controller.addListener(() => offsets.add(controller.offset));
+
+    relabel(() => label = 'a longer label');
+    await tester.pump();
+    await tester.pumpAndSettle();
+    expect(offsets, isEmpty);
+    expect(controller.offset, scrolledTo);
+  });
+
+  testWidgets('NativeSheetContent held to its sheet measures again once it no longer fills it', variant: ios, (
+    tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 790);
+    tester.view.display.size = const Size(393, 852);
+    addTearDown(tester.view.reset);
+    addTearDown(tester.view.display.reset);
+    VeneerBridge.instance.isSheetEngine = true;
+    addTearDown(() => VeneerBridge.instance.isSheetEngine = false);
+
+    var tall = true;
+    late StateSetter shrink;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeSheetContent(
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              shrink = setState;
+              return tall
+                  ? ListView(children: [for (var i = 0; i < 30; i++) SizedBox(height: 60, child: Text('row $i'))])
+                  : const Column(mainAxisSize: MainAxisSize.min, children: [SizedBox(height: 300)]);
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(sent('sheetContentHeight').last['height'], 852);
+
+    shrink(() => tall = false);
+    await tester.pump();
+    await tester.pump();
+    expect(sent('sheetContentHeight').last['height'], 300);
+    expect(tester.getSize(find.byType(Column)).height, moreOrLessEquals(790, epsilon: 0.1));
+  });
+
   testWidgets('NativeSheetContent keeps its height while the sheet grows to it', variant: ios, (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(393, 466);
