@@ -78,10 +78,23 @@ struct GlassSegmentsConfig {
 struct GlassSearchConfig {
   var placeholder: String
   var text: String
+  var microphone: Bool
+  var microphoneActive: Bool
+  /// App icons replacing UIKit's magnifier and microphone symbols.
+  var searchIcon: NativeIconDescriptor?
+  var microphoneIcon: NativeIconDescriptor?
+  var microphoneActiveIcon: NativeIconDescriptor?
+  var iconSize: CGFloat
 
   init(_ args: [String: Any]) {
     placeholder = args["placeholder"] as? String ?? ""
     text = args["text"] as? String ?? ""
+    microphone = args["microphone"] as? Bool ?? false
+    microphoneActive = args["microphoneActive"] as? Bool ?? false
+    searchIcon = NativeIconDescriptor(args["searchIcon"])
+    microphoneIcon = NativeIconDescriptor(args["microphoneIcon"])
+    microphoneActiveIcon = NativeIconDescriptor(args["microphoneActiveIcon"])
+    iconSize = CGFloat((args["iconSize"] as? NSNumber)?.doubleValue ?? 20)
   }
 }
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.16.0
+
+- **Dictation in `NativeSearchField`:** `onMicrophonePressed` puts a microphone at the trailing edge of the
+  field while it is empty, the way Apple's apps offer dictation; the clear button takes its place once
+  there is text. `microphoneActive` fills it while the app listens. The Flutter replica shows the same
+  button.
+- **App icons in `NativeSearchField`:** `searchIcon`, `microphoneIcon` and `microphoneActiveIcon` replace
+  UIKit's magnifier and microphone symbols with any `NativeIcon`, drawn at `iconSize` points, natively and
+  in the replica. Fields that set none of these send the same configuration as before.
+
 ## 0.15.0
 
 - **`showNativeBanner`:** an in-app notification banner on Liquid Glass — icon in a circle with an optional

@@ -521,6 +521,8 @@ class VeneerBridge {
             handlers?.onSubmitted(args['value'] as String? ?? '');
           case 'focus':
             handlers?.onFocusChanged(args['value'] == true);
+          case 'mic':
+            handlers?.onMicrophone?.call();
         }
       case 'contextMenuItem':
         _contextMenuHandlers[args['id']]?.onSelected(args['index']! as int);
@@ -611,7 +613,12 @@ TextSelection? _selection(Map<Object?, Object?> args) {
 
 /// Callbacks from the native composer.
 class VeneerSearchHandlers {
-  const VeneerSearchHandlers({required this.onChanged, required this.onSubmitted, required this.onFocusChanged});
+  const VeneerSearchHandlers({
+    required this.onChanged,
+    required this.onSubmitted,
+    required this.onFocusChanged,
+    this.onMicrophone,
+  });
 
   /// The text changed as the user typed, cleared or pasted.
   final ValueChanged<String> onChanged;
@@ -621,6 +628,9 @@ class VeneerSearchHandlers {
 
   /// The field gained (true) or lost (false) the keyboard.
   final ValueChanged<bool> onFocusChanged;
+
+  /// The field's microphone was tapped.
+  final VoidCallback? onMicrophone;
 }
 
 class VeneerContextMenuHandlers {

@@ -32,6 +32,8 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
   /// Present when the shape is a search field: a real `UISearchTextField`
   /// with a clear background, so the shape's glass is its capsule.
   private var searchField: UISearchTextField?
+  private var searchMicrophone: UIButton?
+  private var systemSearchImage: UIImage?
   /// Present when the shape is a segment bar: equal-width buttons over a
   /// highlight capsule that slides to the selected one.
   private var segmentHost: UIView?
@@ -277,7 +279,58 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
     field.placeholder = config.placeholder
     field.accessibilityLabel = config.placeholder
     if field.text != config.text { field.text = config.text }
+    applySearchIcon(config, to: field)
+    applySearchMicrophone(config, to: field)
   }
+
+  private func applySearchIcon(_ config: GlassSearchConfig, to field: UISearchTextField) {
+    guard let imageView = field.leftView as? UIImageView else { return }
+    if systemSearchImage == nil { systemSearchImage = imageView.image }
+    imageView.image = config.searchIcon.map { searchAccessoryImage($0, size: config.iconSize) } ?? systemSearchImage
+    imageView.sizeToFit()
+  }
+
+  private func searchAccessoryImage(_ icon: NativeIconDescriptor, size: CGFloat) -> UIImage? {
+    NativeIconRenderer.shared.image(for: icon, pointSize: size)?.withRenderingMode(.alwaysTemplate)
+  }
+
+  private func applySearchMicrophone(_ config: GlassSearchConfig, to field: UISearchTextField) {
+    guard config.microphone else {
+      field.rightView = nil
+      searchMicrophone = nil
+      return
+    }
+    let button = searchMicrophone ?? makeSearchMicrophone()
+    let appIcon = config.microphoneActive
+      ? config.microphoneActiveIcon ?? config.microphoneIcon
+      : config.microphoneIcon
+    let symbol = UIImage.SymbolConfiguration(textStyle: .body)
+    button.setImage(
+      appIcon.flatMap { searchAccessoryImage($0, size: config.iconSize) }
+        ?? UIImage(systemName: config.microphoneActive ? "mic.fill" : "mic", withConfiguration: symbol),
+      for: .normal
+    )
+    button.tintColor = config.microphoneActive ? .label : .secondaryLabel
+    field.rightView = button
+    updateSearchMicrophoneVisibility()
+  }
+
+  private func makeSearchMicrophone() -> UIButton {
+    let button = UIButton(type: .system)
+    button.accessibilityLabel = NSLocalizedString("Dictate", comment: "Search field microphone")
+    button.frame = CGRect(x: 0, y: 0, width: 32, height: 32)
+    button.addTarget(self, action: #selector(searchMicrophoneTapped), for: .touchUpInside)
+    searchMicrophone = button
+    return button
+  }
+
+  private func updateSearchMicrophoneVisibility() {
+    guard let field = searchField else { return }
+    let empty = field.text?.isEmpty ?? true
+    field.rightViewMode = searchMicrophone != nil && empty ? .always : .never
+  }
+
+  @objc private func searchMicrophoneTapped() { onSearch?(id, "mic", true) }
 
   private func makeSearchField() -> UISearchTextField {
     let field = UISearchTextField()
@@ -321,7 +374,10 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
     }
   }
 
-  @objc private func searchChanged() { onSearch?(id, "text", searchField?.text ?? "") }
+  @objc private func searchChanged() {
+    updateSearchMicrophoneVisibility()
+    onSearch?(id, "text", searchField?.text ?? "")
+  }
   @objc private func searchBegan() { onSearch?(id, "focus", true) }
   @objc private func searchEnded() { onSearch?(id, "focus", false) }
 

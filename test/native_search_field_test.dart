@@ -92,6 +92,102 @@ void main() {
     expect(lastSearchConfig()['search'], {'placeholder': 'Search', 'text': ''});
   });
 
+  testWidgets('a microphone is configured and reports taps', variant: ios, (tester) async {
+    var taps = 0;
+    Widget field({required bool active}) => MaterialApp(
+      home: NativeSearchField(placeholder: 'Search', onMicrophonePressed: () => taps++, microphoneActive: active),
+    );
+    await tester.pumpWidget(field(active: false));
+    await tester.pumpAndSettle();
+    final id = lastSearchConfig()['id']!;
+    expect(lastSearchConfig()['search'], {
+      'placeholder': 'Search',
+      'text': '',
+      'microphone': true,
+      'microphoneActive': false,
+    });
+
+    await native('shapeSearch', {'id': id, 'kind': 'mic', 'value': true});
+    expect(taps, 1);
+
+    await tester.pumpWidget(field(active: true));
+    await tester.pump();
+    expect((lastSearchConfig()['search'] as Map)['microphoneActive'], true);
+  });
+
+  testWidgets('falls back to a microphone while the field is empty', (tester) async {
+    VeneerBridge.instance.debugIsSupportedOverride = false;
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeSearchField(placeholder: 'Search', onMicrophonePressed: () => taps++),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byIcon(Icons.mic_none));
+    expect(taps, 1);
+
+    await tester.enterText(find.byType(TextField), 'fire');
+    await tester.pump();
+    expect(find.byIcon(Icons.mic_none), findsNothing);
+    expect(find.byIcon(Icons.cancel), findsOneWidget);
+  });
+
+  testWidgets('app icons replace the system magnifier and microphone', variant: ios, (tester) async {
+    const search = NativeIcon.icon(Icons.travel_explore);
+    const mic = NativeIcon.icon(Icons.keyboard_voice_outlined);
+    const micActive = NativeIcon.icon(Icons.keyboard_voice);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeSearchField(
+          placeholder: 'Search',
+          searchIcon: search,
+          microphoneIcon: mic,
+          microphoneActiveIcon: micActive,
+          onMicrophonePressed: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(lastSearchConfig()['search'], {
+      'placeholder': 'Search',
+      'text': '',
+      'searchIcon': search.encode(),
+      'iconSize': 20,
+      'microphone': true,
+      'microphoneActive': false,
+      'microphoneIcon': mic.encode(),
+      'microphoneActiveIcon': micActive.encode(),
+    });
+  });
+
+  testWidgets('the fallback draws the app icons', (tester) async {
+    VeneerBridge.instance.debugIsSupportedOverride = false;
+    Widget field({required bool active}) => MaterialApp(
+      home: Scaffold(
+        body: NativeSearchField(
+          placeholder: 'Search',
+          searchIcon: const NativeIcon.icon(Icons.travel_explore),
+          microphoneIcon: const NativeIcon.icon(Icons.keyboard_voice_outlined),
+          microphoneActiveIcon: const NativeIcon.icon(Icons.keyboard_voice),
+          microphoneActive: active,
+          onMicrophonePressed: () {},
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(field(active: false));
+    expect(find.byIcon(Icons.travel_explore), findsOneWidget);
+    expect(find.byIcon(Icons.search), findsNothing);
+    expect(find.byIcon(Icons.keyboard_voice_outlined), findsOneWidget);
+
+    await tester.pumpWidget(field(active: true));
+    expect(find.byIcon(Icons.keyboard_voice), findsOneWidget);
+  });
+
   testWidgets('focus and unfocus drive the native field', variant: ios, (tester) async {
     final key = GlobalKey<NativeSearchFieldState>();
     await tester.pumpWidget(

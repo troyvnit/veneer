@@ -513,6 +513,11 @@ NativeSearchField(
 - Text flows both ways through the `controller`: typing updates it, and setting `controller.text`
   (e.g. clearing it) updates the native field. `onChanged`, `onSubmitted` and `onFocusChanged` report
   the user's edits; `NativeSearchFieldState.focus()` / `unfocus()` move the keyboard.
+- `onMicrophonePressed` adds a microphone at the trailing edge while the field is empty, the way Apple's
+  apps offer dictation; the clear button takes its place once there is text. Set `microphoneActive` while
+  the app is listening to fill it. Dictation itself is the app's: veneer only reports the tap.
+- `searchIcon`, `microphoneIcon` and `microphoneActiveIcon` swap UIKit's magnifier and microphone symbols
+  for the app's own `NativeIcon`s (an icon font, an SVG), drawn at `iconSize` points.
 - Off iOS 26 it renders a Flutter field of the same height on the fallback surface.
 
 ### Segment bar
