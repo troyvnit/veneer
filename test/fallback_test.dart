@@ -99,6 +99,38 @@ void main() {
     expect(huddle, 1);
   });
 
+  testWidgets('navigation bar replica: a capsule title without onPressed is not a button', (tester) async {
+    final semantics = tester.ensureSemantics();
+    Widget page({VoidCallback? onPressed}) => MaterialApp(
+      home: NativeNavigationBar(
+        title: NativeBarTitle(
+          title: 'Assistant',
+          icon: const NativeIcon.icon(Icons.auto_awesome),
+          capsule: true,
+          iconSize: 24,
+          iconPadding: 8,
+          iconBorderColor: const Color(0x0A000000),
+          padding: const EdgeInsets.only(left: 2, right: 14),
+          onPressed: onPressed,
+        ),
+        child: const SizedBox.expand(),
+      ),
+    );
+
+    await tester.pumpWidget(page());
+    expect(tester.getSemantics(find.text('Assistant')), isNot(matchesSemantics(isButton: true)));
+    final circle = find.ancestor(of: find.byType(NativeIconView), matching: find.byType(Container)).first;
+    expect(tester.getSize(circle), const Size(40, 40));
+
+    await tester.pumpWidget(page(onPressed: () {}));
+    expect(find.bySemanticsLabel('Assistant'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.text('Assistant')),
+      matchesSemantics(isButton: true, hasTapAction: true, label: 'Assistant'),
+    );
+    semantics.dispose();
+  });
+
   testWidgets('navigation bar replica: a long centred title stays on the bar centre with only a leading button', (
     tester,
   ) async {

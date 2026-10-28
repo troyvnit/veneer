@@ -101,6 +101,38 @@ void main() {
     expect((trailing.last as Map)['titleStyle'], isNull);
   });
 
+  testWidgets('a capsule title sends its icon circle, padding and whether it is pressable', variant: ios, (
+    tester,
+  ) async {
+    Widget page({VoidCallback? onPressed}) => MaterialApp(
+      home: NativeNavigationBar(
+        title: NativeBarTitle(
+          title: 'Assistant',
+          icon: const NativeIcon.symbol('sparkles'),
+          capsule: true,
+          iconSize: 24,
+          iconPadding: 8,
+          iconBorderColor: const Color(0x0A000000),
+          padding: const EdgeInsets.only(left: 2, right: 14),
+          onPressed: onPressed,
+        ),
+        child: const SizedBox(),
+      ),
+    );
+
+    await tester.pumpWidget(page());
+    await tester.pumpAndSettle();
+    final title = sent('setNavigationBar').last['title']! as Map;
+    expect(title['iconPadding'], 8);
+    expect(title['iconBorderColor'], 0x0A000000);
+    expect(title['padding'], {'left': 2.0, 'right': 14.0});
+    expect(title['pressable'], isFalse);
+
+    await tester.pumpWidget(page(onPressed: () {}));
+    await tester.pumpAndSettle();
+    expect((sent('setNavigationBar').last['title']! as Map)['pressable'], isTrue);
+  });
+
   testWidgets('navigation bar on a hidden IndexedStack page never shows', variant: ios, (tester) async {
     await tester.pumpWidget(
       const MaterialApp(

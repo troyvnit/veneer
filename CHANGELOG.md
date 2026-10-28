@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.17.0
+
+- **Static title capsules:** a capsule `NativeBarTitle` without `onPressed` no longer responds to touches —
+  no highlight and no glass press — and isn't announced as a button, natively and in the replica.
+- **Framed title icons:** `NativeBarTitle.iconPadding` sets the icon in a circle `iconSize` plus twice the
+  padding across, and `iconBorderColor` rings that circle in 1 pt; a circle of 32 pt or more sits like an
+  avatar, 2 pt from the capsule's edge. `padding` replaces the capsule's default left and right padding.
+
 ## 0.16.0
 
 - **Dictation in `NativeSearchField`:** `onMicrophonePressed` puts a microphone at the trailing edge of the

@@ -71,7 +71,7 @@ final class NativeNavigationBarHost: NSObject {
     lastTrailing = nil
   }
 
-  /// `{leading: button?, title: {title, subtitle, icon, capsule, id}?,
+  /// `{leading: button?, title: {title, subtitle, icon, capsule, pressable, id}?,
   ///   trailing: [button], tintColor}`, where button = `{id, icon, title, menu?,
   ///   prominent, tint}`.
   ///
@@ -93,19 +93,25 @@ final class NativeNavigationBarHost: NSObject {
       if let title, (title["capsule"] as? Bool) == true {
         let capsule = TitleCapsuleControl()
         capsule.configure(title)
-        capsule.addAction(UIAction { [weak self] _ in self?.onEvent?("navItemPressed", ["id": title["id"] ?? "title"]) }, for: .touchUpInside)
+        let pressable = (title["pressable"] as? Bool) ?? true
+        if pressable {
+          capsule.addAction(UIAction { [weak self] _ in self?.onEvent?("navItemPressed", ["id": title["id"] ?? "title"]) }, for: .touchUpInside)
+        } else {
+          capsule.isUserInteractionEnabled = false
+          capsule.accessibilityTraits = .staticText
+        }
         item.title = nil
         item.subtitle = nil
         if (title["fill"] as? Bool) == true {
           // A bar button item hugs its content; the title view is what UIKit
           // stretches between the items, so it carries its own glass.
-          item.titleView = FillingTitleCapsule(capsule)
+          item.titleView = FillingTitleCapsule(capsule, interactive: pressable)
           item.style = .editor
         } else {
           // Also the title view, so UIKit fits it between the items and a
           // long title truncates; as a bar button item it would keep its
           // full width and push everything into the overflow menu.
-          item.titleView = HuggingTitleCapsule(capsule)
+          item.titleView = HuggingTitleCapsule(capsule, interactive: pressable)
           item.style = .editor
         }
       } else if let title, BarTitleView.isCustom(title) {
@@ -420,12 +426,15 @@ final class BarTitleView: UIView {
 @available(iOS 26.0, *)
 final class TitleCapsuleControl: UIControl {
   private let iconView = UIImageView()
+  private let iconFrame = CircleView()
   private let accessoryView = UIImageView()
   private let titleLabel = UILabel()
   private let subtitleLabel = UILabel()
   private let stack = UIStackView()
   private var stackLeading: NSLayoutConstraint?
+  private var stackTrailing: NSLayoutConstraint?
   private var iconWidth: NSLayoutConstraint?
+  private var iconInsets: [NSLayoutConstraint] = []
 
   override init(frame: CGRect) {
     super.init(frame: frame)
@@ -443,7 +452,16 @@ final class TitleCapsuleControl: UIControl {
     accessoryView.contentMode = .scaleAspectFit
     accessoryView.tintColor = .label
     accessoryView.preferredSymbolConfiguration = .init(pointSize: 13, weight: .semibold)
-    stack.addArrangedSubview(iconView)
+    iconView.translatesAutoresizingMaskIntoConstraints = false
+    iconFrame.addSubview(iconView)
+    iconInsets = [
+      iconView.leadingAnchor.constraint(equalTo: iconFrame.leadingAnchor),
+      iconFrame.trailingAnchor.constraint(equalTo: iconView.trailingAnchor),
+      iconView.topAnchor.constraint(equalTo: iconFrame.topAnchor),
+      iconFrame.bottomAnchor.constraint(equalTo: iconView.bottomAnchor),
+    ]
+    NSLayoutConstraint.activate(iconInsets)
+    stack.addArrangedSubview(iconFrame)
     stack.addArrangedSubview(text)
     stack.addArrangedSubview(accessoryView)
     stack.setCustomSpacing(6, after: text)
@@ -455,11 +473,13 @@ final class TitleCapsuleControl: UIControl {
     addSubview(stack)
     let stackLeading = stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4)
     self.stackLeading = stackLeading
+    let stackTrailing = trailingAnchor.constraint(equalTo: stack.trailingAnchor, constant: 8)
+    self.stackTrailing = stackTrailing
     iconWidth = iconView.widthAnchor.constraint(equalToConstant: 18)
     iconView.heightAnchor.constraint(equalTo: iconView.widthAnchor).isActive = true
     NSLayoutConstraint.activate([
       stackLeading,
-      stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+      stackTrailing,
       stack.centerYAnchor.constraint(equalTo: centerYAnchor),
       heightAnchor.constraint(equalToConstant: 44),
     ])
@@ -479,11 +499,19 @@ final class TitleCapsuleControl: UIControl {
     iconView.image = NativeIconDescriptor(spec["icon"]).flatMap {
       NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : iconSize)
     }
-    iconView.isHidden = iconView.image == nil
+    iconFrame.isHidden = iconView.image == nil
+    let iconPadding = (spec["iconPadding"] as? NSNumber).map { CGFloat($0.doubleValue) } ?? 0
+    for inset in iconInsets { inset.constant = iconPadding }
+    let iconBorder = (spec["iconBorderColor"] as? NSNumber).map(UIColor.init(argb:))
+    iconFrame.layer.borderColor = iconBorder?.cgColor
+    iconFrame.layer.borderWidth = iconBorder == nil ? 0 : 1
     // Text alone needs the capsule's own padding; a glyph sits closer, and an
     // avatar-sized icon is concentric with the capsule, 2 pt from its edge.
-    let largeIcon = !iconView.isHidden && iconSize >= 32
-    stackLeading?.constant = iconView.isHidden ? 12 : largeIcon ? 2 : 4
+    let largeIcon = !iconFrame.isHidden && iconSize + 2 * iconPadding >= 32
+    let padding = spec["padding"] as? [String: Any]
+    stackLeading?.constant = (padding?["left"] as? NSNumber).map { CGFloat($0.doubleValue) }
+      ?? (iconFrame.isHidden ? 12 : largeIcon ? 2 : 4)
+    stackTrailing?.constant = (padding?["right"] as? NSNumber).map { CGFloat($0.doubleValue) } ?? 8
     stack.spacing = largeIcon ? 8 : 10
     iconWidth?.constant = iconSize
     iconWidth?.isActive = largeIcon
@@ -499,18 +527,27 @@ final class TitleCapsuleControl: UIControl {
   }
 }
 
+/// A view whose corners round it into a circle at whatever size layout gives
+/// it, e.g. the ring around a title capsule's icon.
+@available(iOS 26.0, *)
+final class CircleView: UIView {
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    layer.cornerRadius = min(bounds.width, bounds.height) / 2
+  }
+}
+
 /// A [TitleCapsuleControl] that hugs its content at the leading edge of the
 /// title view's space, in its own glass, and shrinks (truncating its title)
 /// when that space is narrower.
 @available(iOS 26.0, *)
 final class HuggingTitleCapsule: UIView {
-  private let glass: UIVisualEffectView = {
-    let effect = UIGlassEffect(style: .regular)
-    effect.isInteractive = true
-    return UIVisualEffectView(effect: effect)
-  }()
+  private let glass: UIVisualEffectView
 
-  init(_ capsule: TitleCapsuleControl) {
+  init(_ capsule: TitleCapsuleControl, interactive: Bool) {
+    let effect = UIGlassEffect(style: .regular)
+    effect.isInteractive = interactive
+    glass = UIVisualEffectView(effect: effect)
     super.init(frame: .zero)
     glass.translatesAutoresizingMaskIntoConstraints = false
     glass.clipsToBounds = true
@@ -572,13 +609,12 @@ final class PaddedGlassButton: UIView {
 /// intrinsic width that UIKit clamps to what the items leave.
 @available(iOS 26.0, *)
 final class FillingTitleCapsule: UIView {
-  private let glass: UIVisualEffectView = {
-    let effect = UIGlassEffect(style: .regular)
-    effect.isInteractive = true
-    return UIVisualEffectView(effect: effect)
-  }()
+  private let glass: UIVisualEffectView
 
-  init(_ capsule: TitleCapsuleControl) {
+  init(_ capsule: TitleCapsuleControl, interactive: Bool) {
+    let effect = UIGlassEffect(style: .regular)
+    effect.isInteractive = interactive
+    glass = UIVisualEffectView(effect: effect)
     super.init(frame: .zero)
     glass.translatesAutoresizingMaskIntoConstraints = false
     glass.clipsToBounds = true

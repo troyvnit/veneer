@@ -98,8 +98,9 @@ class NativeBarButton {
 enum NativeBarTitleAlignment { center, leading }
 
 /// The bar's title. By default the system's centred title and subtitle; with
-/// [capsule], a tappable glass capsule after the leading button holding
-/// [icon], [title] and [subtitle] — a channel header.
+/// [capsule], a glass capsule after the leading button holding [icon],
+/// [title] and [subtitle] — a channel header, tappable when [onPressed] is
+/// set.
 @immutable
 class NativeBarTitle {
   const NativeBarTitle({
@@ -110,6 +111,9 @@ class NativeBarTitle {
     this.capsule = false,
     this.fill = false,
     this.iconSize,
+    this.iconPadding,
+    this.iconBorderColor,
+    this.padding,
     this.alignment = NativeBarTitleAlignment.center,
     this.style,
     this.subtitleStyle,
@@ -141,6 +145,21 @@ class NativeBarTitle {
   /// Side of a non-symbol [icon] in a [capsule] (default 18 pt), e.g. 40
   /// for a group avatar that fills the capsule's height.
   final double? iconSize;
+
+  /// In a [capsule], room around [icon] inside its own circle, whose side is
+  /// [iconSize] plus twice this; a circle of 32 pt or more sits like an
+  /// avatar, 2 pt from the capsule's edge.
+  final double? iconPadding;
+
+  /// In a [capsule], a 1 pt ring around [icon]'s circle (see [iconPadding]).
+  final Color? iconBorderColor;
+
+  /// In a [capsule], the room between its edges and its content, in place of
+  /// the default for its kind of icon. Only the left and right are used.
+  final EdgeInsets? padding;
+
+  /// Tapping a [capsule] calls this; without it the capsule doesn't respond
+  /// to touches and isn't announced as a button.
   final VoidCallback? onPressed;
 }
 
@@ -304,6 +323,10 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
               'capsule': title.capsule,
               'fill': title.fill,
               'iconSize': title.iconSize,
+              'iconPadding': title.iconPadding,
+              'iconBorderColor': title.iconBorderColor?.toARGB32(),
+              'padding': title.padding == null ? null : {'left': title.padding!.left, 'right': title.padding!.right},
+              'pressable': title.onPressed != null,
             },
       'trailing': [for (final (i, b) in widget.trailing.indexed) button('trailing$i', b)],
       'tintColor': widget.tintColor?.toARGB32(),
@@ -396,10 +419,13 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
 /// the scroll edge effect. Content gets top padding for it, as natively.
 /// An avatar-sized icon sits 2 pt from the capsule's edge, concentric with
 /// it; a glyph gets the capsule's own padding.
-bool _hasLargeIcon(NativeBarTitle title) => title.icon != null && (title.iconSize ?? 18) >= 32;
+double _iconFrame(NativeBarTitle title) => (title.iconSize ?? 18) + 2 * (title.iconPadding ?? 0);
+
+bool _hasLargeIcon(NativeBarTitle title) => title.icon != null && _iconFrame(title) >= 32;
 
 EdgeInsets _capsulePadding(NativeBarTitle title) =>
-    _hasLargeIcon(title) ? const EdgeInsets.only(left: 2, right: 8) : const EdgeInsets.only(left: 14, right: 16);
+    title.padding?.copyWith(top: 0, bottom: 0) ??
+    (_hasLargeIcon(title) ? const EdgeInsets.only(left: 2, right: 8) : const EdgeInsets.only(left: 14, right: 16));
 
 class _FallbackNavigationBar extends StatelessWidget {
   const _FallbackNavigationBar(this.bar, {required this.scrolled, required this.child, this.nativeBar});
@@ -557,7 +583,7 @@ class _FallbackNavigationBar extends StatelessWidget {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Semantics(
-                button: true,
+                button: title.onPressed != null,
                 child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: title.onPressed,
@@ -570,7 +596,16 @@ class _FallbackNavigationBar extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (title.icon case final icon?) ...[
-                          NativeIconView(icon, size: title.iconSize ?? 18, color: style.label),
+                          Container(
+                            padding: EdgeInsets.all(title.iconPadding ?? 0),
+                            foregroundDecoration: title.iconBorderColor == null
+                                ? null
+                                : BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: title.iconBorderColor!),
+                                  ),
+                            child: NativeIconView(icon, size: title.iconSize ?? 18, color: style.label),
+                          ),
                           SizedBox(width: _hasLargeIcon(title) ? 8 : 10),
                         ],
                         Flexible(child: titleText(CrossAxisAlignment.start)),
