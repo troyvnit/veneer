@@ -28,6 +28,8 @@ final class VeneerOverlayView: UIView {
 
   private var tabBarHost: NativeTabBarHost?
   private var navigationBarHost: NativeNavigationBarHost?
+  private var searchToolbarHost: NativeSearchToolbarHost?
+  private var lastSearchToolbarBottom: CGFloat = -1
   private let edgeEffects = ScrollEdgeEffectHost()
   private var composer: ComposerBaseView?
   private var tabBarEdgeEffect: String?
@@ -117,6 +119,7 @@ final class VeneerOverlayView: UIView {
     }
     if let navigationBarHost, let hit = navigationBarHost.hitTest(point, in: self, with: event) { return hit }
     if let tabBarHost, let hit = tabBarHost.hitTest(point, in: self, with: event) { return hit }
+    if let searchToolbarHost, let hit = searchToolbarHost.hitTest(point, in: self, with: event) { return hit }
     return glassLayer.hitTest(convert(point, to: glassLayer), with: event)
   }
 
@@ -157,6 +160,7 @@ final class VeneerOverlayView: UIView {
     setComposer(nil)
     setNavigationBar(nil)
     setTabBar(nil)
+    setSearchToolbar(nil)
     onEvent = nil
     removeFromSuperview()
   }
@@ -187,6 +191,41 @@ final class VeneerOverlayView: UIView {
   private func updateBottomEdgeEffect() {
     let elements = [tabBarHost?.tabBar, composer?.isShown == true ? composer : nil].compactMap { $0 }
     edgeEffects.set(.bottom, style: tabBarEdgeEffect ?? (composer != nil ? "soft" : nil), elements: elements)
+  }
+
+  // MARK: - Chrome: search toolbar
+
+  func setSearchToolbar(_ args: [String: Any]?) {
+    guard let args else {
+      searchToolbarHost?.detach()
+      searchToolbarHost = nil
+      lastSearchToolbarBottom = -1
+      return
+    }
+    let host = searchToolbarHost ?? {
+      let host = NativeSearchToolbarHost()
+      host.onEvent = { [weak self] method, payload in self?.onEvent?(method, payload) }
+      host.onLayout = { [weak self] in self?.reportSearchToolbar() }
+      host.attach(to: self, host: hostViewController)
+      searchToolbarHost = host
+      return host
+    }()
+    host.update(args)
+    reportSearchToolbar()
+  }
+
+  func searchToolbarCommand(_ args: [String: Any]) {
+    searchToolbarHost?.command(args)
+  }
+
+  /// Tells Flutter how far the search bar reaches up from the bottom of the
+  /// screen, keyboard included while it's up.
+  private func reportSearchToolbar() {
+    guard let top = searchToolbarHost?.chromeTop(in: self) else { return }
+    let bottom = max(0, bounds.height - top)
+    guard abs(bottom - lastSearchToolbarBottom) > 0.5 else { return }
+    lastSearchToolbarBottom = bottom
+    onEvent?("searchToolbarLayout", ["bottom": Double(bottom)])
   }
 
   // MARK: - Chrome: navigation bar
@@ -478,6 +517,7 @@ final class VeneerOverlayView: UIView {
     super.layoutSubviews()
     edgeEffects.layout()
     reportInsets()
+    reportSearchToolbar()
     layoutComposer()
   }
 
@@ -495,6 +535,7 @@ final class VeneerOverlayView: UIView {
   func resendLayout() {
     lastReportedInsets = UIEdgeInsets(top: -1, left: 0, bottom: -1, right: 0)
     lastComposerHeight = -1
+    lastSearchToolbarBottom = -1
     setNeedsLayout()
   }
 

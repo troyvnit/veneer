@@ -83,6 +83,7 @@ class VeneerBridge {
   VoidCallback? _tabActionHandler;
   ValueChanged<String>? _navItemHandler;
   VeneerComposerHandlers? _composerHandlers;
+  VeneerSearchToolbarHandlers? _searchToolbarHandlers;
 
   _ApplyFrameDart? _ffiApplyFrame;
   Pointer<Double>? _ffiBufferPointer;
@@ -113,6 +114,8 @@ class VeneerBridge {
     _tabActionHandler = null;
     _navItemHandler = null;
     _composerHandlers = null;
+    _searchToolbarHandlers = null;
+    searchToolbarBottom = 0;
     _popupShowing = false;
     _tabBarCovered = false;
     _chromeHiddenSent = null;
@@ -372,6 +375,30 @@ class VeneerBridge {
     });
   }
 
+  Future<void> setSearchToolbar(Map<String, Object?> config, VeneerSearchToolbarHandlers handlers) async {
+    _searchToolbarHandlers = handlers;
+    if (!await ensureAttached()) return;
+    await _channel.invokeMethod<void>('setSearchToolbar', config);
+  }
+
+  void updateSearchToolbarHandlers(VeneerSearchToolbarHandlers handlers) => _searchToolbarHandlers = handlers;
+
+  /// How far the native search toolbar last reported reaching up from the
+  /// bottom of the screen, keyboard included; 0 while there's none.
+  double searchToolbarBottom = 0;
+
+  Future<void> removeSearchToolbar() async {
+    _searchToolbarHandlers = null;
+    searchToolbarBottom = 0;
+    if (!_attached) return;
+    await _channel.invokeMethod<void>('removeSearchToolbar');
+  }
+
+  Future<void> searchToolbarCommand(String command, {String? text}) async {
+    if (!_attached) return;
+    await _channel.invokeMethod<void>('searchToolbarCommand', {'command': command, 'text': text});
+  }
+
   bool _popupShowing = false;
   bool _tabBarCovered = false;
   bool? _chromeHiddenSent;
@@ -593,6 +620,21 @@ class VeneerBridge {
           );
         }
         return handler(args['name']! as String, args['arguments']);
+      case 'searchToolbar':
+        final handlers = _searchToolbarHandlers;
+        switch (args['kind']) {
+          case 'text':
+            handlers?.onChanged(args['value'] as String? ?? '');
+          case 'submit':
+            handlers?.onSubmitted(args['value'] as String? ?? '');
+          case 'focus':
+            handlers?.onFocusChanged(args['value'] == true);
+          case 'close':
+            handlers?.onClose();
+        }
+      case 'searchToolbarLayout':
+        searchToolbarBottom = (args['bottom']! as num).toDouble();
+        _searchToolbarHandlers?.onLayout(searchToolbarBottom);
       case 'composerLayout':
         composerHeight = (args['height']! as num).toDouble();
         _composerHandlers?.onLayout(
@@ -631,6 +673,32 @@ class VeneerSearchHandlers {
 
   /// The field's microphone was tapped.
   final VoidCallback? onMicrophone;
+}
+
+/// Callbacks from the native search toolbar.
+class VeneerSearchToolbarHandlers {
+  const VeneerSearchToolbarHandlers({
+    required this.onChanged,
+    required this.onSubmitted,
+    required this.onFocusChanged,
+    required this.onClose,
+    required this.onLayout,
+  });
+
+  /// The text changed as the user typed, dictated, cleared or pasted.
+  final ValueChanged<String> onChanged;
+
+  /// The keyboard's search key was pressed.
+  final ValueChanged<String> onSubmitted;
+
+  /// The field gained (true) or lost (false) the keyboard.
+  final ValueChanged<bool> onFocusChanged;
+
+  /// The bar's close button was tapped.
+  final VoidCallback onClose;
+
+  /// How far the bar reaches up from the bottom of the screen.
+  final ValueChanged<double> onLayout;
 }
 
 class VeneerContextMenuHandlers {

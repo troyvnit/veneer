@@ -43,7 +43,8 @@ behaviour, so one codebase serves every platform.
 - [Components](#components)
   - [Tab bar](#tab-bar) · [Navigation bar](#navigation-bar) · [Composer](#composer) ·
     [Prompt composer](#prompt-composer) · [Sheets](#sheets) · [Menus](#menus) ·
-    [Glass shapes](#glass-shapes) · [Search field](#search-field) · [Segment bar](#segment-bar) · [Icons](#icons)
+    [Glass shapes](#glass-shapes) · [Search field](#search-field) · [Search toolbar](#search-toolbar) ·
+    [Segment bar](#segment-bar) · [Icons](#icons)
 - [Android and older iOS](#android-and-older-ios)
 - [Limitations](#limitations)
 - [Example app](#example-app)
@@ -61,6 +62,7 @@ behaviour, so one codebase serves every platform.
 | **Prompt composer** | An assistant-style composer: grows from a capsule into a card for long prompts and attachments, turns its voice button into send as you type, and splits glass buttons off for a voice session. |
 | **Sheets** | Real UIKit sheets hosting Flutter content: detents, grabber, Liquid Glass at partial heights, the page behind receding — with Veneer's bars and composers inside. |
 | **Menus** | Native `UIMenu`s from bar buttons, composer buttons and glass shapes, and UIKit context menus on long-pressed Flutter widgets. |
+| **Search toolbar** | The system search at the bottom of the screen, as Settings and Passwords have it: field, clear and close buttons, keyboard dictation and the ride on the keyboard are all UIKit's. |
 | **Glass shapes** | `UIGlassEffect` shapes laid out by Flutter, merging within groups, clipped by Flutter clips, interactive. |
 | **Icons** | SF Symbols, any `IconData` (Material, Cupertino, custom and variable icon fonts), SVG and images — all rendered natively. |
 
@@ -519,6 +521,40 @@ NativeSearchField(
 - `searchIcon`, `microphoneIcon` and `microphoneActiveIcon` swap UIKit's magnifier and microphone symbols
   for the app's own `NativeIcon`s (an icon font, an SVG), drawn at `iconSize` points.
 - Off iOS 26 it renders a Flutter field of the same height on the fallback surface.
+
+### Search toolbar
+
+```dart
+final search = GlobalKey<NativeSearchToolbarState>();
+
+Scaffold(
+  resizeToAvoidBottomInset: false,
+  body: NativeSearchToolbar(
+    key: search,
+    placeholder: 'Search places and orders',
+    controller: queryController,
+    onChanged: runSearch,
+    onClose: () => Navigator.pop(context),
+    child: results,
+  ),
+)
+```
+
+- A search page's bar, the way Settings and Passwords show it on iOS 26: a real `UISearchController`
+  on a navigation item with `.integrated` placement, in a `UINavigationController` whose toolbar is
+  the only thing drawn. UIKit lays it out in its floating bar at the bottom, follows the keyboard up
+  and down, and shows the clear button and, while searching, the close button. Dictation is the
+  keyboard's own.
+- It opens in search mode with the keyboard up (`autofocus`); the close button calls `onClose` after
+  the bar has left search mode, typically to pop the page.
+- `child` fills the screen and gets bottom padding for the space the bar takes, keyboard included,
+  so results scroll underneath it and end above it. The keyboard inset is consumed, so an inner
+  `Scaffold` doesn't also resize.
+- Text flows both ways through the `controller`, as in [Search field](#search-field);
+  `NativeSearchToolbarState.focus()` / `unfocus()` move the keyboard.
+- While another route covers its page, the bar is hidden rather than removed, and comes back as it
+  was left. One search toolbar is shown at a time.
+- Off iOS 26 it renders a Flutter search field and close button above the keyboard.
 
 ### Segment bar
 

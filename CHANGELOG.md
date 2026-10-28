@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.19.0
+
+- **Search toolbar:** `NativeSearchToolbar` puts the system search at the bottom of a search page, the
+  way Settings and Passwords have it on iOS 26 — a real `UISearchController` with `.integrated`
+  placement, so the field, its clear and close buttons, keyboard dictation and the ride on the keyboard
+  are all UIKit's. It opens in search mode with the keyboard up, reports edits, submits and the close
+  button, pads its child for the space the bar takes, and stays hidden (not removed) while another
+  route covers its page. Elsewhere a Flutter field and close button above the keyboard.
+
 ## 0.18.1
 
 - **Stop dictation from the search field:** `NativeSearchField` keeps its microphone on show while

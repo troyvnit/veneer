@@ -123,6 +123,7 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
       // A new isolate (hot restart) attaches to the same overlay; a composer
       // the old one showed has no Dart owner left to remove it.
       overlay.setComposer(nil)
+      overlay.setSearchToolbar(nil)
       DispatchQueue.main.async { overlay.resendLayout() }
       let fn: @convention(c) (UnsafePointer<Double>?, Int32, Int32) -> Void = veneer_apply_frame
       result([
@@ -205,6 +206,18 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
 
     case "composerCommand":
       overlay?.composerCommand(args)
+      result(nil)
+
+    case "setSearchToolbar":
+      overlay?.setSearchToolbar(args)
+      result(nil)
+
+    case "removeSearchToolbar":
+      overlay?.setSearchToolbar(nil)
+      result(nil)
+
+    case "searchToolbarCommand":
+      overlay?.searchToolbarCommand(args)
       result(nil)
 
     case "showAlert":

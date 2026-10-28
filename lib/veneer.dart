@@ -40,6 +40,7 @@ export 'src/chrome/native_composer.dart';
 export 'src/chrome/native_context_menu.dart';
 export 'src/chrome/native_menu_anchor.dart';
 export 'src/chrome/native_navigation_bar.dart';
+export 'src/chrome/native_search_toolbar.dart';
 export 'src/chrome/native_sheet.dart' hide veneerSheetAnchor;
 export 'src/controls/native_segmented_control.dart';
 export 'src/controls/native_slider.dart';
