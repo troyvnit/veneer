@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.18.1
+
+- **Stop dictation from the search field:** `NativeSearchField` keeps its microphone on show while
+  `microphoneActive` is set, even once the dictated words fill the field, so a tap can stop listening,
+  natively and in the replica. Otherwise the microphone still shows only while the field is empty.
+
 ## 0.18.0
 
 - **Composer replies:** `NativePromptComposer.reply` takes a `NativeComposerReply` — a "Reply to …" card

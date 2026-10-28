@@ -135,6 +135,29 @@ void main() {
     expect(find.byIcon(Icons.cancel), findsOneWidget);
   });
 
+  testWidgets('keeps the fallback microphone while dictating into the field', (tester) async {
+    VeneerBridge.instance.debugIsSupportedOverride = false;
+    final controller = TextEditingController(text: 'kitchen sink');
+    addTearDown(controller.dispose);
+    var taps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: NativeSearchField(
+            placeholder: 'Search',
+            controller: controller,
+            onMicrophonePressed: () => taps++,
+            microphoneActive: true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.cancel), findsNothing);
+    await tester.tap(find.byIcon(Icons.mic));
+    expect(taps, 1);
+  });
+
   testWidgets('app icons replace the system magnifier and microphone', variant: ios, (tester) async {
     const search = NativeIcon.icon(Icons.travel_explore);
     const mic = NativeIcon.icon(Icons.keyboard_voice_outlined);

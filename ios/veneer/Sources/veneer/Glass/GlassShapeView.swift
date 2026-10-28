@@ -33,6 +33,7 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
   /// with a clear background, so the shape's glass is its capsule.
   private var searchField: UISearchTextField?
   private var searchMicrophone: UIButton?
+  private var searchMicrophoneActive = false
   private var systemSearchImage: UIImage?
   /// Present when the shape is a segment bar: equal-width buttons over a
   /// highlight capsule that slides to the selected one.
@@ -295,6 +296,7 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
   }
 
   private func applySearchMicrophone(_ config: GlassSearchConfig, to field: UISearchTextField) {
+    searchMicrophoneActive = config.microphone && config.microphoneActive
     guard config.microphone else {
       field.rightView = nil
       searchMicrophone = nil
@@ -327,7 +329,7 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
   private func updateSearchMicrophoneVisibility() {
     guard let field = searchField else { return }
     let empty = field.text?.isEmpty ?? true
-    field.rightViewMode = searchMicrophone != nil && empty ? .always : .never
+    field.rightViewMode = searchMicrophone != nil && (empty || searchMicrophoneActive) ? .always : .never
   }
 
   @objc private func searchMicrophoneTapped() { onSearch?(id, "mic", true) }

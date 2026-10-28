@@ -23,7 +23,8 @@ import 'glass_shape.dart';
 ///
 /// Pass [onMicrophonePressed] to show a microphone in the field while it is
 /// empty, the way Apple's apps offer dictation; [microphoneActive] fills it
-/// while the app is listening.
+/// while the app is listening and keeps it on show as the words come in, so
+/// a tap can stop dictation.
 ///
 /// [searchIcon], [microphoneIcon] and [microphoneActiveIcon] replace the
 /// system magnifier and microphone with the app's own icons; left `null`,
@@ -279,7 +280,8 @@ class _FallbackSearchField extends StatelessWidget {
             ),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: controller,
-              builder: (context, value, _) => value.text.isEmpty
+              builder: (context, value, _) =>
+                  value.text.isEmpty || (field.microphoneActive && field.onMicrophonePressed != null)
                   ? field.onMicrophonePressed == null
                         ? const SizedBox(width: 12)
                         : IconButton(
