@@ -137,6 +137,88 @@ class NativeComposerAudio {
   };
 }
 
+/// The message a [NativePromptComposer]'s prompt answers, as in chat apps'
+/// "Reply": a card across the top of the composer, above any attachments.
+///
+/// 8 pt from the composer's edges, 54 pt tall, radius 12:
+/// `[▌ Reply to Sam        × ]` / `[▌ The quoted text…        ]` — a 4 pt
+/// bar in [accentColor] 4 pt before [title] and one line of [subtitle], with
+/// a 32 pt dismiss button 8 pt after them. It turns the composer into its
+/// multi-line card.
+@immutable
+class NativeComposerReply {
+  const NativeComposerReply({
+    required this.title,
+    this.subtitle,
+    this.onDismiss,
+    this.dismissIcon,
+    this.titleStyle,
+    this.subtitleStyle,
+    this.backgroundColor,
+    this.accentColor,
+    this.iconColor,
+    this.dismissLabel,
+  });
+
+  final String title;
+
+  /// One line of the quoted message; hidden when null or empty.
+  final String? subtitle;
+
+  /// Null hides the dismiss button.
+  final VoidCallback? onDismiss;
+
+  /// Defaults to `xmark`.
+  final NativeIcon? dismissIcon;
+
+  /// Defaults to 15 pt medium in [accentColor].
+  final TextStyle? titleStyle;
+
+  /// Defaults to 13 pt in the secondary label colour.
+  final TextStyle? subtitleStyle;
+
+  /// Defaults to the quaternary system fill.
+  final Color? backgroundColor;
+
+  /// The bar; defaults to the composer's tint.
+  final Color? accentColor;
+
+  /// The dismiss glyph; defaults to the label colour.
+  final Color? iconColor;
+
+  /// VoiceOver label for the dismiss button.
+  final String? dismissLabel;
+
+  static const _dismissId = 'replyDismiss';
+
+  Map<String, Object?> _encode(Map<String, VoidCallback?> handlers) {
+    handlers[_dismissId] = onDismiss;
+    return {
+      'title': title,
+      'subtitle': subtitle,
+      'dismissible': onDismiss != null,
+      'dismissId': _dismissId,
+      'dismissIcon': dismissIcon?.encode(),
+      'dismissLabel': dismissLabel,
+      'titleStyle': _encodeStyle(titleStyle),
+      'subtitleStyle': _encodeStyle(subtitleStyle),
+      'backgroundColor': backgroundColor?.toARGB32(),
+      'accentColor': accentColor?.toARGB32(),
+      'iconColor': iconColor?.toARGB32(),
+    };
+  }
+
+  static Map<String, Object?>? _encodeStyle(TextStyle? style) => style == null
+      ? null
+      : {
+          'family': style.fontFamily,
+          'size': style.fontSize,
+          'weight': style.fontWeight?.value,
+          'height': style.height,
+          'color': style.color?.toARGB32(),
+        };
+}
+
 /// An assistant-style prompt composer: native (UIKit) on iOS 26, a Flutter
 /// replica with the same layout elsewhere.
 ///
@@ -150,8 +232,9 @@ class NativeComposerAudio {
 /// attachment.
 ///
 /// It grows into a card when the text wraps, has a line break, or there are
-/// [attachments]: attachments on top, the text full width, buttons along the
-/// bottom row. Every change moves on one spring.
+/// [attachments] or a [reply]: the reply on top, then the attachments, the
+/// text full width, buttons along the bottom row. Every change moves on one
+/// spring.
 ///
 /// [sideActions] are glass circles beside the capsule, shown while
 /// [showSideActions] is true — e.g. a voice session's mute and end buttons.
@@ -179,6 +262,7 @@ class NativePromptComposer extends StatefulWidget {
     this.showSideActions = false,
     this.attachments = const [],
     this.attachmentSummary,
+    this.reply,
     this.onSend,
     this.onChanged,
     this.tintColor,
@@ -235,6 +319,10 @@ class NativePromptComposer extends StatefulWidget {
   /// focused (e.g. after scrolling dismissed the keyboard). Null keeps them
   /// on show.
   final NativeComposerAttachmentSummary? attachmentSummary;
+
+  /// The message the prompt answers, shown across the top; it stays on show
+  /// when the prompt isn't focused.
+  final NativeComposerReply? reply;
 
   /// Called with the text (possibly empty when only attachments are sent).
   final ValueChanged<String>? onSend;
@@ -333,6 +421,7 @@ class _NativePromptComposerState extends _ComposerHostState<NativePromptComposer
     'sideShown': widget.showSideActions,
     'attachments': [for (final a in widget.attachments) a._encode()],
     'attachmentSummary': widget.attachmentSummary?._encode(),
+    'reply': widget.reply?._encode(handlers),
     'tintColor': widget.tintColor?.toARGB32(),
     'highlights': widget.highlights,
     'maxLines': widget.maxLines,
@@ -348,9 +437,10 @@ class _NativePromptComposerState extends _ComposerHostState<NativePromptComposer
 ///
 /// A 48 pt capsule: leading glyph centred 24 pt from the edge, text from
 /// 50 pt, actions every 48 pt, a 32 pt filled circle centred 24 pt from the
-/// trailing edge. Multi-line (wrapping, a line break, attachments): 60 pt
-/// attachment tiles 12 pt from the top, text inset 18 pt, buttons on the
-/// bottom row, radius 24. Side actions: 48 pt circles 10 pt apart.
+/// trailing edge. Multi-line (wrapping, a line break, attachments, a reply):
+/// a 54 pt reply card inset 8 pt, then 60 pt attachment tiles 12 pt below,
+/// text inset 18 pt, buttons on the bottom row, radius 24. Side actions:
+/// 48 pt circles 10 pt apart.
 /// Idle: inset by the home indicator area + 4 pt (12 pt without one), or
 /// 9 pt above a tab bar with 20 pt margins; focused: 12 pt margins, 12 pt
 /// above the keyboard.
@@ -387,6 +477,8 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
   static const _audioLift = 4.0;
   static const _summaryGap = 8.0;
   static const _summaryHeight = 24.0;
+  static const _replyInset = 8.0;
+  static const _replyHeight = 54.0;
   static const _duration = Duration(milliseconds: 350);
   static const _curve = Curves.easeOutCubic;
   // A gentle overshoot, like UIKit's spring with a little bounce.
@@ -530,14 +622,18 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
         final summaryLabel = '${_c.attachments.length}';
         final summaryWidth = collapsed ? _summaryWidth(summaryLabel) : 0.0;
         final inlineWidth = textEnd - textLeading - (collapsed ? summaryWidth + _summaryGap : 0);
+        final reply = _c.reply;
         final multiline =
+            reply != null ||
             (_c.attachments.isNotEmpty && !collapsed) ||
             _text.text.contains('\n') ||
             (_text.text.isNotEmpty && _lines(inlineWidth) > 1);
+        final replyBlock = reply == null ? 0.0 : _replyInset + _replyHeight;
         final attachmentsBlock = _c.attachments.isEmpty || collapsed ? 0.0 : _attachmentTop + _attachmentHeight;
+        final topBlock = replyBlock + attachmentsBlock;
         final lines = multiline ? math.min(_lines(capsuleWidth - 2 * _textInset), _c.maxLines) : 1;
         final textHeight = lines * _lineHeight + 2 * _textVertical;
-        final height = multiline ? attachmentsBlock + textHeight + _multiRowExtra : _row;
+        final height = multiline ? topBlock + textHeight + _multiRowExtra : _row;
         final rowTop = height - _row;
 
         Widget positioned({
@@ -585,13 +681,31 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
           child: Stack(
             clipBehavior: Clip.none,
             children: [
+              AnimatedPositioned(
+                duration: _duration,
+                curve: _curve,
+                left: _replyInset,
+                right: _replyInset,
+                top: _replyInset,
+                height: _replyHeight,
+                child: IgnorePointer(
+                  ignoring: reply == null,
+                  child: AnimatedOpacity(
+                    duration: _duration,
+                    opacity: reply == null ? 0 : 1,
+                    child: reply == null
+                        ? const SizedBox.shrink()
+                        : _FallbackReplyCard(reply: reply, accent: accent, style: style),
+                  ),
+                ),
+              ),
               // Attachments along the top.
               AnimatedPositioned(
                 duration: _duration,
                 curve: _curve,
                 left: 0,
                 right: 0,
-                top: _attachmentTop - _audioLift,
+                top: replyBlock + _attachmentTop - _audioLift,
                 height: _attachmentHeight + _audioLift,
                 child: IgnorePointer(
                   ignoring: collapsed,
@@ -632,7 +746,7 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
                 duration: _duration,
                 curve: _curve,
                 left: multiline ? _textInset : textLeading,
-                top: multiline ? attachmentsBlock : 0,
+                top: multiline ? topBlock : 0,
                 width: multiline ? capsuleWidth - 2 * _textInset : inlineWidth,
                 height: multiline ? textHeight : _row,
                 child: Align(
@@ -834,6 +948,83 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
           ],
         );
       },
+    );
+  }
+}
+
+/// The [NativeComposerReply] card: 8 pt padding, a 4 pt bar 4 pt before the
+/// title and subtitle, a 32 pt dismiss button 8 pt after them.
+class _FallbackReplyCard extends StatelessWidget {
+  const _FallbackReplyCard({required this.reply, required this.accent, required this.style});
+
+  final NativeComposerReply reply;
+  final Color accent;
+  final VeneerFallbackStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    final bar = reply.accentColor ?? accent;
+    final subtitle = reply.subtitle;
+    final title = const TextStyle(
+      fontSize: 15,
+      height: 20 / 15,
+      fontWeight: FontWeight.w500,
+    ).copyWith(color: bar).merge(reply.titleStyle);
+    final body = TextStyle(fontSize: 13, height: 18 / 13, color: style.secondaryLabel).merge(reply.subtitleStyle);
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: reply.backgroundColor ?? style.selection,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        spacing: 8,
+        children: [
+          Expanded(
+            child: Row(
+              spacing: 4,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(color: bar, borderRadius: BorderRadius.circular(2)),
+                  child: const SizedBox(width: 4),
+                ),
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(reply.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: title),
+                      if (subtitle != null && subtitle.isNotEmpty)
+                        Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: body),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (reply.onDismiss case final onDismiss?)
+            Semantics(
+              button: true,
+              label: reply.dismissLabel,
+              excludeSemantics: true,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: onDismiss,
+                child: SizedBox.square(
+                  dimension: 32,
+                  child: Center(
+                    child: NativeIconView(
+                      reply.dismissIcon ?? const NativeIcon.symbol('xmark'),
+                      size: 24,
+                      color: reply.iconColor ?? style.label,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

@@ -271,6 +271,35 @@ void main() {
     });
   });
 
+  testWidgets('prompt composer: a reply is sent with the config and dismissed natively', variant: ios, (tester) async {
+    var dismissed = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativePromptComposer(
+          reply: NativeComposerReply(
+            title: 'Reply to Sam',
+            subtitle: 'Door lock code',
+            onDismiss: () => dismissed++,
+            titleStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Color(0xFF4F49BA)),
+            backgroundColor: const Color(0x0A000000),
+          ),
+          child: const SizedBox(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final reply = sent('setComposer').single['reply']! as Map;
+    expect(reply['title'], 'Reply to Sam');
+    expect(reply['subtitle'], 'Door lock code');
+    expect(reply['dismissible'], isTrue);
+    expect(reply['backgroundColor'], 0x0A000000);
+    expect(reply['titleStyle'], {'family': null, 'size': 15.0, 'weight': 500, 'height': null, 'color': 0xFF4F49BA});
+
+    await nativeEvent('composerButton', {'id': reply['dismissId']});
+    expect(dismissed, 1);
+  });
+
   testWidgets('prompt composer: an audio attachment sends its clip state', variant: ios, (tester) async {
     await tester.pumpWidget(
       MaterialApp(

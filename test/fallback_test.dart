@@ -298,6 +298,39 @@ void main() {
     expect(stripRect.right, lessThanOrEqualTo(capsule.right));
   });
 
+  testWidgets('prompt composer replica: a reply card sits across the top and dismisses', (tester) async {
+    var dismissed = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(400, 800), padding: EdgeInsets.only(bottom: 34)),
+          child: Scaffold(
+            resizeToAvoidBottomInset: false,
+            body: NativePromptComposer(
+              reply: NativeComposerReply(
+                title: 'Reply to Sam',
+                subtitle: 'Door lock code',
+                dismissLabel: 'Cancel reply',
+                onDismiss: () => dismissed++,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final capsule = tester.getRect(find.byType(AnimatedContainer).first);
+    expect(capsule.height, greaterThan(48), reason: 'a reply makes the composer a card');
+    final title = tester.getRect(find.text('Reply to Sam'));
+    expect(title.top - capsule.top, moreOrLessEquals(16, epsilon: 1), reason: 'inset 8, padded 8');
+    expect(find.text('Door lock code'), findsOneWidget);
+
+    await tester.tap(find.bySemanticsLabel('Cancel reply'));
+    expect(dismissed, 1);
+  });
+
   testWidgets('prompt composer replica: unfocused, attachments fold into a count pill', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

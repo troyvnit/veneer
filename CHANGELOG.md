@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.18.0
+
+- **Composer replies:** `NativePromptComposer.reply` takes a `NativeComposerReply` — a "Reply to …" card
+  across the top of the composer, above the attachments: a 4 pt accent bar, a title, one line of the quoted
+  text and a dismiss button, 54 pt tall and inset 8 pt, natively and in the replica. It makes the composer
+  its multi-line card and stays on show while the prompt isn't focused.
+
 ## 0.17.0
 
 - **Static title capsules:** a capsule `NativeBarTitle` without `onPressed` no longer responds to touches —

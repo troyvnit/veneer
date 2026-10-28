@@ -54,6 +54,8 @@ final class NativePromptComposerView: ComposerBaseView {
     static let cornerRadius: CGFloat = 24
     static let attachmentTop: CGFloat = 12
     static let attachmentHeight: CGFloat = 60
+    static let replyInset: CGFloat = 8
+    static let replyHeight: CGFloat = 54
     static let summaryHeight: CGFloat = 24
     static let summaryIconSize: CGFloat = 16
     static let summarySymbolSize: CGFloat = 13
@@ -76,6 +78,9 @@ final class NativePromptComposerView: ComposerBaseView {
   private let primaryButton = UIButton(configuration: .filled())
   private let sendSpinner = UIActivityIndicatorView(style: .medium)
   private let attachmentStrip = AttachmentStripView()
+  /// The message the prompt answers ("Reply"), across the top.
+  private let replyBanner = ReplyBannerView()
+  private var hasReply = false
   /// The attachments folded into `[📎 3]` while the prompt isn't focused.
   private let summaryPill = UIButton(configuration: .plain())
   private var summarySpec: [String: Any]?
@@ -129,9 +134,12 @@ final class NativePromptComposerView: ComposerBaseView {
       self.focus()
     }, for: .touchUpInside)
 
+    replyBanner.alpha = 0
+    replyBanner.onDismiss = { [weak self] id in self?.emitButton(id) }
+
     sendSpinner.hidesWhenStopped = true
     sendSpinner.isUserInteractionEnabled = false
-    for v in [attachmentStrip, summaryPill, textView, leadingButton, primaryButton, sendSpinner] as [UIView] {
+    for v in [replyBanner, attachmentStrip, summaryPill, textView, leadingButton, primaryButton, sendSpinner] as [UIView] {
       capsule.contentView.addSubview(v)
     }
     recordingBar.edgeCenter = Metrics.edgeCenter
@@ -149,7 +157,8 @@ final class NativePromptComposerView: ComposerBaseView {
 
   /// `{leading: button?, actions: [button], primary: button?, stop: button?,
   ///   sendIcon, sendEnabled, sendBusy, editable, side: [button + prominent],
-  ///   sideShown, attachments: [{id, title, subtitle, thumbnail, loading, tappable}]}`,
+  ///   sideShown, attachments: [{id, title, subtitle, thumbnail, loading, tappable}],
+  ///   reply: {title, subtitle, dismissible, dismissId, dismissIcon, ...}?}`,
   ///   button = `{id, icon, title, menu?}`.
   override func configure(_ args: [String: Any]) -> Bool {
     var animate = false
@@ -229,6 +238,12 @@ final class NativePromptComposerView: ComposerBaseView {
     attachmentIds = ids
     attachmentStrip.accent = accent
     attachmentStrip.update(attachments)
+
+    let reply = args["reply"] as? [String: Any]
+    if (reply != nil) != hasReply { animate = true }
+    hasReply = reply != nil
+    replyBanner.accent = accent
+    if let reply { replyBanner.configure(reply) }
 
     let summary = args["attachmentSummary"] as? [String: Any]
     if (summary == nil) != (summarySpec == nil) { animate = true }
@@ -381,10 +396,10 @@ final class NativePromptComposerView: ComposerBaseView {
 
   private var oneLineHeight: CGFloat { max(Metrics.row, ceil(lineHeight) + 2 * Metrics.textVerticalInset) }
 
-  /// Wraps at the inline width, contains a line break, or has attachments.
+  /// Wraps at the inline width, contains a line break, or has attachments or a reply.
   func isMultiline(capsuleWidth: CGFloat) -> Bool {
     if isRecording { return false }
-    if (!attachmentIds.isEmpty && !attachmentsCollapsed) || text.contains("\n") { return true }
+    if hasReply || (!attachmentIds.isEmpty && !attachmentsCollapsed) || text.contains("\n") { return true }
     guard !text.isEmpty else { return false }
     let fitted = textView.sizeThatFits(
       CGSize(width: max(1, inlineTextWidth(capsuleWidth: capsuleWidth)), height: .greatestFiniteMagnitude)
@@ -392,9 +407,13 @@ final class NativePromptComposerView: ComposerBaseView {
     return fitted > oneLineHeight + lineHeight / 2
   }
 
+  private var replyBlock: CGFloat { hasReply ? Metrics.replyInset + Metrics.replyHeight : 0 }
+
   private var attachmentsBlock: CGFloat {
     attachmentIds.isEmpty || attachmentsCollapsed ? 0 : Metrics.attachmentTop + Metrics.attachmentHeight
   }
+
+  private var topBlock: CGFloat { replyBlock + attachmentsBlock }
 
   private func multilineTextHeight(capsuleWidth: CGFloat) -> CGFloat {
     fittedTextHeight(width: capsuleWidth - 2 * Metrics.textInset, minimum: oneLineHeight)
@@ -404,7 +423,7 @@ final class NativePromptComposerView: ComposerBaseView {
     if isRecording, let height = recordingBar.preferredHeight { return height }
     let cw = capsuleWidth(for: width)
     guard isMultiline(capsuleWidth: cw) else { return Metrics.row }
-    return attachmentsBlock + multilineTextHeight(capsuleWidth: cw) + Metrics.multiRowExtra
+    return topBlock + multilineTextHeight(capsuleWidth: cw) + Metrics.multiRowExtra
   }
 
   override func frame(for placement: ComposerPlacement) -> CGRect {
@@ -457,9 +476,17 @@ final class NativePromptComposerView: ComposerBaseView {
     primaryButton.transform = primaryVisible ? .identity : CGAffineTransform(scaleX: 0.5, y: 0.5)
     sendSpinner.center = primaryButton.center
 
+    replyBanner.frame = CGRect(
+      x: Metrics.replyInset,
+      y: Metrics.replyInset,
+      width: max(0, cw - 2 * Metrics.replyInset),
+      height: Metrics.replyHeight)
+    replyBanner.alpha = hasReply ? 1 : 0
+    replyBanner.isUserInteractionEnabled = hasReply
+
     attachmentStrip.frame = CGRect(
       x: 0,
-      y: Metrics.attachmentTop - AttachmentStripView.audioLift,
+      y: replyBlock + Metrics.attachmentTop - AttachmentStripView.audioLift,
       width: cw,
       height: Metrics.attachmentHeight + AttachmentStripView.audioLift)
     let collapsed = attachmentsCollapsed
@@ -476,7 +503,7 @@ final class NativePromptComposerView: ComposerBaseView {
 
     if multiline {
       let textHeight = multilineTextHeight(capsuleWidth: cw)
-      textView.frame = CGRect(x: Metrics.textInset, y: attachmentsBlock, width: cw - 2 * Metrics.textInset, height: textHeight)
+      textView.frame = CGRect(x: Metrics.textInset, y: topBlock, width: cw - 2 * Metrics.textInset, height: textHeight)
       let maximum = oneLineHeight + ceil(lineHeight) * CGFloat(max(0, maxLines - 1))
       textView.isScrollEnabled = textHeight >= maximum
     } else {
@@ -495,7 +522,7 @@ final class NativePromptComposerView: ComposerBaseView {
     leadingButton.alpha = recording ? 0 : 1
     textView.alpha = recording ? 0 : 1
     if recording {
-      for v in [primaryButton, attachmentStrip, summaryPill, sendSpinner] + actionButtons as [UIView] { v.alpha = 0 }
+      for v in [primaryButton, replyBanner, attachmentStrip, summaryPill, sendSpinner] + actionButtons as [UIView] { v.alpha = 0 }
     }
     for v in [leadingButton, primaryButton, textView] as [UIView] { v.isUserInteractionEnabled = !recording }
     if recording { for b in actionButtons { b.isUserInteractionEnabled = false } }
@@ -1001,5 +1028,119 @@ final class AudioWaveformView: UIView {
 final class ExpandedHitButton: UIButton {
   override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
     bounds.insetBy(dx: -10, dy: -10).contains(point)
+  }
+}
+
+/// The message the prompt answers, 54 pt, radius 12, 8 pt padding:
+/// `[▌ title           × ]` — a 4 pt bar 4 pt before the title and one line
+/// of subtitle, and a 32 pt dismiss button 8 pt after them.
+@available(iOS 26.0, *)
+final class ReplyBannerView: UIView {
+  var onDismiss: ((String) -> Void)?
+  var accent: UIColor = .systemBlue
+
+  private let bar = UIView()
+  private let titleLabel = UILabel()
+  private let subtitleLabel = UILabel()
+  private let dismissButton = ExpandedHitButton(configuration: .plain())
+  private var dismissId = ""
+
+  private static let padding: CGFloat = 8
+  private static let barWidth: CGFloat = 4
+  private static let barGap: CGFloat = 4
+  private static let dismissGap: CGFloat = 8
+  private static let dismissSize: CGFloat = 32
+  private static let dismissIconSize: CGFloat = 24
+  private static let titleHeight: CGFloat = 20
+  private static let subtitleHeight: CGFloat = 18
+
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    layer.cornerRadius = 12
+    layer.cornerCurve = .continuous
+    bar.layer.cornerRadius = Self.barWidth / 2
+    for label in [titleLabel, subtitleLabel] {
+      label.numberOfLines = 1
+      label.lineBreakMode = .byTruncatingTail
+      label.adjustsFontForContentSizeCategory = false
+    }
+    dismissButton.configuration?.contentInsets = .zero
+    dismissButton.configuration?.preferredSymbolConfigurationForImage = .init(pointSize: 17, weight: .regular)
+    dismissButton.addAction(UIAction { [weak self] _ in
+      guard let self else { return }
+      self.onDismiss?(self.dismissId)
+    }, for: .touchUpInside)
+    for v in [bar, titleLabel, subtitleLabel, dismissButton] as [UIView] { addSubview(v) }
+  }
+
+  required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+
+  func configure(_ spec: [String: Any]) {
+    let accentColor = (spec["accentColor"] as? NSNumber).map(UIColor.init(argb:)) ?? accent
+    backgroundColor = (spec["backgroundColor"] as? NSNumber).map(UIColor.init(argb:)) ?? .quaternarySystemFill
+    bar.backgroundColor = accentColor
+    let title = spec["title"] as? String ?? ""
+    let subtitle = spec["subtitle"] as? String ?? ""
+    titleLabel.attributedText = Self.text(
+      title, style: spec["titleStyle"], size: 15, weight: 500, color: accentColor)
+    subtitleLabel.attributedText = Self.text(
+      subtitle, style: spec["subtitleStyle"], size: 13, weight: 400, color: .secondaryLabel)
+    subtitleLabel.isHidden = subtitle.isEmpty
+    accessibilityLabel = [title, subtitle].filter { !$0.isEmpty }.joined(separator: ", ")
+
+    dismissId = spec["dismissId"] as? String ?? ""
+    dismissButton.isHidden = !((spec["dismissible"] as? Bool) ?? false)
+    let icon = NativeIconDescriptor(spec["dismissIcon"]).flatMap {
+      NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? nil : Self.dismissIconSize)
+    }
+    dismissButton.configuration?.image = icon ?? UIImage(systemName: "xmark")
+    dismissButton.configuration?.baseForegroundColor =
+      (spec["iconColor"] as? NSNumber).map(UIColor.init(argb:)) ?? .label
+    dismissButton.accessibilityLabel = spec["dismissLabel"] as? String
+    setNeedsLayout()
+  }
+
+  private static func text(_ text: String, style raw: Any?, size fallbackSize: CGFloat, weight: Int, color: UIColor)
+    -> NSAttributedString
+  {
+    let style = raw as? [String: Any]
+    let size = (style?["size"] as? NSNumber).map { CGFloat($0.doubleValue) } ?? fallbackSize
+    let font = NativeIconRenderer.shared.textFont(
+      family: style?["family"] as? String, size: size, weight: (style?["weight"] as? NSNumber)?.intValue ?? weight)
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.lineBreakMode = .byTruncatingTail
+    var attributes: [NSAttributedString.Key: Any] = [
+      .font: font,
+      .foregroundColor: (style?["color"] as? NSNumber).map(UIColor.init(argb:)) ?? color,
+      .paragraphStyle: paragraph,
+    ]
+    if let height = (style?["height"] as? NSNumber).map({ CGFloat($0.doubleValue) }) {
+      let lineHeight = (size * height).rounded()
+      paragraph.minimumLineHeight = lineHeight
+      paragraph.maximumLineHeight = lineHeight
+      attributes[.baselineOffset] = (lineHeight - font.lineHeight) / 4
+    }
+    return NSAttributedString(string: text, attributes: attributes)
+  }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    let p = Self.padding
+    let inner = bounds.height - 2 * p
+    let dismissShown = !dismissButton.isHidden
+    let trailing = dismissShown ? Self.dismissSize + Self.dismissGap : 0
+    bar.frame = CGRect(x: p, y: p, width: Self.barWidth, height: inner)
+    let textX = bar.frame.maxX + Self.barGap
+    let textW = max(0, bounds.width - p - textX - trailing)
+    if subtitleLabel.isHidden {
+      titleLabel.frame = CGRect(x: textX, y: p, width: textW, height: inner)
+    } else {
+      let top = p + (inner - Self.titleHeight - Self.subtitleHeight) / 2
+      titleLabel.frame = CGRect(x: textX, y: top, width: textW, height: Self.titleHeight)
+      subtitleLabel.frame = CGRect(x: textX, y: top + Self.titleHeight, width: textW, height: Self.subtitleHeight)
+    }
+    dismissButton.frame = CGRect(
+      x: bounds.width - p - Self.dismissSize, y: (bounds.height - Self.dismissSize) / 2,
+      width: Self.dismissSize, height: Self.dismissSize)
   }
 }
