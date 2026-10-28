@@ -331,6 +331,49 @@ void main() {
     expect(dismissed, 1);
   });
 
+  testWidgets('prompt composer replica: suggestions sit above the composer and are picked', (tester) async {
+    final picked = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(400, 800), padding: EdgeInsets.only(bottom: 34)),
+          child: Scaffold(
+            resizeToAvoidBottomInset: false,
+            body: NativePromptComposer(
+              suggestions: NativeComposerSuggestions(
+                items: [
+                  NativeComposerSuggestion(
+                    title: 'Sam Lee',
+                    subtitle: 'Technician',
+                    onSelected: () => picked.add('Sam'),
+                  ),
+                  NativeComposerSuggestion(
+                    title: 'Ana Ruiz',
+                    detail: 'Not in channel',
+                    onSelected: () => picked.add('Ana'),
+                  ),
+                ],
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final capsule = tester.getRect(find.byType(AnimatedContainer).first);
+    final sam = tester.getRect(find.text('Sam Lee'));
+    final ana = tester.getRect(find.text('Ana Ruiz'));
+    expect(ana.bottom, lessThan(capsule.top - 8), reason: 'the list sits 8 pt above the composer');
+    expect(sam.top, lessThan(ana.top));
+    expect(find.text('Technician'), findsOneWidget);
+    expect(find.text('Not in channel'), findsOneWidget);
+
+    await tester.tap(find.text('Ana Ruiz'));
+    expect(picked, ['Ana']);
+  });
+
   testWidgets('prompt composer replica: unfocused, attachments fold into a count pill', (tester) async {
     await tester.pumpWidget(
       MaterialApp(

@@ -109,10 +109,11 @@ final class VeneerOverlayView: UIView {
   /// interactive glass beneath it.
   override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
     guard isUserInteractionEnabled, !isHidden, self.point(inside: point, with: event) else { return nil }
-    // The frame check matters: while its text view is first responder, UIKit
+    // The bounds check matters: while its text view is first responder, UIKit
     // resolves hits on the composer to text-interaction views even for points
-    // far outside it, which would steal every tap from Flutter.
-    if let composer, composer.isShown, composer.frame.contains(point),
+    // far outside it, which would steal every tap from Flutter. `point(inside:)`
+    // is the composer's own frame plus any list it shows above itself.
+    if let composer, composer.isShown, composer.point(inside: convert(point, to: composer), with: event),
       let hit = composer.hitTest(convert(point, to: composer), with: event)
     {
       return hit

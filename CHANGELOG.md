@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.20.0
+
+- **Composer suggestions:** `NativePromptComposer.suggestions` takes a `NativeComposerSuggestions` — a list
+  right above the composer, its full width, 8 pt above it, radius 24, natively on Liquid Glass and in the
+  replica. 52 pt rows: a 32 pt round image, a title with a subtitle under it and a trailing detail (e.g.
+  people to mention and "Not in channel"); it scrolls past five and a half rows. Selecting a row calls its
+  `onSelected`. The composer's own height and the room Flutter leaves for it don't change.
+
 ## 0.19.0
 
 - **Search toolbar:** `NativeSearchToolbar` puts the system search at the bottom of a search page, the

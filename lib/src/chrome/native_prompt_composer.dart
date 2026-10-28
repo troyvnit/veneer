@@ -219,6 +219,69 @@ class NativeComposerReply {
         };
 }
 
+/// One row of [NativeComposerSuggestions]: a 32 pt round [image], the
+/// [title] with [subtitle] under it, and [detail] at the trailing edge —
+/// e.g. a person to mention and "Not in channel".
+@immutable
+class NativeComposerSuggestion {
+  const NativeComposerSuggestion({required this.title, this.subtitle, this.detail, this.image, this.onSelected});
+
+  final String title;
+
+  /// One line under [title]; hidden when null or empty.
+  final String? subtitle;
+
+  /// Trailing text; hidden when null or empty.
+  final String? detail;
+
+  /// Drawn as a 32 pt circle; pass `NativeIcon.imageFile` for a photo.
+  final NativeIcon? image;
+
+  final VoidCallback? onSelected;
+}
+
+/// A list a [NativePromptComposer] shows right above itself while the prompt
+/// is being typed, as chat apps show people to mention: the composer's full
+/// width, 8 pt above it, radius 24, 52 pt rows, scrolling past five and a
+/// half of them. Selecting a row calls its [NativeComposerSuggestion.onSelected];
+/// the app then edits the text, e.g. with [NativeComposerController.setText].
+@immutable
+class NativeComposerSuggestions {
+  const NativeComposerSuggestions({required this.items, this.titleStyle, this.subtitleStyle, this.detailStyle});
+
+  final List<NativeComposerSuggestion> items;
+
+  /// Defaults to 17 pt in the label colour.
+  final TextStyle? titleStyle;
+
+  /// Defaults to 13 pt in the secondary label colour.
+  final TextStyle? subtitleStyle;
+
+  /// Defaults to 13 pt in the secondary label colour.
+  final TextStyle? detailStyle;
+
+  Map<String, Object?> _encode(Map<String, VoidCallback?> handlers) => {
+    'items': [
+      for (final (i, item) in items.indexed)
+        {
+          'id': _register(handlers, 'suggestion$i', item.onSelected),
+          'title': item.title,
+          'subtitle': item.subtitle,
+          'detail': item.detail,
+          'image': item.image?.encode(),
+        },
+    ],
+    'titleStyle': NativeComposerReply._encodeStyle(titleStyle),
+    'subtitleStyle': NativeComposerReply._encodeStyle(subtitleStyle),
+    'detailStyle': NativeComposerReply._encodeStyle(detailStyle),
+  };
+
+  static String _register(Map<String, VoidCallback?> handlers, String id, VoidCallback? onSelected) {
+    handlers[id] = onSelected;
+    return id;
+  }
+}
+
 /// An assistant-style prompt composer: native (UIKit) on iOS 26, a Flutter
 /// replica with the same layout elsewhere.
 ///
@@ -263,6 +326,7 @@ class NativePromptComposer extends StatefulWidget {
     this.attachments = const [],
     this.attachmentSummary,
     this.reply,
+    this.suggestions,
     this.onSend,
     this.onChanged,
     this.tintColor,
@@ -323,6 +387,10 @@ class NativePromptComposer extends StatefulWidget {
   /// The message the prompt answers, shown across the top; it stays on show
   /// when the prompt isn't focused.
   final NativeComposerReply? reply;
+
+  /// A list right above the composer, e.g. people to mention; null or empty
+  /// hides it.
+  final NativeComposerSuggestions? suggestions;
 
   /// Called with the text (possibly empty when only attachments are sent).
   final ValueChanged<String>? onSend;
@@ -422,6 +490,7 @@ class _NativePromptComposerState extends _ComposerHostState<NativePromptComposer
     'attachments': [for (final a in widget.attachments) a._encode()],
     'attachmentSummary': widget.attachmentSummary?._encode(),
     'reply': widget.reply?._encode(handlers),
+    'suggestions': widget.suggestions?._encode(handlers),
     'tintColor': widget.tintColor?.toARGB32(),
     'highlights': widget.highlights,
     'maxLines': widget.maxLines,
@@ -479,6 +548,7 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
   static const _summaryHeight = 24.0;
   static const _replyInset = 8.0;
   static const _replyHeight = 54.0;
+  static const _suggestionsGap = 8.0;
   static const _duration = Duration(milliseconds: 350);
   static const _curve = Curves.easeOutCubic;
   // A gentle overshoot, like UIKit's spring with a little bounce.
@@ -888,6 +958,15 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
               ),
               child: _c.child,
             ),
+            if (_c.suggestions case final suggestions? when suggestions.items.isNotEmpty)
+              AnimatedPositioned(
+                duration: _duration,
+                curve: _curve,
+                left: margin,
+                right: margin,
+                bottom: bottom + height + _suggestionsGap,
+                child: _FallbackSuggestions(suggestions: suggestions, style: style),
+              ),
             Positioned(
               left: 0,
               right: 0,
@@ -948,6 +1027,86 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
           ],
         );
       },
+    );
+  }
+}
+
+/// The [NativeComposerSuggestions] list: radius 24, 6 pt above and below the
+/// rows, 52 pt rows with a 32 pt image 16 pt from the edge, the text 12 pt
+/// after it and the detail 16 pt from the trailing edge; five and a half
+/// rows before it scrolls.
+class _FallbackSuggestions extends StatelessWidget {
+  const _FallbackSuggestions({required this.suggestions, required this.style});
+
+  final NativeComposerSuggestions suggestions;
+  final VeneerFallbackStyle style;
+
+  static const _row = 52.0;
+  static const _padding = 6.0;
+  static const _visibleRows = 5.5;
+  static const _image = 32.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = suggestions.items;
+    final title = TextStyle(fontSize: 17, height: 22 / 17, color: style.label).merge(suggestions.titleStyle);
+    final subtitle = TextStyle(
+      fontSize: 13,
+      height: 18 / 13,
+      color: style.secondaryLabel,
+    ).merge(suggestions.subtitleStyle);
+    final detail = TextStyle(fontSize: 13, height: 18 / 13, color: style.secondaryLabel).merge(suggestions.detailStyle);
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 2 * _padding + _visibleRows * _row),
+      clipBehavior: Clip.antiAlias,
+      decoration: style.surfaceDecoration(radius: BorderRadius.circular(24)),
+      child: ListView.builder(
+        shrinkWrap: true,
+        padding: const EdgeInsets.symmetric(vertical: _padding),
+        itemExtent: _row,
+        itemCount: items.length,
+        itemBuilder: (context, i) {
+          final item = items[i];
+          final image = item.image;
+          final itemSubtitle = item.subtitle;
+          final itemDetail = item.detail;
+          return Semantics(
+            button: true,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: item.onSelected,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  spacing: 12,
+                  children: [
+                    ClipOval(
+                      child: SizedBox.square(
+                        dimension: _image,
+                        child: image == null
+                            ? ColoredBox(color: style.innerSurface)
+                            : NativeIconView(image, size: _image, fit: BoxFit.cover),
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: title),
+                          if (itemSubtitle != null && itemSubtitle.isNotEmpty)
+                            Text(itemSubtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: subtitle),
+                        ],
+                      ),
+                    ),
+                    if (itemDetail != null && itemDetail.isNotEmpty) Text(itemDetail, maxLines: 1, style: detail),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

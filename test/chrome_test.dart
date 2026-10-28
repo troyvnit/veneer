@@ -300,6 +300,42 @@ void main() {
     expect(dismissed, 1);
   });
 
+  testWidgets('prompt composer: suggestions are sent with the config and picked natively', variant: ios, (
+    tester,
+  ) async {
+    final picked = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativePromptComposer(
+          suggestions: NativeComposerSuggestions(
+            items: [
+              NativeComposerSuggestion(title: 'Sam Lee', subtitle: 'Technician', onSelected: () => picked.add('Sam')),
+              NativeComposerSuggestion(
+                title: 'Ana Ruiz',
+                detail: 'Not in channel',
+                onSelected: () => picked.add('Ana'),
+              ),
+            ],
+            titleStyle: const TextStyle(fontSize: 16),
+          ),
+          child: const SizedBox(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final suggestions = sent('setComposer').single['suggestions']! as Map;
+    final items = suggestions['items']! as List;
+    expect(items, hasLength(2));
+    expect((items[0] as Map)['title'], 'Sam Lee');
+    expect((items[0] as Map)['subtitle'], 'Technician');
+    expect((items[1] as Map)['detail'], 'Not in channel');
+    expect(suggestions['titleStyle'], {'family': null, 'size': 16.0, 'weight': null, 'height': null, 'color': null});
+
+    await nativeEvent('composerButton', {'id': (items[1] as Map)['id']});
+    expect(picked, ['Ana']);
+  });
+
   testWidgets('prompt composer: an audio attachment sends its clip state', variant: ios, (tester) async {
     await tester.pumpWidget(
       MaterialApp(

@@ -81,6 +81,8 @@ final class NativePromptComposerView: ComposerBaseView {
   /// The message the prompt answers ("Reply"), across the top.
   private let replyBanner = ReplyBannerView()
   private var hasReply = false
+  /// A list right above the capsule, e.g. people to mention.
+  private let suggestionsView = ComposerSuggestionsView()
   /// The attachments folded into `[📎 3]` while the prompt isn't focused.
   private let summaryPill = UIButton(configuration: .plain())
   private var summarySpec: [String: Any]?
@@ -137,6 +139,11 @@ final class NativePromptComposerView: ComposerBaseView {
     replyBanner.alpha = 0
     replyBanner.onDismiss = { [weak self] id in self?.emitButton(id) }
 
+    suggestionsView.alpha = 0
+    suggestionsView.isUserInteractionEnabled = false
+    suggestionsView.onSelect = { [weak self] id in self?.emitButton(id) }
+    addSubview(suggestionsView)
+
     sendSpinner.hidesWhenStopped = true
     sendSpinner.isUserInteractionEnabled = false
     for v in [replyBanner, attachmentStrip, summaryPill, textView, leadingButton, primaryButton, sendSpinner] as [UIView] {
@@ -158,7 +165,8 @@ final class NativePromptComposerView: ComposerBaseView {
   /// `{leading: button?, actions: [button], primary: button?, stop: button?,
   ///   sendIcon, sendEnabled, sendBusy, editable, side: [button + prominent],
   ///   sideShown, attachments: [{id, title, subtitle, thumbnail, loading, tappable}],
-  ///   reply: {title, subtitle, dismissible, dismissId, dismissIcon, ...}?}`,
+  ///   reply: {title, subtitle, dismissible, dismissId, dismissIcon, ...}?,
+  ///   suggestions: {items: [{id, title, subtitle, detail, image}], ...}?}`,
   ///   button = `{id, icon, title, menu?}`.
   override func configure(_ args: [String: Any]) -> Bool {
     var animate = false
@@ -244,6 +252,16 @@ final class NativePromptComposerView: ComposerBaseView {
     hasReply = reply != nil
     replyBanner.accent = accent
     if let reply { replyBanner.configure(reply) }
+
+    if suggestionsView.configure(args["suggestions"] as? [String: Any]) && window != nil {
+      UIView.animate(
+        springDuration: 0.3, bounce: 0, initialSpringVelocity: 0, delay: 0,
+        options: [.beginFromCurrentState, .allowUserInteraction]
+      ) {
+        self.layoutSuggestions()
+        self.suggestionsView.layoutIfNeeded()
+      }
+    }
 
     let summary = args["attachmentSummary"] as? [String: Any]
     if (summary == nil) != (summarySpec == nil) { animate = true }
@@ -526,6 +544,7 @@ final class NativePromptComposerView: ComposerBaseView {
     }
     for v in [leadingButton, primaryButton, textView] as [UIView] { v.isUserInteractionEnabled = !recording }
     if recording { for b in actionButtons { b.isUserInteractionEnabled = false } }
+    layoutSuggestions()
 
     let n = CGFloat(sideButtons.count)
     for (i, b) in sideButtons.enumerated() {
@@ -534,6 +553,25 @@ final class NativePromptComposerView: ComposerBaseView {
       let x = sideShown ? shownX : cw - Metrics.row
       b.frame = CGRect(x: x, y: rowTop, width: Metrics.row, height: Metrics.row)
     }
+  }
+
+  /// The full width, 8 pt above the capsule, no taller than the room above
+  /// the composer; it keeps its last frame while it fades out.
+  private func layoutSuggestions() {
+    let shown = suggestionsView.hasItems && !isRecording && isShown
+    if suggestionsView.hasItems {
+      let room = superview.map { frame.minY - $0.safeAreaInsets.top - 2 * ComposerSuggestionsView.gap }
+      let height = min(suggestionsView.preferredHeight, max(ComposerSuggestionsView.rowHeight, room ?? .greatestFiniteMagnitude))
+      suggestionsView.frame = CGRect(
+        x: 0, y: -ComposerSuggestionsView.gap - height, width: bounds.width, height: height)
+    }
+    suggestionsView.alpha = shown ? 1 : 0
+    suggestionsView.isUserInteractionEnabled = shown
+  }
+
+  override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+    if super.point(inside: point, with: event) { return true }
+    return isShown && suggestionsView.isUserInteractionEnabled && suggestionsView.frame.contains(point)
   }
 
   /// Glass materializes (or dissolves) when its effect changes inside an
@@ -1100,7 +1138,7 @@ final class ReplyBannerView: UIView {
     setNeedsLayout()
   }
 
-  private static func text(_ text: String, style raw: Any?, size fallbackSize: CGFloat, weight: Int, color: UIColor)
+  static func text(_ text: String, style raw: Any?, size fallbackSize: CGFloat, weight: Int, color: UIColor)
     -> NSAttributedString
   {
     let style = raw as? [String: Any]
