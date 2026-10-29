@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.20.1
+
+- **Search toolbar:** the padding `NativeSearchToolbar` gives its child now matches the bar. It measured
+  the bar from the containers UIKit nests its glass in, which span the screen below the top safe area,
+  so a long list ended in a gap most of a screen tall; it now stops at the glass. The bar is also
+  measured again as the keyboard moves, so the padding drops back when the keyboard goes down.
+
 ## 0.20.0
 
 - **Composer suggestions:** `NativePromptComposer.suggestions` takes a `NativeComposerSuggestions` — a list

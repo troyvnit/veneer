@@ -107,12 +107,21 @@ final class NativeSearchToolbarHost: NSObject, UISearchBarDelegate, UISearchCont
     navigation.view.isHidden = hidden
   }
 
-  /// The top of the bar, in `container`'s coordinates: the floating bar UIKit
-  /// hosts the field in, above the keyboard while it's up.
+  /// The tallest the bar's glass gets, the largest text sizes included.
+  private static let maxBarHeight: CGFloat = 120
+
+  /// The top of the bar, in `container`'s coordinates: the glass UIKit hosts
+  /// the field in, above the keyboard while it's up. Above the glass UIKit
+  /// nests it in empty views and in containers that span the screen below the
+  /// top safe area; neither is the bar, so the walk stops at the first one.
   func chromeTop(in container: UIView) -> CGFloat? {
     guard navigation.view.superview === container, !isHidden, searchBar.searchTextField.window != nil else { return nil }
     var bar: UIView = searchBar.searchTextField
-    while let parent = bar.superview, parent !== navigation.view, !covers(parent, container) { bar = parent }
+    while let parent = bar.superview, parent !== navigation.view,
+      parent.bounds.height > 0, parent.bounds.height <= Self.maxBarHeight
+    {
+      bar = parent
+    }
     return bar.convert(bar.bounds, to: container).minY
   }
 

@@ -97,6 +97,9 @@ final class VeneerOverlayView: UIView {
     NotificationCenter.default.addObserver(
       self, selector: #selector(keyboardWillChangeFrame(_:)),
       name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(keyboardDidChangeFrame(_:)),
+      name: UIResponder.keyboardDidChangeFrameNotification, object: nil)
   }
 
   required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
@@ -351,6 +354,7 @@ final class VeneerOverlayView: UIView {
   /// Keyboard notifications drive the morph with the keyboard's own
   /// duration and curve, so card and keyboard move as one.
   @objc private func keyboardWillChangeFrame(_ note: Notification) {
+    DispatchQueue.main.async { [weak self] in self?.relayoutSearchToolbar() }
     // A native sheet over this view has its own overlay; the keyboard is its.
     if let host = hostViewController, host.presentedViewController != nil, !host.isBeingPresented,
       keyboardScreenFrame == nil
@@ -379,6 +383,19 @@ final class VeneerOverlayView: UIView {
     let duration = (info[UIResponder.keyboardAnimationDurationUserInfoKey] as? NSNumber)?.doubleValue ?? 0.25
     let curve = (info[UIResponder.keyboardAnimationCurveUserInfoKey] as? NSNumber)?.uintValue ?? 7
     animateComposer(duration: duration, options: UIView.AnimationOptions(rawValue: curve << 16))
+  }
+
+  @objc private func keyboardDidChangeFrame(_ note: Notification) {
+    relayoutSearchToolbar()
+  }
+
+  /// UIKit moves the search bar with the keyboard inside its own floating
+  /// container, which lays out nothing the overlay observes; measure it again
+  /// once the keyboard's move is under way and once it has ended.
+  private func relayoutSearchToolbar() {
+    guard let host = searchToolbarHost else { return }
+    host.navigation.view.layoutIfNeeded()
+    reportSearchToolbar()
   }
 
   /// Focus without a software keyboard notification (hardware keyboard):
