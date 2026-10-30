@@ -172,9 +172,9 @@ final class NativeTabBarHost: NSObject, UITabBarControllerDelegate {
     isApplyingProgrammaticSelection = false
   }
 
-  func setHidden(_ hidden: Bool) {
+  func setHidden(_ hidden: Bool, animated: Bool = true) {
     guard controller.isTabBarHidden != hidden else { return }
-    controller.setTabBarHidden(hidden, animated: true)
+    controller.setTabBarHidden(hidden, animated: animated)
   }
 
   var isHidden: Bool { controller.isTabBarHidden }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.20.2
+
+- **Tab bar:** a tab bar created while its page is already covered now starts hidden. A scope that mounts
+  under another route (say a page pushed in the same frame) sends the hide before the bar exists; the
+  native side dropped it, so the bar showed over the covering page and stayed there.
+
 ## 0.20.1
 
 - **Search toolbar:** the padding `NativeSearchToolbar` gives its child now matches the bar. It measured

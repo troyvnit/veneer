@@ -27,6 +27,9 @@ final class VeneerOverlayView: UIView {
   weak var hostViewController: UIViewController?
 
   private var tabBarHost: NativeTabBarHost?
+  /// Dart can hide the chrome before the tab bar exists (a scope that mounts
+  /// already covered sends it first), so a new bar starts in this state.
+  private var chromeHidden = false
   private var navigationBarHost: NativeNavigationBarHost?
   private var searchToolbarHost: NativeSearchToolbarHost?
   private var lastSearchToolbarBottom: CGFloat = -1
@@ -184,6 +187,7 @@ final class VeneerOverlayView: UIView {
         self?.layoutComposer()
       }
       host.attach(to: self, host: hostViewController)
+      host.setHidden(chromeHidden, animated: false)
       tabBarHost = host
       return host
     }()
@@ -263,6 +267,7 @@ final class VeneerOverlayView: UIView {
   }
 
   func setChromeHidden(_ hidden: Bool) {
+    chromeHidden = hidden
     tabBarHost?.setHidden(hidden)
   }
 
