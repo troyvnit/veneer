@@ -133,6 +133,8 @@ void main() {
             labels: const ['Member', 'Admin'],
             selectedIndex: 0,
             selectedColor: const Color(0xFFFFFFFF),
+            textStyle: const TextStyle(fontFamily: 'Inter', fontSize: 15, fontWeight: FontWeight.w500),
+            selectedTextStyle: const TextStyle(fontFamily: 'Inter', fontSize: 15, fontWeight: FontWeight.w600),
             height: 40,
             onValueChanged: picks.add,
           ),
@@ -144,6 +146,8 @@ void main() {
     final view = tester.widget<UiKitView>(find.byType(UiKitView));
     expect(view.viewType, 'veneer/segmented');
     expect((view.creationParams! as Map)['labels'], ['Member', 'Admin']);
+    expect((view.creationParams! as Map)['font'], {'family': 'Inter', 'size': 15.0, 'weight': 500});
+    expect((view.creationParams! as Map)['selectedFont'], {'family': 'Inter', 'size': 15.0, 'weight': 600});
     expect(tester.getSize(find.byType(NativeSegmentedControl)), const Size(240, 40));
 
     await nativeEvent('veneer/segmented_$nextViewId', 'valueChanged', {'index': 1});

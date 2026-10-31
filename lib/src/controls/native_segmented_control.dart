@@ -17,6 +17,8 @@ class NativeSegmentedControl extends StatelessWidget {
     this.selectedColor,
     this.textColor,
     this.selectedTextColor,
+    this.textStyle,
+    this.selectedTextStyle,
     this.height = 32,
   });
 
@@ -29,6 +31,13 @@ class NativeSegmentedControl extends StatelessWidget {
   final Color? selectedColor;
   final Color? textColor;
   final Color? selectedTextColor;
+
+  /// The segments' font: family, size and weight. Without one, UIKit's
+  /// 13 pt system font.
+  final TextStyle? textStyle;
+
+  /// The selected segment's font; defaults to [textStyle].
+  final TextStyle? selectedTextStyle;
   final double height;
 
   @override
@@ -44,7 +53,11 @@ class NativeSegmentedControl extends StatelessWidget {
           },
           children: {
             for (final (index, label) in labels.indexed)
-              index: Text(label, style: TextStyle(color: index == selectedIndex ? selectedTextColor : textColor)),
+              index: Text(
+                label,
+                style: ((index == selectedIndex ? selectedTextStyle ?? textStyle : textStyle) ?? const TextStyle())
+                    .copyWith(color: index == selectedIndex ? selectedTextColor : textColor),
+              ),
           },
         ),
       );
@@ -60,6 +73,8 @@ class NativeSegmentedControl extends StatelessWidget {
           'selectedColor': selectedColor?.toARGB32(),
           'textColor': textColor?.toARGB32(),
           'selectedTextColor': selectedTextColor?.toARGB32(),
+          'font': _encodeFont(textStyle),
+          'selectedFont': _encodeFont(selectedTextStyle ?? textStyle),
         },
         onEvent: (method, arguments) {
           if (method == 'valueChanged') onValueChanged(arguments['index']! as int);
@@ -68,3 +83,6 @@ class NativeSegmentedControl extends StatelessWidget {
     );
   }
 }
+
+Map<String, Object?>? _encodeFont(TextStyle? style) =>
+    style == null ? null : {'family': style.fontFamily, 'size': style.fontSize, 'weight': style.fontWeight?.value};

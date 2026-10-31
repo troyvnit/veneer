@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.21.0
+
+- **Segmented control:** `NativeSegmentedControl.textStyle` and `selectedTextStyle` set the segments' font —
+  family, size and weight, from the app's Flutter fonts natively — in place of UIKit's 13 pt system font.
+
 ## 0.20.2
 
 - **Tab bar:** a tab bar created while its page is already covered now starts hidden. A scope that mounts

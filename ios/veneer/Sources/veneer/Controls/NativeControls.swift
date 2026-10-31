@@ -196,12 +196,25 @@ private final class NativeSegmentedView: NSObject, FlutterPlatformView {
     var selectedText: [NSAttributedString.Key: Any] = [:]
     if let color = config.color("textColor") { normal[.foregroundColor] = color }
     if let color = config.color("selectedTextColor") { selectedText[.foregroundColor] = color }
+    if let font = Self.font(config["font"]) { normal[.font] = font }
+    if let font = Self.font(config["selectedFont"]) { selectedText[.font] = font }
     control.setTitleTextAttributes(normal, for: .normal)
     control.setTitleTextAttributes(selectedText, for: .selected)
   }
 
   @objc private func changed() {
     channel.invokeMethod("valueChanged", arguments: ["index": control.selectedSegmentIndex])
+  }
+
+  /// `{family?, size?, weight?}` from the app's Flutter fonts; nil keeps UIKit's.
+  private static func font(_ raw: Any?) -> UIFont? {
+    guard let style = raw as? [String: Any] else { return nil }
+    let size = (style["size"] as? NSNumber).map { CGFloat($0.doubleValue) } ?? 13
+    let weight = (style["weight"] as? NSNumber)?.intValue
+    guard #available(iOS 26.0, *) else {
+      return .systemFont(ofSize: size, weight: (weight ?? 400) >= 600 ? .semibold : (weight ?? 400) >= 500 ? .medium : .regular)
+    }
+    return NativeIconRenderer.shared.textFont(family: style["family"] as? String, size: size, weight: weight)
   }
 }
 
