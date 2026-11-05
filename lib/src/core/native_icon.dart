@@ -230,6 +230,9 @@ class NativeIconView extends StatelessWidget {
   /// How raster images and colour SVGs fill the box (thumbnails use cover).
   final BoxFit fit;
 
+  /// Whether the icon is a raster image (a photo) rather than a glyph or SVG.
+  static bool isRaster(NativeIcon icon) => icon is _ImageAssetIcon || icon is _ImageFileIcon;
+
   /// Whether the icon keeps its own colours (raster images, untinted SVGs).
   static bool keepsColors(NativeIcon icon) => switch (icon) {
     _ImageAssetIcon() || _ImageFileIcon() => true,

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.22.0
+
+- **Prompt composer:** a file chip in `NativePromptComposer.attachments` takes the app's colours —
+  `NativeComposerAttachment.backgroundColor`, `borderColor` (a 1 pt outline), `thumbnailBackgroundColor`,
+  `titleColor` and `subtitleColor`, each falling back to the system colour it replaces. A chip's untinted SVG
+  thumbnail (a file-type icon) now sits centred at 24 pt on the thumbnail fill, in its own colours, instead of
+  filling the box; raster thumbnails still fill it, and square image tiles are unchanged.
+- **Icons:** `NativeIconView.isRaster` tells a photo from a glyph or SVG.
+
 ## 0.21.1
 
 - **Switch and segmented control:** a tap now reaches the UIKit control when a Flutter parent also takes

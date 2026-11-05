@@ -5,8 +5,10 @@ part of 'native_composer.dart';
 ///
 /// Without a [title] it's a square image tile (a photo: pass
 /// `NativeIcon.image`/`imageFile`, or a colour SVG, as [thumbnail]); with
-/// one, a chip with a thumbnail, the title and [subtitle] (a file). With
-/// [audio], a full-width voice clip row instead.
+/// one, a chip with a thumbnail, the title and [subtitle] (a file). A chip's
+/// raster thumbnail fills its box; any other icon sits centred on
+/// [thumbnailBackgroundColor], in its own colours when it's an untinted SVG
+/// (a file-type icon, say). With [audio], a full-width voice clip row instead.
 @immutable
 class NativeComposerAttachment {
   const NativeComposerAttachment({
@@ -18,6 +20,11 @@ class NativeComposerAttachment {
     this.onRemove,
     this.onTap,
     this.audio,
+    this.backgroundColor,
+    this.borderColor,
+    this.thumbnailBackgroundColor,
+    this.titleColor,
+    this.subtitleColor,
   });
 
   final String id;
@@ -40,6 +47,21 @@ class NativeComposerAttachment {
   /// duration and remove. The app plays the clip; this only draws it.
   final NativeComposerAudio? audio;
 
+  /// A chip's fill; defaults to the tertiary system fill.
+  final Color? backgroundColor;
+
+  /// A 1 pt outline around a chip; null draws none.
+  final Color? borderColor;
+
+  /// Behind a chip's non-raster thumbnail; defaults to the quaternary system fill.
+  final Color? thumbnailBackgroundColor;
+
+  /// Defaults to the label colour.
+  final Color? titleColor;
+
+  /// Defaults to the secondary label colour.
+  final Color? subtitleColor;
+
   Map<String, Object?> _encode() => {
     'id': id,
     'title': title,
@@ -48,6 +70,11 @@ class NativeComposerAttachment {
     'loading': loading,
     'tappable': onTap != null,
     'audio': audio?._encode(),
+    'backgroundColor': backgroundColor?.toARGB32(),
+    'borderColor': borderColor?.toARGB32(),
+    'thumbnailBackgroundColor': thumbnailBackgroundColor?.toARGB32(),
+    'titleColor': titleColor?.toARGB32(),
+    'subtitleColor': subtitleColor?.toARGB32(),
   };
 }
 
@@ -1203,14 +1230,16 @@ class _FallbackAttachmentTile extends StatelessWidget {
     final side = chip ? 44.0 : 60.0;
     Widget thumbnail = SizedBox(width: side, height: side);
     if (a.thumbnail case final t?) {
-      thumbnail = NativeIconView.keepsColors(t)
+      final fills = chip ? NativeIconView.isRaster(t) : NativeIconView.keepsColors(t);
+      final colourGlyph = NativeIconView.keepsColors(t);
+      thumbnail = fills
           ? NativeIconView(t, size: side, fit: BoxFit.cover)
           : Container(
               width: side,
               height: side,
-              color: style.selection,
+              color: a.thumbnailBackgroundColor ?? style.selection,
               alignment: Alignment.center,
-              child: NativeIconView(t, size: 22, color: style.secondaryLabel),
+              child: NativeIconView(t, size: colourGlyph ? 24 : 22, color: colourGlyph ? null : style.secondaryLabel),
             );
     }
     thumbnail = ClipRRect(borderRadius: BorderRadius.circular(chip ? 10 : 16), child: thumbnail);
@@ -1231,7 +1260,11 @@ class _FallbackAttachmentTile extends StatelessWidget {
               height: 60,
               constraints: const BoxConstraints(maxWidth: 220),
               padding: const EdgeInsets.only(left: 8, right: 38),
-              decoration: BoxDecoration(color: style.selection, borderRadius: BorderRadius.circular(16)),
+              decoration: BoxDecoration(
+                color: a.backgroundColor ?? style.selection,
+                border: a.borderColor == null ? null : Border.all(color: a.borderColor!),
+                borderRadius: BorderRadius.circular(16),
+              ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -1246,14 +1279,18 @@ class _FallbackAttachmentTile extends StatelessWidget {
                           a.title!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: style.label),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: a.titleColor ?? style.label,
+                          ),
                         ),
                         if ((a.subtitle ?? '').isNotEmpty)
                           Text(
                             a.subtitle!,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 13, color: style.secondaryLabel),
+                            style: TextStyle(fontSize: 13, color: a.subtitleColor ?? style.secondaryLabel),
                           ),
                       ],
                     ),

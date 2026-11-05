@@ -826,7 +826,13 @@ final class AttachmentTileView: UIView {
     subtitleLabel.text = subtitle
     titleLabel.isHidden = !isChip
     subtitleLabel.isHidden = !isChip || (subtitle ?? "").isEmpty
-    backgroundColor = isChip ? .tertiarySystemFill : .clear
+    func color(_ key: String) -> UIColor? { (spec[key] as? NSNumber).map(UIColor.init(argb:)) }
+    titleLabel.textColor = color("titleColor") ?? .label
+    subtitleLabel.textColor = color("subtitleColor") ?? .secondaryLabel
+    backgroundColor = isChip ? color("backgroundColor") ?? .tertiarySystemFill : .clear
+    let border = isChip ? color("borderColor") : nil
+    layer.borderColor = border?.cgColor
+    layer.borderWidth = border == nil ? 0 : 1
     accessibilityLabel = [title, subtitle].compactMap { $0 }.joined(separator: ", ")
     tapArea.isHidden = !((spec["tappable"] as? Bool) ?? false)
     tapArea.isAccessibilityElement = !tapArea.isHidden
@@ -834,22 +840,26 @@ final class AttachmentTileView: UIView {
 
     let side = isChip ? Self.chipThumbnail : 60
     let d = NativeIconDescriptor(spec["thumbnail"])
-    if let d, d.keepsColors {
+    let fills = isChip ? (d?.isRaster ?? false) : (d?.keepsColors ?? false)
+    if let d, fills {
       thumbnail.image = d.isRaster
         ? NativeIconRenderer.shared.fullImage(for: d)
         : NativeIconRenderer.shared.image(for: d, pointSize: side)
       thumbnail.contentMode = .scaleAspectFill
       thumbnailClip.backgroundColor = .clear
     } else {
-      thumbnail.image = d.flatMap { NativeIconRenderer.shared.image(for: $0, pointSize: $0.isSymbol ? 20 : 22) }
+      let colourGlyph = d?.keepsColors ?? false
+      thumbnail.image = d.flatMap {
+        NativeIconRenderer.shared.image(for: $0, pointSize: colourGlyph ? 24 : $0.isSymbol ? 20 : 22)
+      }
       thumbnail.contentMode = .center
       thumbnail.tintColor = .secondaryLabel
-      thumbnailClip.backgroundColor = .quaternarySystemFill
+      thumbnailClip.backgroundColor = color("thumbnailBackgroundColor") ?? .quaternarySystemFill
     }
     thumbnail.preferredSymbolConfiguration = .init(pointSize: 20, weight: .regular)
     let loading = (spec["loading"] as? Bool) ?? false
     dim.isHidden = !loading
-    thumbnail.isHidden = loading && !(d?.keepsColors ?? false)
+    thumbnail.isHidden = loading && !fills
     if loading { spinner.startAnimating() } else { spinner.stopAnimating() }
     setNeedsLayout()
   }
