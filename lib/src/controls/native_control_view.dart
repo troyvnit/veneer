@@ -13,11 +13,18 @@ import 'package:flutter/widgets.dart';
 /// current [config] is sent again, so a parent that doesn't take the new
 /// value puts the control back.
 class NativeControlView extends StatefulWidget {
-  const NativeControlView({super.key, required this.kind, required this.config, required this.onEvent});
+  const NativeControlView({
+    super.key,
+    required this.kind,
+    required this.config,
+    required this.onEvent,
+    this.claimsTaps = false,
+  });
 
   final String kind;
   final Map<String, Object?> config;
   final void Function(String method, Map<Object?, Object?> arguments) onEvent;
+  final bool claimsTaps;
 
   @override
   State<NativeControlView> createState() => _NativeControlViewState();
@@ -68,7 +75,9 @@ class _NativeControlViewState extends State<NativeControlView> {
       creationParams: widget.config,
       creationParamsCodec: const StandardMessageCodec(),
       // Keeps a drag on the control from becoming a Flutter scroll.
-      gestureRecognizers: {Factory<HorizontalDragGestureRecognizer>(HorizontalDragGestureRecognizer.new)},
+      gestureRecognizers: widget.claimsTaps
+          ? {Factory<EagerGestureRecognizer>(EagerGestureRecognizer.new)}
+          : {Factory<HorizontalDragGestureRecognizer>(HorizontalDragGestureRecognizer.new)},
       onPlatformViewCreated: _onCreated,
     );
   }

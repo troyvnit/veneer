@@ -66,6 +66,7 @@ class NativeSegmentedControl extends StatelessWidget {
       height: height,
       child: NativeControlView(
         kind: 'segmented',
+        claimsTaps: true,
         config: {
           'labels': labels,
           'selectedIndex': selectedIndex,

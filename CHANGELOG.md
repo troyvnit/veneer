@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.21.1
+
+- **Switch and segmented control:** a tap now reaches the UIKit control when a Flutter parent also takes
+  taps — a list row with `onTap`, say. The control waited for Flutter's gesture arena, which only settled
+  as the finger lifted, and UIKit dropped touches handed over after they had ended, so the switch didn't
+  flip and the segment wasn't picked. Both now claim the pointer as it goes down. A drag that starts on
+  one of them no longer scrolls the page under it; the slider, a drag control, is unchanged.
+
 ## 0.21.0
 
 - **Segmented control:** `NativeSegmentedControl.textStyle` and `selectedTextStyle` set the segments' font —

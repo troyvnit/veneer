@@ -26,6 +26,7 @@ class NativeSwitch extends StatelessWidget {
       size: _size,
       child: NativeControlView(
         kind: 'switch',
+        claimsTaps: true,
         config: {
           'value': value,
           'enabled': onChanged != null,

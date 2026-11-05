@@ -9,17 +9,20 @@ void main() {
   final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   final veneerCalls = <MethodCall>[];
   final controlCalls = <String, List<MethodCall>>{};
+  final platformViewCalls = <MethodCall>[];
   var nextViewId = 0;
 
   setUp(() {
     veneerCalls.clear();
     controlCalls.clear();
+    platformViewCalls.clear();
     VeneerBridge.instance.debugReset();
     messenger.setMockMethodCallHandler(const MethodChannel('veneer'), (call) async {
       veneerCalls.add(call);
       return call.method == 'showAlert' ? 1 : null;
     });
     messenger.setMockMethodCallHandler(SystemChannels.platform_views, (call) async {
+      platformViewCalls.add(call);
       if (call.method != 'create') return null;
       final args = call.arguments as Map;
       final channel = '${args['viewType']}_${args['id']}';
@@ -87,6 +90,35 @@ void main() {
     setState(() => value = true);
     await tester.pump();
     expect(controlCalls[channel]!.last.arguments, containsPair('value', true));
+  });
+
+  testWidgets('native switch under a tappable parent takes the tap on touch down', variant: ios, (tester) async {
+    VeneerBridge.instance.debugIsSupportedOverride = true;
+    var parentTaps = 0;
+    await pumpLtr(
+      tester,
+      Center(
+        child: GestureDetector(
+          onTap: () => parentTaps++,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: NativeSwitch(value: false, onChanged: (_) {}),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final gesture = await tester.startGesture(tester.getCenter(find.byType(UiKitView)));
+    expect(
+      platformViewCalls.map((call) => call.method),
+      contains('acceptGesture'),
+      reason: 'UIKit gets the touch while the finger is still down',
+    );
+    await gesture.up();
+    await tester.pump();
+
+    expect(parentTaps, 0);
   });
 
   testWidgets('native slider: range, enabled, and start/change/end events', variant: ios, (tester) async {
