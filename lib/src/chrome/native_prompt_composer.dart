@@ -332,7 +332,8 @@ class NativeComposerSuggestions {
 /// as it narrows, and the inline [actions] fade out.
 ///
 /// Idle, it sits concentric with the display's bottom corners (inset by the
-/// home indicator area + 4 pt), or 9 pt above a tab bar. Focused, it widens
+/// home indicator area + 4 pt, or by [idleInset]), or 9 pt above a tab bar.
+/// Focused, it widens
 /// to 12 pt margins 12 pt above the keyboard, inside the keyboard's own
 /// animation. [child] gets bottom padding for it, as with [NativeComposer].
 class NativePromptComposer extends StatefulWidget {
@@ -361,6 +362,7 @@ class NativePromptComposer extends StatefulWidget {
     this.maxLines = 8,
     this.clearOnSend = true,
     this.interactiveKeyboardDismissal = true,
+    this.idleInset,
     this.onVoiceRecorded,
     this.onVoiceRecordingFailed,
     this.recordingCancelLabel,
@@ -435,6 +437,12 @@ class NativePromptComposer extends StatefulWidget {
 
   /// See [NativeComposer.interactiveKeyboardDismissal].
   final bool interactiveKeyboardDismissal;
+
+  /// Distance from the sides and the bottom of the screen while idle with no
+  /// tab bar below, in place of the default that follows the display's corners
+  /// (the home indicator area + 4 pt) — e.g. a tab bar's own inset, so the
+  /// composer rests where the bar does on other pages.
+  final double? idleInset;
 
   /// A clip recorded with [NativeComposerController.startVoiceRecording].
   final ValueChanged<NativeVoiceRecording>? onVoiceRecorded;
@@ -521,6 +529,7 @@ class _NativePromptComposerState extends _ComposerHostState<NativePromptComposer
     'tintColor': widget.tintColor?.toARGB32(),
     'highlights': widget.highlights,
     'maxLines': widget.maxLines,
+    'idleInset': widget.idleInset,
   };
 
   @override
@@ -691,7 +700,7 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
       restMargin = 20;
       restBottom = mq.padding.bottom + 9;
     } else {
-      final inset = systemBottom > 0 ? systemBottom + 4 : 12.0;
+      final inset = _c.idleInset ?? (systemBottom > 0 ? systemBottom + 4 : 12.0);
       restMargin = inset;
       restBottom = inset;
     }

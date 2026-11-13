@@ -97,6 +97,7 @@ final class NativePromptComposerView: ComposerBaseView {
   private var actionSpecs: NSArray = []
   private var sideSpecs: NSArray = []
   private(set) var sideShown = false
+  private var idleInset: CGFloat?
   private var attachmentIds: [String] = []
   /// The primary circle's current face, so content changes only swap it
   /// when it actually changes (and the symbol replace effect runs once).
@@ -164,7 +165,7 @@ final class NativePromptComposerView: ComposerBaseView {
 
   /// `{leading: button?, actions: [button], primary: button?, stop: button?,
   ///   sendIcon, sendEnabled, sendBusy, editable, side: [button + prominent],
-  ///   sideShown, attachments: [{id, title, subtitle, thumbnail, loading, tappable}],
+  ///   idleInset, sideShown, attachments: [{id, title, subtitle, thumbnail, loading, tappable}],
   ///   reply: {title, subtitle, dismissible, dismissId, dismissIcon, ...}?,
   ///   suggestions: {items: [{id, title, subtitle, detail, image}], ...}?}`,
   ///   button = `{id, icon, title, menu?}`.
@@ -181,6 +182,11 @@ final class NativePromptComposerView: ComposerBaseView {
     if (stop == nil) != (stopSpec == nil) { animate = true }
     stopSpec = stop
     sendEnabled = (args["sendEnabled"] as? Bool) ?? true
+    let inset = (args["idleInset"] as? NSNumber).map { CGFloat(truncating: $0) }
+    if idleInset != inset {
+      idleInset = inset
+      animate = true
+    }
     sendBusy = (args["sendBusy"] as? Bool) ?? false
 
     leadingSpec = args["leading"] as? [String: Any]
@@ -454,7 +460,9 @@ final class NativePromptComposerView: ComposerBaseView {
       margin = Metrics.tabBarMargin
       bottom = tabTop - Metrics.tabBarGap
     } else {
-      let inset = placement.safeAreaBottom > 0 ? placement.safeAreaBottom + Metrics.idleExtraInset : Metrics.flatInset
+      let inset =
+        idleInset
+        ?? (placement.safeAreaBottom > 0 ? placement.safeAreaBottom + Metrics.idleExtraInset : Metrics.flatInset)
       margin = inset
       bottom = placement.bounds.height - inset
     }

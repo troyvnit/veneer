@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.23.0
+
+- **Prompt composer:** `NativePromptComposer.idleInset` sets how far the idle capsule sits from the sides and
+  the bottom of the screen when no tab bar is below it, in place of the default that follows the display's
+  corners (the home indicator area + 4 pt).
+
 ## 0.22.0
 
 - **Prompt composer:** a file chip in `NativePromptComposer.attachments` takes the app's colours —
