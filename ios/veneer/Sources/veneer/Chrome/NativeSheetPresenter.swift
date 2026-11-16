@@ -182,7 +182,12 @@ final class NativeSheetPresenter {
       controller.view.backgroundColor = .clear
     }
     // A kept-alive controller may have gone full screen last time.
-    controller.modalPresentationStyle = (args["fullScreen"] as? Bool) == true ? .fullScreen : .pageSheet
+    let fullScreen = (args["fullScreen"] as? Bool) == true
+    let fullScreenBackground = (args["backgroundColor"] as? NSNumber).map(UIColor.init(argb:)) ?? .systemBackground
+    controller.modalPresentationStyle = fullScreen ? .fullScreen : .pageSheet
+    // A sheet's material is UIKit's; a full-screen page has nothing behind
+    // its transparent Flutter view but the window.
+    controller.view.backgroundColor = fullScreen ? fullScreenBackground : .clear
     controller.additionalSafeAreaInsets.top = 0
     let keeps = retain && !showingKept
 
@@ -201,6 +206,7 @@ final class NativeSheetPresenter {
         self.prewarm(entrypoint: entrypoint, libraryURI: libraryURI)
       }
     }
+    session.fullScreenBackground = fullScreenBackground
     session.configure(args)
     session.payload = args["payload"] is NSNull ? nil : args["payload"]
     sessions[sessionKey] = session
@@ -286,6 +292,8 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
   var retainKey: String?
   /// Handed to the sheet's Flutter app (`NativeSheet.payload`).
   var payload: Any?
+  /// What backs the sheet's transparent view once it fills the screen.
+  var fullScreenBackground: UIColor = .systemBackground
   /// The sheet this one was presented over, and those presented over it.
   weak var parent: NativeSheetSession?
   var children: [NativeSheetSession] = []
@@ -448,6 +456,7 @@ final class NativeSheetSession: NSObject, UISheetPresentationControllerDelegate 
         return
       }
       controller.modalPresentationStyle = .fullScreen
+      controller.view.backgroundColor = self.fullScreenBackground
       controller.additionalSafeAreaInsets.top = 0
       presenter.present(controller, animated: false) { [weak self] in
         self?.movingToFullScreen = false

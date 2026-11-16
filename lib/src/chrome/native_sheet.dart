@@ -110,7 +110,9 @@ class NativeSheetDetent {
 /// With [fullScreen], it comes up as a full-screen page instead (UIKit's
 /// `.fullScreen`): no detents, no drag to dismiss, the page behind hidden —
 /// for content like a call that owns the screen. A sheet can also become one
-/// while open, keeping its state: [NativeSheet.enterFullScreen].
+/// while open, keeping its state: [NativeSheet.enterFullScreen]. A native
+/// full-screen page is backed by [backgroundColor], or the system background
+/// without one, under content that paints none of its own.
 Future<T?> showNativeSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
@@ -149,6 +151,9 @@ Future<T?> showNativeSheet<T>({
           'expandsOnScroll': expandsOnScroll,
           'retain': keepAlive,
           'fullScreen': fullScreen,
+          'backgroundColor': backgroundColor == null
+              ? null
+              : CupertinoDynamicColor.resolve(backgroundColor, context).toARGB32(),
         },
         onDetentChanged: onDetentChanged == null ? null : (i) => onDetentChanged(detents[i]),
         onPresented: (id) {

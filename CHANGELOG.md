@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.23.1
+
+- **Full-screen sheets:** a native full-screen page (`showNativeSheet(fullScreen: true)`, or after
+  `NativeSheet.enterFullScreen`) is now backed by `backgroundColor`, or the system background without one.
+  Its Flutter view is transparent and, unlike a sheet, UIKit puts no material behind it, so content with a
+  transparent `Scaffold` showed the page behind while it came up and then the black window.
+
 ## 0.23.0
 
 - **Prompt composer:** `NativePromptComposer.idleInset` sets how far the idle capsule sits from the sides and
