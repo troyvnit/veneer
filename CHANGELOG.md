@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.24.0
+
+- **`NativePromptComposer.leadingSideAction`:** one glass circle 8 pt before the capsule, e.g. a way back
+  home. It shows while the prompt isn't focused or recording, and merges into the capsule's leading end
+  while it is, so typing gets the full width. The Flutter fallback matches.
+
 ## 0.23.1
 
 - **Full-screen sheets:** a native full-screen page (`showNativeSheet(fullScreen: true)`, or after

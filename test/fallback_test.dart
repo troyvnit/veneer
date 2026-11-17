@@ -533,6 +533,41 @@ void main() {
     expect(calls, isEmpty);
   });
 
+  testWidgets('prompt composer replica: leading side action sits before the capsule until focused', (tester) async {
+    var home = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(size: Size(400, 800), padding: EdgeInsets.only(bottom: 34)),
+          child: Scaffold(
+            resizeToAvoidBottomInset: false,
+            body: NativePromptComposer(
+              placeholder: 'Ask anything',
+              leadingSideAction: NativeComposerButton(
+                icon: const NativeIcon.symbol('house'),
+                title: 'Home',
+                onPressed: () => home++,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
+      ),
+    );
+    final capsule = find.byType(AnimatedContainer).first;
+    final idleWidth = tester.getSize(capsule).width;
+    expect(tester.getTopLeft(capsule).dx, greaterThan(tester.getTopRight(find.bySemanticsLabel('Home')).dx));
+
+    await tester.tap(find.bySemanticsLabel('Home'));
+    expect(home, 1);
+
+    await tester.showKeyboard(find.byType(TextField));
+    await tester.pumpAndSettle();
+    expect(tester.getSize(capsule).width, greaterThan(idleWidth), reason: 'typing gets the full width');
+    await tester.tap(find.bySemanticsLabel('Home'), warnIfMissed: false);
+    expect(home, 1, reason: 'hidden while focused');
+  });
+
   testWidgets('native sheet: detents, drag to the next detent, drag down to dismiss', (tester) async {
     final navigator = GlobalKey<NavigatorState>();
     final detents = <NativeSheetDetent>[];

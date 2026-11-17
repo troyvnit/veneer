@@ -331,6 +331,10 @@ class NativeComposerSuggestions {
 /// They split off the capsule like liquid (UIKit's glass container effect)
 /// as it narrows, and the inline [actions] fade out.
 ///
+/// [leadingSideAction] is one glass circle before the capsule, e.g. a way
+/// back home. It shows while the prompt isn't focused and merges into the
+/// capsule's leading end while it is, so typing gets the full width.
+///
 /// Idle, it sits concentric with the display's bottom corners (inset by the
 /// home indicator area + 4 pt, or by [idleInset]), or 9 pt above a tab bar.
 /// Focused, it widens
@@ -351,6 +355,7 @@ class NativePromptComposer extends StatefulWidget {
     this.editable = true,
     this.sideActions = const [],
     this.showSideActions = false,
+    this.leadingSideAction,
     this.attachments = const [],
     this.attachmentSummary,
     this.reply,
@@ -405,6 +410,10 @@ class NativePromptComposer extends StatefulWidget {
   /// one with the label colour.
   final List<NativeComposerButton> sideActions;
   final bool showSideActions;
+
+  /// A glass circle before the capsule, 8 pt from it, shown while the prompt
+  /// isn't focused or recording.
+  final NativeComposerButton? leadingSideAction;
 
   final List<NativeComposerAttachment> attachments;
 
@@ -522,6 +531,7 @@ class _NativePromptComposerState extends _ComposerHostState<NativePromptComposer
     'editable': widget.editable,
     'side': [for (final (i, b) in widget.sideActions.indexed) b._encode('side$i', handlers)],
     'sideShown': widget.showSideActions,
+    'leadingSide': widget.leadingSideAction?._encode('leadingSide', handlers),
     'attachments': [for (final a in widget.attachments) a._encode()],
     'attachmentSummary': widget.attachmentSummary?._encode(),
     'reply': widget.reply?._encode(handlers),
@@ -545,7 +555,8 @@ class _NativePromptComposerState extends _ComposerHostState<NativePromptComposer
 /// trailing edge. Multi-line (wrapping, a line break, attachments, a reply):
 /// a 54 pt reply card inset 8 pt, then 60 pt attachment tiles 12 pt below,
 /// text inset 18 pt, buttons on the bottom row, radius 24. Side actions:
-/// 48 pt circles 10 pt apart.
+/// 48 pt circles 10 pt apart. Leading side action: a 48 pt circle 8 pt
+/// before the capsule while it isn't focused.
 /// Idle: inset by the home indicator area + 4 pt (12 pt without one), or
 /// 9 pt above a tab bar with 20 pt margins; focused: 12 pt margins, 12 pt
 /// above the keyboard.
@@ -575,6 +586,7 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
   static const _lineHeight = 22.0;
   static const _multiRowExtra = 32.0;
   static const _sideSpacing = 10.0;
+  static const _leadingSideSpacing = 8.0;
   static const _radius = 24.0;
   static const _attachmentTop = 12.0;
   static const _attachmentHeight = 60.0;
@@ -714,7 +726,10 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
         final width = constraints.maxWidth - 2 * margin;
         final sideShown = _c.showSideActions && _c.sideActions.isNotEmpty;
         final n = _c.sideActions.length;
-        final capsuleWidth = width - (sideShown ? n * (_row + _sideSpacing) : 0);
+        final leadingSide = _c.leadingSideAction;
+        final leadingSideShown = leadingSide != null && !focused;
+        final leadingReserve = leadingSideShown ? _row + _leadingSideSpacing : 0.0;
+        final capsuleWidth = width - leadingReserve - (sideShown ? n * (_row + _sideSpacing) : 0);
         final canSend = _canSend;
         final hasContent = _hasContent;
         final stop = _c.stopAction;
@@ -1021,8 +1036,34 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
                     child: Stack(
                       clipBehavior: Clip.none,
                       children: [
-                        Positioned(
-                          left: 0,
+                        if (leadingSide != null)
+                          positioned(
+                            left: 0,
+                            bottom: 0,
+                            size: _row,
+                            visible: leadingSideShown,
+                            curve: _springCurve,
+                            child: _fallbackTap(
+                              leadingSide,
+                              child: DecoratedBox(
+                                decoration: style.surfaceDecoration(
+                                  shape: BoxShape.circle,
+                                  color: leadingSide.prominent ? style.label : null,
+                                ),
+                                child: Center(
+                                  child: NativeIconView(
+                                    leadingSide.icon,
+                                    size: leadingSide.prominent ? 20 : 24,
+                                    color: leadingSide.prominent ? style.surface : style.label,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        AnimatedPositioned(
+                          duration: _duration,
+                          curve: _curve,
+                          left: leadingReserve,
                           bottom: 0,
                           child: GestureDetector(
                             // Like the native capsule: tapping anywhere on it focuses.
@@ -1032,7 +1073,9 @@ class _FallbackPromptComposerState extends State<_FallbackPromptComposer> implem
                         ),
                         for (final (i, b) in _c.sideActions.indexed)
                           positioned(
-                            left: sideShown ? width - (n - i) * _row - (n - 1 - i) * _sideSpacing : capsuleWidth - _row,
+                            left: sideShown
+                                ? width - (n - i) * _row - (n - 1 - i) * _sideSpacing
+                                : leadingReserve + capsuleWidth - _row,
                             bottom: 0,
                             size: _row,
                             visible: sideShown,

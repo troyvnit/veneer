@@ -19,6 +19,10 @@ import UIKit
 /// `UIGlassContainerEffect`, so they separate like liquid), and the inline
 /// actions fade out.
 ///
+/// Leading side action: one 48 pt glass circle 8 pt before the capsule while
+/// the prompt isn't focused or recording; it merges into the capsule's
+/// leading end while the prompt is focused, so typing gets the full width.
+///
 /// Placement: idle, the capsule sits concentric with the display's bottom
 /// corners (inset by the home indicator's safe area + 4 pt on all three
 /// sides), or 9 pt above a tab bar with 20 pt margins. Focused, it widens to
@@ -39,6 +43,7 @@ final class NativePromptComposerView: ComposerBaseView {
     /// Idle inset on devices without a home indicator.
     static let flatInset: CGFloat = 12
     static let sideSpacing: CGFloat = 10
+    static let leadingSideSpacing: CGFloat = 8
     static let edgeCenter: CGFloat = 24
     static let actionSpacing: CGFloat = 48
     static let primary: CGFloat = 32
@@ -87,6 +92,7 @@ final class NativePromptComposerView: ComposerBaseView {
   private let summaryPill = UIButton(configuration: .plain())
   private var summarySpec: [String: Any]?
   private var sideButtons: [SideGlassButton] = []
+  private var leadingSideButton: SideGlassButton?
 
   private var leadingSpec: [String: Any]?
   private var primarySpec: [String: Any]?
@@ -165,7 +171,7 @@ final class NativePromptComposerView: ComposerBaseView {
 
   /// `{leading: button?, actions: [button], primary: button?, stop: button?,
   ///   sendIcon, sendEnabled, sendBusy, editable, side: [button + prominent],
-  ///   idleInset, sideShown, attachments: [{id, title, subtitle, thumbnail, loading, tappable}],
+  ///   idleInset, sideShown, leadingSide: button?, attachments: [{id, title, subtitle, thumbnail, loading, tappable}],
   ///   reply: {title, subtitle, dismissible, dismissId, dismissIcon, ...}?,
   ///   suggestions: {items: [{id, title, subtitle, detail, image}], ...}?}`,
   ///   button = `{id, icon, title, menu?}`.
@@ -240,6 +246,23 @@ final class NativePromptComposerView: ComposerBaseView {
       for (b, spec) in zip(sideButtons, side) { b.configure(spec, animated: window != nil) }
       sideSpecs = side as NSArray
     }
+    let leadingSide = args["leadingSide"] as? [String: Any]
+    if (leadingSide == nil) != (leadingSideButton == nil) {
+      leadingSideButton?.removeFromSuperview()
+      leadingSideButton = leadingSide.map { _ in
+        let b = SideGlassButton()
+        b.button.addAction(UIAction { [weak self, weak b] _ in
+          guard let self, let b else { return }
+          self.emitButton(b.id)
+        }, for: .touchUpInside)
+        glassContainer.contentView.addSubview(b)
+        b.frame = CGRect(x: 0, y: max(0, bounds.height - Metrics.row), width: Metrics.row, height: Metrics.row)
+        return b
+      }
+      animate = true
+    }
+    if let leadingSide, let leadingSideButton { leadingSideButton.configure(leadingSide, animated: window != nil) }
+
     let shown = ((args["sideShown"] as? Bool) ?? false) && !sideButtons.isEmpty
     if shown != sideShown {
       sideShown = shown
@@ -308,12 +331,12 @@ final class NativePromptComposerView: ComposerBaseView {
 
   override func textViewDidBeginEditing(_ textView: UITextView) {
     super.textViewDidBeginEditing(textView)
-    if summarySpec != nil, !attachmentIds.isEmpty { animateContentLayout() }
+    if (summarySpec != nil && !attachmentIds.isEmpty) || leadingSideButton != nil { animateContentLayout() }
   }
 
   override func textViewDidEndEditing(_ textView: UITextView) {
     super.textViewDidEndEditing(textView)
-    if summarySpec != nil, !attachmentIds.isEmpty { animateContentLayout() }
+    if (summarySpec != nil && !attachmentIds.isEmpty) || leadingSideButton != nil { animateContentLayout() }
   }
 
   private func buttonImage(_ raw: Any?, imageSize: CGFloat) -> UIImage? {
@@ -402,7 +425,11 @@ final class NativePromptComposerView: ComposerBaseView {
     sideShown ? CGFloat(sideButtons.count) * (Metrics.row + Metrics.sideSpacing) : 0
   }
 
-  func capsuleWidth(for width: CGFloat) -> CGFloat { max(Metrics.row * 2, width - sideReserve) }
+  private var leadingSideShown: Bool { leadingSideButton != nil && !isEditingText && !isRecording }
+
+  private var leadingReserve: CGFloat { leadingSideShown ? Metrics.row + Metrics.leadingSideSpacing : 0 }
+
+  func capsuleWidth(for width: CGFloat) -> CGFloat { max(Metrics.row * 2, width - leadingReserve - sideReserve) }
 
   private var textLeading: CGFloat { leadingSpec == nil ? Metrics.textInset : Metrics.textLeading }
 
@@ -481,7 +508,8 @@ final class NativePromptComposerView: ComposerBaseView {
     let multiline = isMultiline(capsuleWidth: cw)
     laidOutMultiline = multiline
     laidOutPrimaryVisible = primaryVisible
-    capsule.frame = CGRect(x: 0, y: 0, width: cw, height: h)
+    let capsuleX = leadingReserve
+    capsule.frame = CGRect(x: capsuleX, y: 0, width: cw, height: h)
 
     let rowTop = h - Metrics.row
     leadingButton.frame = CGRect(x: 0, y: rowTop, width: Metrics.row, height: Metrics.row)
@@ -558,9 +586,12 @@ final class NativePromptComposerView: ComposerBaseView {
     for (i, b) in sideButtons.enumerated() {
       let shownX = w - (n - CGFloat(i)) * Metrics.row - (n - 1 - CGFloat(i)) * Metrics.sideSpacing
       // Tucked into the capsule's trailing end while hidden, so they grow out of it.
-      let x = sideShown ? shownX : cw - Metrics.row
+      let x = sideShown ? shownX : capsuleX + cw - Metrics.row
       b.frame = CGRect(x: x, y: rowTop, width: Metrics.row, height: Metrics.row)
     }
+    // Tucked into the capsule's leading end while hidden.
+    leadingSideButton?.frame = CGRect(x: 0, y: rowTop, width: Metrics.row, height: Metrics.row)
+    leadingSideButton?.setOn(leadingSideShown)
   }
 
   /// The full width, 8 pt above the capsule, no taller than the room above
@@ -586,6 +617,7 @@ final class NativePromptComposerView: ComposerBaseView {
   /// animation block.
   private func applySideState() {
     for b in sideButtons { b.setOn(sideShown) }
+    leadingSideButton?.setOn(leadingSideShown)
   }
 
   override func animateContentLayout() {
