@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.24.2
+
+- **Tab bar:** when UIKit lays the tab bar out as a vertical column along a side edge (the iPhone Duo's outer
+  screen), its width is now reported as a left or right inset, and `NativeChromeScope` adds it to
+  `MediaQuery` padding. It was measured from its top edge as a bottom inset, which made the bar look as tall
+  as the screen.
+- **Tab bar:** in that vertical column the selected tab now takes the bar's tint (it fell back to the system
+  blue, since the column reads the tab bar controller's view tint rather than the tab bar's), and the trailing
+  button's icon is drawn at no more than 40 pt there, so an avatar sits inside its glass instead of filling it.
+- **Corner safe area:** on a screen with no status bar along the top and no side inset to hold content away
+  from the rounded corners (the iPhone Duo's outer screen, whose status bar runs down one side), the view
+  controller hosting the overlay gets a 24 pt additional top safe area. The native navigation bar and Flutter's
+  `MediaQuery` padding both move below it, so the bar's glass items and the page content clear the corners
+  together. Hosts that don't reach the top of the screen (sheets) and iPhone landscape are unchanged.
+
 ## 0.24.1
 
 - **Menu anchor:** a drag that starts on a `NativeMenuAnchor` now scrolls the content under it, so a

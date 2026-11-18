@@ -139,6 +139,8 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
     _live.add(this);
     _bridge.chromeBottomInset.addListener(_onInset);
     _bridge.chromeTopInset.addListener(_onInset);
+    _bridge.chromeLeftInset.addListener(_onInset);
+    _bridge.chromeRightInset.addListener(_onInset);
     _push();
   }
 
@@ -206,6 +208,8 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
     _routes.dispose();
     _bridge.chromeBottomInset.removeListener(_onInset);
     _bridge.chromeTopInset.removeListener(_onInset);
+    _bridge.chromeLeftInset.removeListener(_onInset);
+    _bridge.chromeRightInset.removeListener(_onInset);
     if (owned) {
       if (_live.lastOrNull case final next?) {
         next._takeOver();
@@ -223,12 +227,16 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
     final mq = MediaQuery.of(context);
     final bottom = math.max(mq.padding.bottom, _bridge.chromeBottomInset.value);
     final top = math.max(mq.padding.top, _bridge.chromeTopInset.value);
+    final left = math.max(mq.padding.left, _bridge.chromeLeftInset.value);
+    final right = math.max(mq.padding.right, _bridge.chromeRightInset.value);
     return MediaQuery(
       data: mq.copyWith(
-        padding: mq.padding.copyWith(top: top, bottom: bottom),
+        padding: mq.padding.copyWith(top: top, bottom: bottom, left: left, right: right),
         viewPadding: mq.viewPadding.copyWith(
           top: math.max(mq.viewPadding.top, top),
           bottom: math.max(mq.viewPadding.bottom, bottom),
+          left: math.max(mq.viewPadding.left, left),
+          right: math.max(mq.viewPadding.right, right),
         ),
       ),
       child: widget.child,

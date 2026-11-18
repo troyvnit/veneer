@@ -51,6 +51,14 @@ class VeneerBridge {
   /// navigation bar; 0 when none is showing.
   final ValueNotifier<double> chromeTopInset = ValueNotifier(0);
 
+  /// Width of native chrome along the left edge, when the tab bar sits in a
+  /// vertical column there instead of at the bottom; otherwise 0.
+  final ValueNotifier<double> chromeLeftInset = ValueNotifier(0);
+
+  /// Width of native chrome along the right edge, when the tab bar sits in a
+  /// vertical column there instead of at the bottom; otherwise 0.
+  final ValueNotifier<double> chromeRightInset = ValueNotifier(0);
+
   /// In a native sheet's engine: the tallest the UIKit sheet can get (above
   /// the bottom safe area), once presented.
   final ValueNotifier<double?> sheetMaximumHeight = ValueNotifier(null);
@@ -571,6 +579,8 @@ class VeneerBridge {
       case 'chromeInsets':
         chromeBottomInset.value = (args['bottom']! as num).toDouble();
         chromeTopInset.value = ((args['top'] as num?) ?? 0).toDouble();
+        chromeLeftInset.value = ((args['left'] as num?) ?? 0).toDouble();
+        chromeRightInset.value = ((args['right'] as num?) ?? 0).toDouble();
       case 'navItemPressed':
         _navItemHandler?.call(args['id']! as String);
       case 'composerButton':

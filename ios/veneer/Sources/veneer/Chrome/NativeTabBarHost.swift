@@ -34,12 +34,38 @@ final class NativeTabBarHost: NSObject, UITabBarControllerDelegate {
   private static let actionIdentifierValue = "veneer.action"
   private static let tabIconSize: CGFloat = 25
 
+  /// The largest the trailing button's icon gets while the bar is a vertical
+  /// column along a side edge (the iPhone Duo's outer screen). UIKit draws
+  /// that button smaller there than detached beside a bottom bar, and an icon
+  /// sized for the bottom bar would fill it edge to edge, hiding its glass.
+  private static let verticalActionIconSize: CGFloat = 40
+
+  private var lastAction: [String: Any]?
+  private var isVertical = false
+
   override init() {
     super.init()
     controller.view.backgroundColor = .clear
     controller.view.isOpaque = false
     controller.tabBarMinimizeBehavior = .never
-    controller.onLayout = { [weak self] in self?.onLayout?() }
+    controller.onLayout = { [weak self] in
+      self?.updateOrientation()
+      self?.onLayout?()
+    }
+  }
+
+  /// Re-renders the trailing button's icon when the bar switches between a
+  /// bottom bar and a vertical side column.
+  private func updateOrientation() {
+    let frame = tabBar.frame
+    let vertical = frame.height > frame.width
+    guard vertical != isVertical else { return }
+    isVertical = vertical
+    guard let action = lastAction, let actionIdentifier, let tab = controller.tab(forIdentifier: actionIdentifier) else {
+      return
+    }
+    if let image = icon(action["icon"], size: actionIconSize(action)) { tab.image = image }
+    configure(tab, from: action, iconSize: actionIconSize(action))
   }
 
   var tabBar: UITabBar { controller.tabBar }
@@ -68,6 +94,7 @@ final class NativeTabBarHost: NSObject, UITabBarControllerDelegate {
   func update(_ args: [String: Any]) {
     let items = args["items"] as? [[String: Any]] ?? []
     let action = args["action"] as? [String: Any]
+    lastAction = action
 
     // Replace tabs only when the bar's structure changes; replacing restarts
     // UIKit's layout and selection state. Icons, titles and badges update in
@@ -84,7 +111,9 @@ final class NativeTabBarHost: NSObject, UITabBarControllerDelegate {
       updateTabs(items: items, action: action)
     }
 
-    controller.tabBar.tintColor = (args["tintColor"] as? NSNumber).map(UIColor.init(argb:))
+    let tint = (args["tintColor"] as? NSNumber).map(UIColor.init(argb:))
+    controller.tabBar.tintColor = tint
+    controller.view.tintColor = tint
     select(index: (args["selectedIndex"] as? NSNumber)?.intValue ?? 0)
 
     // Attach the delegate only after tabs and selection exist: UIKit calls
@@ -149,7 +178,8 @@ final class NativeTabBarHost: NSObject, UITabBarControllerDelegate {
   }
 
   private func actionIconSize(_ action: [String: Any]) -> CGFloat {
-    (action["iconSize"] as? NSNumber).map { CGFloat($0.doubleValue) } ?? Self.tabIconSize
+    let size = (action["iconSize"] as? NSNumber).map { CGFloat($0.doubleValue) } ?? Self.tabIconSize
+    return isVertical ? min(size, Self.verticalActionIconSize) : size
   }
 
   private func icon(_ raw: Any?, size: CGFloat = NativeTabBarHost.tabIconSize) -> UIImage? {

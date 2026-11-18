@@ -480,6 +480,7 @@ final class VeneerOverlayView: UIView {
     super.didMoveToWindow()
     if window != nil { updateKeyboardDismissal() }
     updateStackOrderLink()
+    updateCornerSafeArea()
   }
 
   /// The keyboard's current top: from the last notification normally, from
@@ -538,6 +539,7 @@ final class VeneerOverlayView: UIView {
 
   override func layoutSubviews() {
     super.layoutSubviews()
+    updateCornerSafeArea()
     edgeEffects.layout()
     reportInsets()
     reportSearchToolbar()
@@ -547,6 +549,26 @@ final class VeneerOverlayView: UIView {
   override func safeAreaInsetsDidChange() {
     super.safeAreaInsetsDidChange()
     navigationBarHost?.updateTopInset(in: self)
+  }
+
+  /// Room the host keeps along the top of a screen with no status bar there
+  /// and no side inset to hold its content away from the rounded corners (the
+  /// iPhone Duo's outer screen, whose status bar runs down one side).
+  static let cornerTopInset: CGFloat = 24
+
+  /// Gives the host that room as an additional top safe area, so the native
+  /// navigation bar and Flutter's `MediaQuery` padding both clear the corners.
+  /// Only for a host whose view reaches the top of the screen: a sheet sits
+  /// lower, and iPhone landscape has side insets. The window's own safe area
+  /// doesn't include the addition, so this never feeds back into itself.
+  private func updateCornerSafeArea() {
+    guard let host = hostViewController, let window, host.isViewLoaded else { return }
+    let screen = window.safeAreaInsets
+    let atTop = host.view.convert(host.view.bounds, to: window).minY < 1
+    let needed = atTop && screen.top == 0 && (screen.left == 0 || screen.right == 0)
+    let top: CGFloat = needed ? Self.cornerTopInset : 0
+    guard abs(host.additionalSafeAreaInsets.top - top) > 0.5 else { return }
+    host.additionalSafeAreaInsets.top = top
   }
 
   /// Distance from the top of native chrome to the bottom of the screen.
@@ -565,12 +587,34 @@ final class VeneerOverlayView: UIView {
   func reportInsets() {
     // A hidden tab bar keeps its last inset, so the page underneath doesn't
     // re-lay out; the navigation bar's inset is reported regardless.
-    let bottom =
-      tabBarHost.map { $0.isHidden ? lastReportedInsets.bottom : bounds.height - $0.tabBar.convert($0.tabBar.bounds, to: self).minY } ?? 0
+    let bar = tabBarHost.map { $0.isHidden ? lastReportedInsets : tabBarInsets($0) } ?? .zero
     let top = navigationBarHost.map { $0.bar.convert($0.bar.bounds, to: self).maxY } ?? 0
-    guard abs(bottom - lastReportedInsets.bottom) > 0.5 || abs(top - lastReportedInsets.top) > 0.5 else { return }
-    lastReportedInsets = UIEdgeInsets(top: top, left: 0, bottom: bottom, right: 0)
-    onEvent?("chromeInsets", ["bottom": Double(bottom), "top": Double(top)])
+    let insets = UIEdgeInsets(top: top, left: bar.left, bottom: bar.bottom, right: bar.right)
+    guard
+      abs(insets.bottom - lastReportedInsets.bottom) > 0.5 || abs(insets.top - lastReportedInsets.top) > 0.5
+        || abs(insets.left - lastReportedInsets.left) > 0.5 || abs(insets.right - lastReportedInsets.right) > 0.5
+    else { return }
+    lastReportedInsets = insets
+    onEvent?(
+      "chromeInsets",
+      [
+        "bottom": Double(insets.bottom), "top": Double(insets.top),
+        "left": Double(insets.left), "right": Double(insets.right),
+      ])
+  }
+
+  /// The edge the tab bar occupies. UIKit puts it at the bottom on most
+  /// screens, but in a vertical column along a side edge on some (the
+  /// iPhone Duo's outer screen), where it covers the full height and so
+  /// mustn't count as a bottom inset.
+  private func tabBarInsets(_ host: NativeTabBarHost) -> UIEdgeInsets {
+    let frame = host.tabBar.convert(host.tabBar.bounds, to: self)
+    guard frame.height > frame.width else {
+      return UIEdgeInsets(top: 0, left: 0, bottom: bounds.height - frame.minY, right: 0)
+    }
+    return frame.midX > bounds.midX
+      ? UIEdgeInsets(top: 0, left: 0, bottom: 0, right: bounds.width - frame.minX)
+      : UIEdgeInsets(top: 0, left: frame.maxX, bottom: 0, right: 0)
   }
 }
 
