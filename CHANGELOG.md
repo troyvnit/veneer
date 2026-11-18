@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.25.0
+
+- **Tab bar:** taps on the tabs and the trailing button reach the bar again when UIKit lays it out as a side
+  column (the iPhone Duo's outer screen). UIKit draws those buttons in a toolbar host outside `UITabBar`, so
+  the overlay let every touch fall through to Flutter.
+- **Split layouts:** new `NativeChromePane` marks one column of a split layout (a list beside its detail), and
+  native chrome inside it stays in that column. Each pane gets its own `UINavigationBar` and scroll edge
+  effects, a `NativeChromeScope` tab bar inside a pane is confined to it (drawn as a bottom bar for the pane's
+  width, not the side rail UIKit picks on a wide screen), and a composer is laid out for its pane's width.
+  Without a pane, chrome spans the screen as before.
+- **Split layouts:** new `NativePaneRoute` mixin for routes that show in one pane. A page in another pane
+  isn't covered by them: its navigation bar, tab bar, composer and glass stay up. Needs
+  `VeneerNavigatorObserver` on the navigator, which now also tracks the order of its routes.
+  Chrome re-checks whether it's covered whenever an observed navigator's routes change, so a page in one
+  pane hides its bars under a sheet pushed over the other pane's page, and shows them again when it closes.
+- **Navigator observer:** `VeneerNavigatorObserver` handles `didReplace`, so replacing a popup route with
+  another keeps the chrome hidden for the right time.
+
 ## 0.24.2
 
 - **Tab bar:** when UIKit lays the tab bar out as a vertical column along a side edge (the iPhone Duo's outer

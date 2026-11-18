@@ -39,6 +39,20 @@ final class ScrollEdgeEffectHost {
     layout()
   }
 
+  /// For one pane of a split layout: sits just above `sibling`, the whole
+  /// overlay's host, and covers only the pane (see `place(in:)`).
+  func attach(to container: UIView, above sibling: UIView) {
+    guard scrollView.superview !== container else { return }
+    scrollView.autoresizingMask = []
+    container.insertSubview(scrollView, aboveSubview: sibling)
+  }
+
+  func place(in frame: CGRect) {
+    guard scrollView.frame != frame else { return }
+    scrollView.frame = frame
+    layout()
+  }
+
   /// Keeps the content one point larger than the viewport in both
   /// directions and parked in the middle, so both edges count as scrolled.
   func layout() {

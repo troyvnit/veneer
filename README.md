@@ -216,6 +216,29 @@ NativeNavigationBar(
   (`scrollEdgeEffect`, soft by default).
 - Shown while its page is visible; the most recently shown bar wins.
 
+### Split layouts
+
+```dart
+Row(children: [
+  SizedBox(
+    width: 375,
+    child: NativeChromePane(id: 'list', left: 0, width: 375, child: listWithTabs),
+  ),
+  Expanded(
+    child: NativeChromePane(id: 'detail', left: 376, width: screenWidth - 376, child: detail),
+  ),
+])
+```
+
+- Each `NativeChromePane` gets its own navigation bar and scroll edge effects, spanning only its
+  columns. `left` and `width` are where the pane rests, in logical pixels from the left of the
+  Flutter view; chrome doesn't follow a route transition sliding the pane's content.
+- A `NativeChromeScope` inside a pane confines the tab bar to it, as a bottom bar sized for the
+  pane. A composer inside a pane is laid out for the pane's width.
+- Routes that show in one pane mix in `NativePaneRoute` and report the pane's id in
+  `nativePane` (null while they cover the whole screen). Pages in other panes then stay
+  uncovered. The navigator needs a `VeneerNavigatorObserver`.
+
 ### Composer
 
 A messaging composer for chat screens:

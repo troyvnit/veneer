@@ -43,11 +43,12 @@ final class NativeNavigationBarHost: NSObject {
   /// much room instead.
   static let edgeTopInset: CGFloat = 8
 
-  func attach(to container: UIView) {
+  /// Spans `guide` (one pane of a split layout) when given, else the container.
+  func attach(to container: UIView, guide: UILayoutGuide? = nil) {
     guard bar.superview !== container else { return }
     container.addSubview(bar)
-    let leading = bar.leadingAnchor.constraint(equalTo: container.leadingAnchor)
-    let trailing = bar.trailingAnchor.constraint(equalTo: container.trailingAnchor)
+    let leading = bar.leadingAnchor.constraint(equalTo: guide?.leadingAnchor ?? container.leadingAnchor)
+    let trailing = bar.trailingAnchor.constraint(equalTo: guide?.trailingAnchor ?? container.trailingAnchor)
     let top = bar.topAnchor.constraint(equalTo: container.safeAreaLayoutGuide.topAnchor)
     self.leading = leading
     self.trailing = trailing
@@ -261,9 +262,27 @@ final class NativeNavigationBarHost: NSObject {
   /// nil keeps UIKit's. The bar ignores layout margins for its glass items,
   /// so the bar itself is shifted.
   func setSideInset(_ inset: CGFloat?) {
-    let shift = inset.map { $0 - Self.systemSideInset } ?? 0
-    leading?.constant = shift
-    trailing?.constant = -shift
+    sideShift = inset.map { $0 - Self.systemSideInset } ?? 0
+    applySideConstraints()
+  }
+
+  /// Which of the bar's edges face another pane of a split layout rather
+  /// than the screen's edge. UIKit gives glass items no margin there, so the
+  /// bar is pulled in by the margin it gives a screen edge.
+  func setInteriorEdges(leading: Bool, trailing: Bool) {
+    guard leading != interiorLeading || trailing != interiorTrailing else { return }
+    interiorLeading = leading
+    interiorTrailing = trailing
+    applySideConstraints()
+  }
+
+  private var sideShift: CGFloat = 0
+  private var interiorLeading = false
+  private var interiorTrailing = false
+
+  private func applySideConstraints() {
+    leading?.constant = sideShift + (interiorLeading ? Self.systemSideInset : 0)
+    trailing?.constant = -sideShift - (interiorTrailing ? Self.systemSideInset : 0)
   }
 
   func setHidden(_ hidden: Bool) {

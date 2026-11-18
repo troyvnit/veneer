@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../controls/native_control_view.dart';
 import '../core/fallback_scope.dart';
 import '../core/fallback_style.dart';
+import '../core/native_chrome_pane.dart';
 import '../core/native_icon.dart';
 import '../core/native_menu.dart';
 import '../core/route_visibility.dart';
@@ -173,7 +174,8 @@ class NativeBarTitle {
 ///
 /// One bar is shown at a time: the most recently visible
 /// [NativeNavigationBar] wins, and it hides when its page is covered by
-/// another route or hidden in an `IndexedStack`.
+/// another route or hidden in an `IndexedStack`. In a split layout each
+/// [NativeChromePane] has its own bar, spanning only that pane.
 class NativeNavigationBar extends StatefulWidget {
   const NativeNavigationBar({
     super.key,
@@ -217,10 +219,16 @@ Map<String, Object?>? _encodeStyle(TextStyle? style) => style == null
       };
 
 class _NativeNavigationBarState extends State<NativeNavigationBar> {
-  static _NativeNavigationBarState? _active;
-  static String? _lastSent;
+  static final Map<String?, _NativeNavigationBarState> _active = {};
+  static final Map<String?, String> _lastSent = {};
   bool _visible = false;
   bool _native = false;
+
+  /// The [NativeChromePane] this bar shows in; null for the whole screen.
+  String? _pane;
+  String? _paneConfig;
+
+  bool get _isActive => _active[_pane] == this;
 
   /// Whether the page's content has scrolled under the bar: its scroll edge
   /// effect shows only then, as UIKit's does.
@@ -240,7 +248,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
     if (scrolled == _scrolled) return false;
     _scrolled = scrolled;
     if (_native) {
-      if (_visible && _active == this) _bridge.setNavigationBarScrolled(scrolled);
+      if (_visible && _isActive) _bridge.setNavigationBarScrolled(scrolled, pane: _pane);
     } else {
       setState(() {});
     }
@@ -264,8 +272,8 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
     super.didUpdateWidget(old);
     _refresh(resend: true);
     final scrolled = widget.scrolled;
-    if (scrolled != null && scrolled != old.scrolled && _native && _visible && _active == this) {
-      _bridge.setNavigationBarScrolled(scrolled);
+    if (scrolled != null && scrolled != old.scrolled && _native && _visible && _isActive) {
+      _bridge.setNavigationBarScrolled(scrolled, pane: _pane);
     }
   }
 
@@ -275,12 +283,30 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
     _native = useNativeLayer(context);
     if (!_native) return;
     final visible = Visibility.of(context) && isRouteOnTop(context);
-    if (visible != _visible) {
+    final pane = NativeChromePane.maybeOf(context);
+    final paneConfig = pane == null ? null : jsonEncode(NativeChromePane.encodeOf(context));
+    if (pane?.id != _pane) {
+      _leavePane();
+      _pane = pane?.id;
+      _paneConfig = paneConfig;
+      _visible = visible;
+      if (_visible) _push();
+    } else if (visible != _visible) {
       _visible = visible;
       _push();
-    } else if (resend && _visible) {
+    } else if ((resend || paneConfig != _paneConfig) && _visible) {
+      _paneConfig = paneConfig;
       _push();
     }
+  }
+
+  /// Gives up the native bar of the pane this bar was in (a split layout
+  /// folding to one column, say).
+  void _leavePane() {
+    if (!_isActive) return;
+    _active.remove(_pane);
+    _lastSent.remove(_pane);
+    _bridge.removeNavigationBar(pane: _pane);
   }
 
   /// The bar's wire configuration; registers each button's callback in
@@ -331,14 +357,15 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
       'trailing': [for (final (i, b) in widget.trailing.indexed) button('trailing$i', b)],
       'tintColor': widget.tintColor?.toARGB32(),
       'edgeEffect': widget.scrollEdgeEffect.name,
+      'pane': NativeChromePane.encodeOf(context),
     };
   }
 
   void _push() {
     if (!_native) return;
     if (_visible) {
-      _active = this;
-    } else if (_active != this) {
+      _active[_pane] = this;
+    } else if (!_isActive) {
       return; // another bar owns the native view
     }
     final handlers = <String, VoidCallback?>{};
@@ -346,12 +373,12 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
     // Pages rebuild every frame while the keyboard animates; only send real
     // changes. Callbacks are refreshed locally either way.
     final encoded = jsonEncode(config);
-    if (encoded == _lastSent) {
-      _bridge.updateNavigationBarHandler((id) => handlers[id]?.call());
+    if (encoded == _lastSent[_pane]) {
+      _bridge.updateNavigationBarHandler((id) => handlers[id]?.call(), pane: _pane);
       return;
     }
-    _lastSent = encoded;
-    _bridge.setNavigationBar({...config, 'scrolled': _isScrolled}, (id) => handlers[id]?.call());
+    _lastSent[_pane] = encoded;
+    _bridge.setNavigationBar({...config, 'scrolled': _isScrolled}, (id) => handlers[id]?.call(), pane: _pane);
   }
 
   /// The real `UINavigationBar` as a platform view, for content the overlay
@@ -370,11 +397,7 @@ class _NativeNavigationBarState extends State<NativeNavigationBar> {
   @override
   void dispose() {
     _routes.dispose();
-    if (_active == this) {
-      _active = null;
-      _lastSent = null;
-      _bridge.removeNavigationBar();
-    }
+    _leavePane();
     super.dispose();
   }
 

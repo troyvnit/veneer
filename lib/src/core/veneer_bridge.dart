@@ -89,7 +89,7 @@ class VeneerBridge {
   final Map<int, VeneerContextMenuHandlers> _contextMenuHandlers = {};
   ValueChanged<int>? _tabSelectedHandler;
   VoidCallback? _tabActionHandler;
-  ValueChanged<String>? _navItemHandler;
+  final Map<String?, ValueChanged<String>> _navItemHandlers = {};
   VeneerComposerHandlers? _composerHandlers;
   VeneerSearchToolbarHandlers? _searchToolbarHandlers;
 
@@ -120,7 +120,7 @@ class VeneerBridge {
     _bannerHandlers.clear();
     _tabSelectedHandler = null;
     _tabActionHandler = null;
-    _navItemHandler = null;
+    _navItemHandlers.clear();
     _composerHandlers = null;
     _searchToolbarHandlers = null;
     searchToolbarBottom = 0;
@@ -335,27 +335,29 @@ class VeneerBridge {
     await _channel.invokeMethod<void>('removeTabBar');
   }
 
-  Future<void> setNavigationBar(Map<String, Object?> config, ValueChanged<String> onItem) async {
-    _navItemHandler = onItem;
+  /// [pane] is the `NativeChromePane` id the bar shows in (null for the
+  /// whole screen); `config['pane']` says where that pane sits.
+  Future<void> setNavigationBar(Map<String, Object?> config, ValueChanged<String> onItem, {String? pane}) async {
+    _navItemHandlers[pane] = onItem;
     if (!await ensureAttached()) return;
     await _channel.invokeMethod<void>('setNavigationBar', config);
   }
 
   /// Whether the active bar's page has scrolled under it (its edge effect
   /// shows only then).
-  void setNavigationBarScrolled(bool scrolled) {
+  void setNavigationBarScrolled(bool scrolled, {String? pane}) {
     if (!_attached) return;
-    _channel.invokeMethod<void>('navigationBarScrolled', {'scrolled': scrolled});
+    _channel.invokeMethod<void>('navigationBarScrolled', {'scrolled': scrolled, 'pane': pane});
   }
 
-  void updateNavigationBarHandler(ValueChanged<String> onItem) => _navItemHandler = onItem;
+  void updateNavigationBarHandler(ValueChanged<String> onItem, {String? pane}) => _navItemHandlers[pane] = onItem;
 
   void updateComposerHandlers(VeneerComposerHandlers handlers) => _composerHandlers = handlers;
 
-  Future<void> removeNavigationBar() async {
-    _navItemHandler = null;
+  Future<void> removeNavigationBar({String? pane}) async {
+    _navItemHandlers.remove(pane);
     if (!_attached) return;
-    await _channel.invokeMethod<void>('removeNavigationBar');
+    await _channel.invokeMethod<void>('removeNavigationBar', {'pane': pane});
   }
 
   Future<void> setComposer(Map<String, Object?> config, VeneerComposerHandlers handlers) async {
@@ -582,7 +584,7 @@ class VeneerBridge {
         chromeLeftInset.value = ((args['left'] as num?) ?? 0).toDouble();
         chromeRightInset.value = ((args['right'] as num?) ?? 0).toDouble();
       case 'navItemPressed':
-        _navItemHandler?.call(args['id']! as String);
+        _navItemHandlers[args['pane'] as String?]?.call(args['id']! as String);
       case 'composerButton':
         _composerHandlers?.onButton(args['id']! as String);
       case 'composerText':

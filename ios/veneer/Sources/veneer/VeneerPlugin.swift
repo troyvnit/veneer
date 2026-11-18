@@ -193,11 +193,11 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
       result(nil)
 
     case "navigationBarScrolled":
-      overlay?.setNavigationBarScrolled((args["scrolled"] as? Bool) ?? false)
+      overlay?.setNavigationBarScrolled((args["scrolled"] as? Bool) ?? false, pane: args["pane"] as? String ?? "")
       result(nil)
 
     case "removeNavigationBar":
-      overlay?.setNavigationBar(nil)
+      overlay?.removeNavigationBar(pane: args["pane"] as? String ?? "")
       result(nil)
 
     case "setComposer":

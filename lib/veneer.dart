@@ -6,6 +6,8 @@
 ///     layout's trailing button ([NativeTabAction]);
 ///   * [NativeNavigationBar] — a real `UINavigationBar`, with native menus
 ///     ([NativeMenuItem]) and iOS 26's scroll edge effect;
+///   * [NativeChromePane] and [NativePaneRoute] — split layouts, with a
+///     navigation bar per column and the tab bar and composer kept to theirs;
 ///   * [NativeComposer] and [NativePromptComposer] — native messaging and
 ///     assistant-style composers that ride the keyboard;
 ///   * [showNativeSheet] — real UIKit sheets hosting Flutter content;
@@ -47,6 +49,7 @@ export 'src/controls/native_slider.dart';
 export 'src/controls/native_switch.dart';
 export 'src/core/fallback_scope.dart' show VeneerFallbackScope, useNativeLayer;
 export 'src/core/fallback_style.dart' show VeneerFallbackStyle;
+export 'src/core/native_chrome_pane.dart';
 export 'src/core/native_icon.dart';
 export 'src/core/native_menu.dart' show NativeMenuItem;
 export 'src/core/veneer_bridge.dart' show SheetRequestHandler, VeneerBridge, VeneerTransport;

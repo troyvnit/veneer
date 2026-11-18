@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../core/fallback_style.dart';
+import '../core/native_chrome_pane.dart';
 import '../core/native_icon.dart';
 import '../core/route_visibility.dart';
 import '../core/veneer_bridge.dart';
@@ -160,6 +161,7 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
       'selectedIndex': widget.selectedIndex,
       'tintColor': widget.tintColor?.toARGB32(),
       'edgeEffect': widget.scrollEdgeEffect.name,
+      'pane': NativeChromePane.encodeOf(context),
     };
     // Rebuilds (e.g. MediaQuery changes during keyboard animation) resend
     // nothing unless the bar actually changed.
@@ -185,6 +187,7 @@ class _NativeChromeScopeState extends State<NativeChromeScope> {
     super.didChangeDependencies();
     _routes.update(context);
     _updateCovered();
+    _push();
   }
 
   void _updateCovered() {
@@ -256,17 +259,27 @@ class VeneerNavigatorObserver extends NavigatorObserver {
 
   @override
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    RouteStacks.pushed(navigator, route);
     if (route is PopupRoute) _update(1);
   }
 
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    RouteStacks.removed(navigator, route);
     if (route is PopupRoute) _update(-1);
   }
 
   @override
   void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    RouteStacks.removed(navigator, route);
     if (route is PopupRoute) _update(-1);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    RouteStacks.replaced(navigator, oldRoute, newRoute);
+    if (oldRoute is PopupRoute) _update(-1);
+    if (newRoute is PopupRoute) _update(1);
   }
 }
 

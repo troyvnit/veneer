@@ -30,7 +30,17 @@ final class VeneerOverlayView: UIView {
   /// Dart can hide the chrome before the tab bar exists (a scope that mounts
   /// already covered sends it first), so a new bar starts in this state.
   private var chromeHidden = false
-  private var navigationBarHost: NativeNavigationBarHost?
+  /// One navigation bar per pane; the whole overlay's is keyed "".
+  private var navigationBarHosts: [String: NativeNavigationBarHost] = [:]
+  /// Panes chrome has been placed in, by id, with where each one sits.
+  private var panes: [String: ChromePane] = [:]
+  private var paneGuides: [String: PaneGuide] = [:]
+  /// Edge effects for the panes of a split layout; the whole overlay's are
+  /// `edgeEffects`.
+  private var paneEdgeEffects: [String: ScrollEdgeEffectHost] = [:]
+  private var bottomEffectPanes: Set<String> = []
+  private var tabBarPane = ChromePane.full
+  private var composerPane = ChromePane.full
   private var searchToolbarHost: NativeSearchToolbarHost?
   private var lastSearchToolbarBottom: CGFloat = -1
   private let edgeEffects = ScrollEdgeEffectHost()
@@ -124,7 +134,9 @@ final class VeneerOverlayView: UIView {
     {
       return hit
     }
-    if let navigationBarHost, let hit = navigationBarHost.hitTest(point, in: self, with: event) { return hit }
+    for host in navigationBarHosts.values {
+      if let hit = host.hitTest(point, in: self, with: event) { return hit }
+    }
     if let tabBarHost, let hit = tabBarHost.hitTest(point, in: self, with: event) { return hit }
     if let searchToolbarHost, let hit = searchToolbarHost.hitTest(point, in: self, with: event) { return hit }
     return glassLayer.hitTest(convert(point, to: glassLayer), with: event)
@@ -165,7 +177,7 @@ final class VeneerOverlayView: UIView {
     NotificationCenter.default.removeObserver(self)
     composer?.unfocus()
     setComposer(nil)
-    setNavigationBar(nil)
+    removeNavigationBars()
     setTabBar(nil)
     setSearchToolbar(nil)
     onEvent = nil
@@ -176,6 +188,8 @@ final class VeneerOverlayView: UIView {
     guard let args else {
       tabBarHost?.detach()
       tabBarHost = nil
+      tabBarPane = .full
+      updateBottomEdgeEffect()
       reportInsets()
       return
     }
@@ -191,14 +205,106 @@ final class VeneerOverlayView: UIView {
       tabBarHost = host
       return host
     }()
+    tabBarPane = register(ChromePane(args["pane"]))
+    host.place(in: tabBarPane.isFull ? nil : tabBarPane.frame(in: bounds), container: self)
     host.update(args)
     tabBarEdgeEffect = args["edgeEffect"] as? String
     updateBottomEdgeEffect()
   }
 
+  /// Each pane's bottom effect is shaped around the tab bar and composer in it.
   private func updateBottomEdgeEffect() {
-    let elements = [tabBarHost?.tabBar, composer?.isShown == true ? composer : nil].compactMap { $0 }
-    edgeEffects.set(.bottom, style: tabBarEdgeEffect ?? (composer != nil ? "soft" : nil), elements: elements)
+    var elements: [String: [UIView]] = [:]
+    elements[tabBarPane.id] = []
+    elements[composerPane.id] = []
+    if let bar = tabBarHost?.tabBar { elements[tabBarPane.id, default: []].append(bar) }
+    if let composer, composer.isShown { elements[composerPane.id, default: []].append(composer) }
+    for id in bottomEffectPanes.subtracting(elements.keys) {
+      edgeEffects(for: id).set(.bottom, style: nil, elements: [])
+    }
+    bottomEffectPanes = Set(elements.keys)
+    for (id, views) in elements {
+      let tabStyle = tabBarHost != nil && id == tabBarPane.id ? tabBarEdgeEffect : nil
+      let composerStyle = composer != nil && id == composerPane.id ? "soft" : nil
+      edgeEffects(for: id).set(.bottom, style: tabStyle ?? composerStyle, elements: views)
+    }
+  }
+
+  // MARK: - Panes
+
+  /// A layout guide spanning one pane's columns, for chrome laid out with
+  /// constraints.
+  private final class PaneGuide {
+    let guide = UILayoutGuide()
+    var leading: NSLayoutConstraint!
+    var width: NSLayoutConstraint!
+  }
+
+  /// Records where `pane` sits, moving whatever is already in it.
+  @discardableResult
+  private func register(_ pane: ChromePane) -> ChromePane {
+    guard !pane.isFull else { return pane }
+    let moved = panes[pane.id] != pane
+    panes[pane.id] = pane
+    let entry = paneGuides[pane.id] ?? {
+      let entry = PaneGuide()
+      addLayoutGuide(entry.guide)
+      entry.leading = entry.guide.leadingAnchor.constraint(equalTo: leadingAnchor)
+      entry.width = entry.guide.widthAnchor.constraint(equalToConstant: 0)
+      NSLayoutConstraint.activate([
+        entry.leading, entry.width,
+        entry.guide.topAnchor.constraint(equalTo: topAnchor),
+        entry.guide.bottomAnchor.constraint(equalTo: bottomAnchor),
+      ])
+      paneGuides[pane.id] = entry
+      return entry
+    }()
+    let frame = pane.frame(in: bounds)
+    entry.leading.constant = frame.minX
+    entry.width.constant = frame.width
+    if moved { setNeedsLayout() }
+    return pane
+  }
+
+  private func guide(for pane: ChromePane) -> UILayoutGuide? {
+    pane.isFull ? nil : paneGuides[pane.id]?.guide
+  }
+
+  private func edgeEffects(for id: String) -> ScrollEdgeEffectHost {
+    guard !id.isEmpty, let pane = panes[id] else { return edgeEffects }
+    if let host = paneEdgeEffects[id] { return host }
+    let host = ScrollEdgeEffectHost()
+    host.attach(to: self, above: edgeEffects.scrollView)
+    host.place(in: pane.frame(in: bounds))
+    paneEdgeEffects[id] = host
+    return host
+  }
+
+  private func updateInteriorEdges(_ host: NativeNavigationBarHost, pane: ChromePane) {
+    guard !pane.isFull else {
+      host.setInteriorEdges(leading: false, trailing: false)
+      return
+    }
+    let frame = pane.frame(in: bounds)
+    host.setInteriorEdges(leading: frame.minX > 0.5, trailing: frame.maxX < bounds.width - 0.5)
+  }
+
+  /// Re-applies every pane's frame after the overlay resized (a rotation).
+  private func layoutPanes() {
+    for (id, host) in navigationBarHosts {
+      updateInteriorEdges(host, pane: panes[id] ?? .full)
+    }
+    for (id, pane) in panes {
+      let frame = pane.frame(in: bounds)
+      if let entry = paneGuides[id] {
+        if entry.leading.constant != frame.minX { entry.leading.constant = frame.minX }
+        if entry.width.constant != frame.width { entry.width.constant = frame.width }
+      }
+      paneEdgeEffects[id]?.place(in: frame)
+    }
+    if let tabBarHost, !tabBarPane.isFull {
+      tabBarHost.place(in: tabBarPane.frame(in: bounds), container: self)
+    }
   }
 
   // MARK: - Chrome: search toolbar
@@ -238,32 +344,43 @@ final class VeneerOverlayView: UIView {
 
   // MARK: - Chrome: navigation bar
 
-  func setNavigationBar(_ args: [String: Any]?) {
-    guard let args else {
-      edgeEffects.set(.top, style: nil, elements: [])
-      navigationBarHost?.detach()
-      navigationBarHost = nil
-      setNeedsLayout()
-      return
-    }
-    let host = navigationBarHost ?? {
+  func setNavigationBar(_ args: [String: Any]) {
+    let pane = register(ChromePane(args["pane"]))
+    let host = navigationBarHosts[pane.id] ?? {
       let host = NativeNavigationBarHost()
-      host.onEvent = onEvent
-      host.attach(to: self)
-      navigationBarHost = host
+      let paneId = pane.id
+      host.onEvent = { [weak self] method, payload in
+        var payload = payload as? [String: Any] ?? [:]
+        if !paneId.isEmpty { payload["pane"] = paneId }
+        self?.onEvent?(method, payload)
+      }
+      host.attach(to: self, guide: guide(for: pane))
+      navigationBarHosts[pane.id] = host
       return host
     }()
     // In a sheet, buttons are concentric with the sheet's corners.
     if isInSheet { host.setSideInset(NativeSheetSession.edgeInset) }
+    updateInteriorEdges(host, pane: pane)
     host.update(args)
     host.setHidden((args["hidden"] as? Bool) ?? false)
-    edgeEffects.setTopScrolled((args["scrolled"] as? Bool) ?? false)
-    edgeEffects.set(.top, style: host.isHidden ? nil : (args["edgeEffect"] as? String), elements: host.isHidden ? [] : [host.bar])
+    let effects = edgeEffects(for: pane.id)
+    effects.setTopScrolled((args["scrolled"] as? Bool) ?? false)
+    effects.set(.top, style: host.isHidden ? nil : (args["edgeEffect"] as? String), elements: host.isHidden ? [] : [host.bar])
     setNeedsLayout()
   }
 
-  func setNavigationBarScrolled(_ scrolled: Bool) {
-    edgeEffects.setTopScrolled(scrolled)
+  func removeNavigationBar(pane id: String) {
+    edgeEffects(for: id).set(.top, style: nil, elements: [])
+    navigationBarHosts.removeValue(forKey: id)?.detach()
+    setNeedsLayout()
+  }
+
+  func removeNavigationBars() {
+    for id in Array(navigationBarHosts.keys) { removeNavigationBar(pane: id) }
+  }
+
+  func setNavigationBarScrolled(_ scrolled: Bool, pane id: String) {
+    edgeEffects(for: id).setTopScrolled(scrolled)
   }
 
   func setChromeHidden(_ hidden: Bool) {
@@ -275,7 +392,9 @@ final class VeneerOverlayView: UIView {
   /// controller's view): navigation bar, then the composer on top.
   override func didAddSubview(_ subview: UIView) {
     super.didAddSubview(subview)
-    if let bar = navigationBarHost?.bar, bar.superview === self, subview !== bar { bringSubviewToFront(bar) }
+    for bar in navigationBarHosts.values.map(\.bar) where bar.superview === self && subview !== bar {
+      bringSubviewToFront(bar)
+    }
     if let composer, composer.superview === self, subview !== composer { bringSubviewToFront(composer) }
   }
 
@@ -288,6 +407,7 @@ final class VeneerOverlayView: UIView {
 
   func setComposer(_ args: [String: Any]?) {
     guard let args else {
+      composerPane = .full
       composer?.unfocus()
       composer?.cancelRecording()
       composer?.removeFromSuperview()
@@ -312,6 +432,7 @@ final class VeneerOverlayView: UIView {
       view = makeComposer(type)
       view.setShown(false, animated: false)
     }
+    composerPane = register(ChromePane(args["pane"]))
     view.update(args)
     interactiveDismissal = (args["interactiveDismissal"] as? Bool) ?? true
     layoutComposer()
@@ -491,11 +612,16 @@ final class VeneerOverlayView: UIView {
     return top < bounds.height - 1 ? top : nil
   }
 
+  /// In the composer's pane's own coordinates; a tab bar in another pane
+  /// isn't under it.
   private func composerPlacement(keyboardTop: CGFloat?) -> ComposerPlacement {
-    ComposerPlacement(
-      bounds: bounds,
+    let sameColumn = tabBarPane.id == composerPane.id
+    return ComposerPlacement(
+      bounds: CGRect(origin: .zero, size: composerPane.frame(in: bounds).size),
       safeAreaBottom: safeAreaInsets.bottom,
-      tabBarTop: tabBarHost.flatMap { $0.isHidden ? nil : $0.tabBar.convert($0.tabBar.bounds, to: self).minY },
+      tabBarTop: tabBarHost.flatMap {
+        $0.isHidden || !sameColumn ? nil : $0.tabBar.convert($0.tabBar.bounds, to: self).minY
+      },
       keyboardTop: keyboardTop)
   }
 
@@ -504,7 +630,7 @@ final class VeneerOverlayView: UIView {
   private func layoutComposer() {
     guard let composer else { return }
     let frame = composer.frame(for: composerPlacement(keyboardTop: liveKeyboardTop))
-      .offsetBy(dx: composerOffset.x, dy: composerOffset.y)
+      .offsetBy(dx: composerOffset.x + composerPane.frame(in: bounds).minX, dy: composerOffset.y)
     if composer.frame != frame { composer.frame = frame }
   }
 
@@ -540,6 +666,7 @@ final class VeneerOverlayView: UIView {
   override func layoutSubviews() {
     super.layoutSubviews()
     updateCornerSafeArea()
+    layoutPanes()
     edgeEffects.layout()
     reportInsets()
     reportSearchToolbar()
@@ -548,7 +675,7 @@ final class VeneerOverlayView: UIView {
 
   override func safeAreaInsetsDidChange() {
     super.safeAreaInsetsDidChange()
-    navigationBarHost?.updateTopInset(in: self)
+    for host in navigationBarHosts.values { host.updateTopInset(in: self) }
   }
 
   /// Room the host keeps along the top of a screen with no status bar there
@@ -588,7 +715,7 @@ final class VeneerOverlayView: UIView {
     // A hidden tab bar keeps its last inset, so the page underneath doesn't
     // re-lay out; the navigation bar's inset is reported regardless.
     let bar = tabBarHost.map { $0.isHidden ? lastReportedInsets : tabBarInsets($0) } ?? .zero
-    let top = navigationBarHost.map { $0.bar.convert($0.bar.bounds, to: self).maxY } ?? 0
+    let top = navigationBarHosts.values.map { $0.bar.convert($0.bar.bounds, to: self).maxY }.max() ?? 0
     let insets = UIEdgeInsets(top: top, left: bar.left, bottom: bar.bottom, right: bar.right)
     guard
       abs(insets.bottom - lastReportedInsets.bottom) > 0.5 || abs(insets.top - lastReportedInsets.top) > 0.5

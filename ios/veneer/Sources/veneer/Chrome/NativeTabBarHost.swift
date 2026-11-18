@@ -79,6 +79,26 @@ final class NativeTabBarHost: NSObject, UITabBarControllerDelegate {
     controller.didMove(toParent: host)
   }
 
+  /// Confines the controller to `frame` (a split layout's column), where
+  /// it draws a bottom bar sized for that column rather than the side rail
+  /// UIKit picks for a wide screen; nil fills the container again.
+  func place(in frame: CGRect?, container: UIView) {
+    guard let frame else {
+      guard controller.view.autoresizingMask.isEmpty else { return }
+      if controller.traitOverrides.contains(UITraitHorizontalSizeClass.self) {
+        controller.traitOverrides.remove(UITraitHorizontalSizeClass.self)
+      }
+      controller.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+      controller.view.frame = container.bounds
+      return
+    }
+    controller.view.autoresizingMask = []
+    if !controller.traitOverrides.contains(UITraitHorizontalSizeClass.self) {
+      controller.traitOverrides.horizontalSizeClass = .compact
+    }
+    if controller.view.frame != frame { controller.view.frame = frame }
+  }
+
   func detach() {
     controller.willMove(toParent: nil)
     controller.view.removeFromSuperview()
@@ -214,11 +234,13 @@ final class NativeTabBarHost: NSObject, UITabBarControllerDelegate {
   /// Chrome takes a touch only when it lands on the bar itself (including
   /// the detached trailing button); everywhere else it falls through.
   func hitTest(_ point: CGPoint, in container: UIView, with event: UIEvent?) -> UIView? {
-    guard !controller.isTabBarHidden,
-      let hit = controller.view.hitTest(container.convert(point, to: controller.view), with: event),
-      hit.isDescendant(of: controller.tabBar)
-    else { return nil }
-    return hit
+    guard !controller.isTabBarHidden else { return nil }
+    let local = container.convert(point, to: controller.view)
+    guard let hit = controller.view.hitTest(local, with: event), hit !== controller.view else { return nil }
+    if hit.isDescendant(of: controller.tabBar) { return hit }
+    // As a side column (the iPhone Duo's outer screen) UIKit draws the tab
+    // buttons in a toolbar host outside `tabBar`, over the bar's frame.
+    return tabBar.convert(tabBar.bounds, to: controller.view).contains(local) ? hit : nil
   }
 
   // MARK: - UITabBarControllerDelegate

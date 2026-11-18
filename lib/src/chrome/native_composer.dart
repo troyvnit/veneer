@@ -8,6 +8,7 @@ import 'package:flutter/rendering.dart';
 
 import '../core/fallback_scope.dart';
 import '../core/fallback_style.dart';
+import '../core/native_chrome_pane.dart';
 import '../core/native_icon.dart';
 import '../core/native_menu.dart';
 import '../core/route_visibility.dart';
@@ -388,13 +389,19 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
     _native = useNativeLayer(context);
     if (!_native) return;
     final visible = Visibility.of(context) && isRouteOnTop(context);
+    final pane = NativeChromePane.maybeOf(context) == null ? null : jsonEncode(NativeChromePane.encodeOf(context));
+    final paneChanged = pane != _paneConfig;
+    _paneConfig = pane;
     if (visible != _visible) {
       _visible = visible;
       _push();
-    } else if (resend && _visible) {
+    } else if ((resend || paneChanged) && _visible) {
       _push();
     }
   }
+
+  /// Where the [NativeChromePane] holding the composer sits, as last seen.
+  String? _paneConfig;
 
   void _push() {
     if (!_native) return;
@@ -416,6 +423,7 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
       'recordingCancelLabel': _recordingCancelLabel,
       'recordingDoneLabel': _recordingDoneLabel,
       'recording': _recording?._encode(),
+      'pane': NativeChromePane.encodeOf(context),
     };
     final handlerSet = VeneerComposerHandlers(
       onButton: (id) => handlers[id]?.call(),
