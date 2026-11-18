@@ -9,12 +9,20 @@ issue_tracker: https://github.com/troyvnit/veneer/issues
 screenshots:
   - description: Native tab bar, navigation bar and composer over Flutter content.
     path: doc/images/chat.jpg
+  - description: A split layout on the unfolded iPhone Duo, with a native navigation bar per column.
+    path: doc/images/duo_split.jpg
   - description: An assistant in a native UIKit sheet with the native prompt composer.
     path: doc/images/assistant.jpg
+  - description: UIKit switch, slider, segmented control and menus laid out by Flutter.
+    path: doc/images/components.jpg
+  - description: An in-app notification banner on Liquid Glass, above the app's bars and sheets.
+    path: doc/images/banner.jpg
+  - description: A native UIMenu with a title, subtitles and a checkmark, opened from a Flutter row.
+    path: doc/images/menu_anchor.jpg
   - description: The sheet at its medium detent, in Liquid Glass.
     path: doc/images/medium.jpg
-  - description: Voice mode, with glass buttons split off the composer.
-    path: doc/images/voice.jpg
+  - description: Liquid Glass behind Flutter text, a glass segment bar and a native search field.
+    path: doc/images/glass.jpg
   - description: Flutter replicas of the same UI on Android and iOS 15-25.
     path: doc/images/fallback_chat.jpg
 topics:

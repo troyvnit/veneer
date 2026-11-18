@@ -9,10 +9,11 @@ flutter run
 | Where | What it shows |
 |---|---|
 | **Chat** tab | Native tab bar and navigation bar, the scroll edge effect over Flutter messages, and the messaging composer with interactive keyboard dismissal |
+| **Components** tab | UIKit switch, slider and segmented control; a native alert and an in-app banner; a native menu from a Flutter row and a context menu; glass behind Flutter text, the glass segment bar and search field; pages for the search toolbar and a split layout (open it on the unfolded iPhone Duo) |
 | **AI button** (tab bar) | An assistant in a real UIKit sheet (`assistantSheet` entrypoint in `lib/main.dart`): native navigation bar and menus, the prompt composer with attachments and voice mode |
 | **Morph** tab | Glass shapes merging and splitting within groups |
 | **Clip** tab | Glass inside Flutter clips and scrolling lists |
-| **Lab** tab | Icon types (SF Symbol, IconData, SVG), the glass sync-lag test and native stats |
+| **Lab** (gauge button on Components) | Icon types (SF Symbol, IconData, SVG), the glass sync-lag test and native stats |
 
 Launch arguments (iOS):
 

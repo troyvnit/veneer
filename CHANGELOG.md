@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Docs and example:** the README covers every component, with new screenshots (including split
+  layouts on the unfolded iPhone Duo) and a section on banners. The example app has a Components tab
+  for the controls, alerts, banners, menus, glass behind Flutter content, the segment bar, the search
+  field and toolbar, and a split layout.
+- **CI:** checks the oldest supported Flutter (3.47) and the latest stable, builds the example for iOS
+  and runs the Swift tests. `tool/analyze.sh` fails on every analyzer issue except Flutter's notice
+  about the coming `material_ui` / `cupertino_ui` packages.
+
 ## 0.25.0
 
 - **Tab bar:** taps on the tabs and the trailing button reach the bar again when UIKit lays it out as a side

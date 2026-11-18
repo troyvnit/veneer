@@ -32,8 +32,8 @@ Read the whole diff, including changes you didn't make. Every change belongs und
 ## 4. Check
 
 ```bash
-dart format --line-length 120 --output=none --set-exit-if-changed lib test
-flutter analyze
+dart format --output=none --set-exit-if-changed lib test example/lib
+tool/analyze.sh
 flutter test
 (cd example && flutter pub get && flutter build ios --simulator --debug)
 flutter pub publish --dry-run

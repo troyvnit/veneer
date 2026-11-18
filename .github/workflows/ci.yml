@@ -4,23 +4,70 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  dart:
+    name: Dart (Flutter ${{ matrix.name }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest Flutter the package supports (pubspec.yaml) and the newest.
+        include:
+          - name: '3.47'
+            version: '3.47.x'
+          - name: stable
+            version: ''
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ matrix.version }}
+          channel: stable
+          cache: true
+      - run: flutter --version
+      - run: flutter pub get
+      - name: Format
+        run: dart format --output=none --set-exit-if-changed lib test example/lib
+      - name: Analyze (package and example)
+        run: |
+          (cd example && flutter pub get)
+          tool/analyze.sh
+      - name: Test
+        run: flutter test
+      - name: Publish dry run
+        if: matrix.name == 'stable'
+        run: flutter pub publish --dry-run
+
+  ios:
+    name: iOS (build the example, Swift tests)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - run: flutter pub get
-      - run: dart format --output=none --set-exit-if-changed lib test
-      - run: flutter analyze
-      - run: flutter test
-      - name: Analyze the example
+      - run: xcodebuild -version
+      - name: Build the example for the simulator
         working-directory: example
         run: |
           flutter pub get
-          flutter analyze
-      - run: flutter pub publish --dry-run
+          flutter build ios --simulator --debug
+      - name: Swift tests
+        working-directory: example/ios
+        run: |
+          udid=$(xcrun simctl list devices available | grep -m1 -E '^ +iPhone' | grep -oE '[0-9A-F-]{36}')
+          echo "Testing on $(xcrun simctl list devices available | grep "$udid")"
+          xcodebuild test -quiet \
+            -workspace Runner.xcworkspace -scheme Runner \
+            -destination "platform=iOS Simulator,id=$udid" \
+            -only-testing:RunnerTests

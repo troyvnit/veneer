@@ -5,7 +5,7 @@ import 'package:veneer/veneer.dart';
 import 'pages/assistant_page.dart';
 import 'pages/chat_page.dart';
 import 'pages/clip_page.dart';
-import 'pages/diagnostics_page.dart';
+import 'pages/components_page.dart';
 import 'pages/morph_page.dart';
 import 'pages/sync_test_page.dart';
 import 'app_icons.dart';
@@ -107,14 +107,15 @@ class _HomePageState extends State<HomePage> {
             title: 'Chat',
             icon: NativeIcon.icon(AppIcons.chatsCircle),
             selectedIcon: NativeIcon.icon(AppIcons.chatsCircleFill),
+            badge: '3',
           ),
+          NativeTabItem(title: 'Components', icon: NativeIcon.icon(AppIcons.squaresFour)),
           NativeTabItem(
             title: 'Morph',
             icon: NativeIcon.icon(AppIcons.drop),
             selectedIcon: NativeIcon.icon(AppIcons.dropFill),
           ),
           NativeTabItem(title: 'Clip', icon: NativeIcon.svgAsset('assets/icons/scissors.svg')),
-          NativeTabItem(title: 'Lab', icon: NativeIcon.icon(AppIcons.gauge), badge: '3'),
         ],
         scrollEdgeEffect: NativeScrollEdgeEffect.soft,
         trailingAction: NativeTabAction(
@@ -124,7 +125,7 @@ class _HomePageState extends State<HomePage> {
         ),
         selectedIndex: _index,
         onTabSelected: (i) => setState(() => _index = i),
-        child: IndexedStack(index: _index, children: const [ChatPage(), MorphPage(), ClipPage(), DiagnosticsPage()]),
+        child: IndexedStack(index: _index, children: const [ChatPage(), ComponentsPage(), MorphPage(), ClipPage()]),
       ),
     );
   }
