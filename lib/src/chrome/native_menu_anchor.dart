@@ -11,8 +11,9 @@ import '../glass/glass_shape.dart';
 /// For a trigger Flutter draws itself — a text row with a chevron, a filled
 /// pill, an icon — where [GlassShape.menu] would need the trigger to be glass.
 /// On iOS 26 it's UIKit's own `UIMenu`: an invisible native button
-/// ([GlassStyle.none]) sits over [child] and takes the tap, so [child] gets
-/// no touches of its own. Inside content the overlay can't follow (a
+/// ([GlassStyle.none]) sits over [child], and a Flutter tap on it opens the
+/// button's menu. Touches stay Flutter's, so a drag that starts on [child]
+/// scrolls the content under it, but [child] gets none of its own. Inside content the overlay can't follow (a
 /// [VeneerFallbackScope], such as a Flutter-drawn sheet) that button is a
 /// platform view instead, so the menu is still UIKit's. Elsewhere (Android,
 /// iOS 15–25) a tap opens the Flutter replica of a native menu next to

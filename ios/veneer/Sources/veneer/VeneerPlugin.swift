@@ -152,6 +152,10 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
       }
       result(nil)
 
+    case "openShapeMenu":
+      if let id = (args["id"] as? NSNumber)?.intValue { overlay?.glassLayer.openMenu(id: id) }
+      result(nil)
+
     case "removeShape":
       if let id = (args["id"] as? NSNumber)?.intValue { overlay?.glassLayer.remove(id: id) }
       result(nil)

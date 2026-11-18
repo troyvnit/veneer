@@ -173,17 +173,28 @@ class _GlassShapeState extends State<GlassShape> {
     // hides us: native glass would otherwise float above that content.
     // Offstage and zero opacity are caught by the coordinator's paint walk.
     final visible = Visibility.of(context) && isRouteOnTop(context);
+    final onTap = _opensMenuFromFlutter ? _openMenu : widget.onTap;
+    final anchor = _GlassAnchor(
+      shapeId: _id,
+      shouldShow: visible,
+      child: SizedBox(width: widget.width ?? double.infinity, height: widget.height ?? double.infinity),
+    );
     return Semantics(
       button: widget.onTap != null || widget.menu != null,
       label: widget.label,
-      onTap: widget.onTap,
-      child: _GlassAnchor(
-        shapeId: _id,
-        shouldShow: visible,
-        child: SizedBox(width: widget.width ?? double.infinity, height: widget.height ?? double.infinity),
-      ),
+      onTap: onTap,
+      child: _opensMenuFromFlutter
+          ? GestureDetector(behavior: HitTestBehavior.opaque, onTap: _openMenu, child: anchor)
+          : anchor,
     );
   }
+
+  /// A [GlassStyle.none] menu leaves its touches to Flutter, so a drag that
+  /// starts on it scrolls the content under it; a tap opens the menu.
+  bool get _opensMenuFromFlutter =>
+      widget.style == GlassStyle.none && widget.onTap == null && (widget.menu?.isNotEmpty ?? false);
+
+  void _openMenu() => VeneerBridge.instance.openShapeMenu(_id);
 }
 
 class _GlassAnchor extends SingleChildRenderObjectWidget {

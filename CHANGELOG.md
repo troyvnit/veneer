@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.24.1
+
+- **Menu anchor:** a drag that starts on a `NativeMenuAnchor` now scrolls the content under it, so a
+  horizontal row of filter chips with menus scrolls again. The invisible native button over the trigger took
+  every touch that began on it, and the chips covered most of the row. Its touches now go to Flutter, and a
+  tap opens the same `UIMenu` from the button (`UIControl.performPrimaryAction`).
+- **Menu anchor:** closing the menu no longer leaves a Liquid Glass droplet over the trigger. UIKit collapsed
+  the menu back into the invisible button, and the droplet warped the Flutter widget under it for a few
+  frames; the menu now fades out instead.
+
 ## 0.24.0
 
 - **`NativePromptComposer.leadingSideAction`:** one glass circle 8 pt before the capsule, e.g. a way back

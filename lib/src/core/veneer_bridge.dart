@@ -246,6 +246,13 @@ class VeneerBridge {
     await _channel.invokeMethod<void>('removeShape', {'id': id});
   }
 
+  /// Opens the `UIMenu` of a [GlassStyle.none] menu shape, which leaves its
+  /// touches to Flutter.
+  Future<void> openShapeMenu(int id) async {
+    if (!_attached) return;
+    await _channel.invokeMethod<void>('openShapeMenu', {'id': id});
+  }
+
   /// Drives a search shape's native field: `focus`, `blur` or `clear`.
   Future<void> searchCommand(int id, String command) async {
     if (!_attached) return;

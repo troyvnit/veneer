@@ -12,6 +12,10 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
   var onSegment: ((Int, Int) -> Void)?
   private(set) var isInteractive = false
   private(set) var isShown = false
+  /// A plain menu anchor over Flutter content: touches fall through to
+  /// Flutter, so a drag that starts on it still scrolls, and Dart opens the
+  /// menu on a tap (`openMenu`).
+  private var opensMenuFromFlutter = false
   /// Latest visibility requested by Flutter; `isShown` catches up async.
   var targetVisible = false
 
@@ -28,7 +32,7 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
   private lazy var tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
   /// Covers the shape when it has a menu, so a tap opens the `UIMenu`
   /// growing out of the glass.
-  private var menuButton: UIButton?
+  private var menuButton: MenuAnchorButton?
   /// Present when the shape is a search field: a real `UISearchTextField`
   /// with a clear background, so the shape's glass is its capsule.
   private var searchField: UISearchTextField?
@@ -83,6 +87,7 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
       self.onMenu?(self.id, index)
     }
     isInteractive = c.interactive || menu != nil || c.search != nil || c.segments != nil
+    opensMenuFromFlutter = c.plain && menu != nil && !c.interactive && c.search == nil && c.segments == nil
     if c.interactive && menu == nil && c.search == nil && c.segments == nil {
       addGestureRecognizer(tap)
     } else {
@@ -92,7 +97,7 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
     applySegments(c.segments)
     if let menu {
       let button = menuButton ?? {
-        let b = UIButton(type: .custom)
+        let b = MenuAnchorButton(type: .custom)
         b.showsMenuAsPrimaryAction = true
         // Keep the Dart order even when the menu opens upward.
         b.preferredMenuElementOrder = .fixed
@@ -104,6 +109,7 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
       }()
       button.menu = menu
       button.accessibilityLabel = c.label
+      button.previewsFlutterContent = opensMenuFromFlutter
     } else {
       menuButton?.removeFromSuperview()
       menuButton = nil
@@ -162,11 +168,16 @@ final class GlassShapeView: UIVisualEffectView, UITextFieldDelegate {
   /// or they shadow interactive shapes beneath them (e.g. an offstage
   /// page's pill under an onstage button) and the touch falls to Flutter.
   override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-    guard isInteractive, isShown else { return nil }
+    guard isInteractive, isShown, !opensMenuFromFlutter else { return nil }
     return super.hitTest(point, with: event)
   }
 
   @objc private func handleTap() { onTap?(id) }
+
+  func openMenu() {
+    guard isShown, let menuButton else { return }
+    menuButton.performPrimaryAction()
+  }
 
   // MARK: - Segments
 
@@ -399,5 +410,34 @@ private extension UIFont {
   func withWeight(_ weight: UIFont.Weight) -> UIFont {
     let descriptor = fontDescriptor.addingAttributes([.traits: [UIFontDescriptor.TraitKey.weight: weight]])
     return UIFont(descriptor: descriptor, size: 0)
+  }
+}
+
+/// The button a menu shape opens its `UIMenu` from. Over Flutter content
+/// (a [GlassStyle.none] anchor) it is invisible, and UIKit's menu morph would
+/// collapse back into it as a Liquid Glass droplet that warps the Flutter
+/// widget under it. With no preview there UIKit fades the menu out instead.
+@available(iOS 26.0, *)
+final class MenuAnchorButton: UIButton {
+  var previewsFlutterContent = false
+
+  override func contextMenuInteraction(
+    _ interaction: UIContextMenuInteraction,
+    configuration: UIContextMenuConfiguration,
+    highlightPreviewForItemWithIdentifier identifier: any NSCopying
+  ) -> UITargetedPreview? {
+    if previewsFlutterContent { return nil }
+    return super.contextMenuInteraction(
+      interaction, configuration: configuration, highlightPreviewForItemWithIdentifier: identifier)
+  }
+
+  override func contextMenuInteraction(
+    _ interaction: UIContextMenuInteraction,
+    configuration: UIContextMenuConfiguration,
+    dismissalPreviewForItemWithIdentifier identifier: any NSCopying
+  ) -> UITargetedPreview? {
+    if previewsFlutterContent { return nil }
+    return super.contextMenuInteraction(
+      interaction, configuration: configuration, dismissalPreviewForItemWithIdentifier: identifier)
   }
 }

@@ -228,6 +228,10 @@ final class GlassLayerView: UIView {
     shapes[id]?.searchCommand(command)
   }
 
+  func openMenu(id: Int) {
+    shapes[id]?.openMenu()
+  }
+
   func remove(id: Int) {
     guard let shape = shapes.removeValue(forKey: id) else { return }
     shape.dematerialize { [weak self] in self?.detach(shape) }
