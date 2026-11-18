@@ -45,13 +45,23 @@ jobs:
         run: flutter pub publish --dry-run
 
   ios:
-    name: iOS (build the example, Swift tests)
-    runs-on: macos-26
+    name: iOS (Xcode ${{ matrix.xcode }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Xcode 27 compiles the iOS 27 SDK code paths; Xcode 26 checks they
+        # stay behind `#if compiler(>=6.4)` for apps not on Xcode 27 yet.
+        include:
+          - xcode: '26'
+            runner: macos-26
+          - xcode: '27'
+            runner: xcode-27
     steps:
       - uses: actions/checkout@v5
       - uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: ^${{ matrix.xcode }}
       - uses: subosito/flutter-action@v2
         with:
           channel: stable

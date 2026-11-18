@@ -126,7 +126,8 @@ Requirements:
 
 - Flutter 3.47 or later (Dart 3.13).
 - iOS deployment target **15.0** or later. The native layer turns on at runtime on iOS 26+.
-  Build with Xcode 26 or later so the iOS 26 SDK is available.
+  Build with Xcode 26 or later so the iOS 26 SDK is available. Xcode 27 adds the parts that need the
+  iOS 27 SDK: the tab bar's prominent action tab and selected tab icons.
 - Works with CocoaPods and Swift Package Manager. No Android setup.
 
 ## Quick start
@@ -793,8 +794,8 @@ results and the rules learned along the way.
 ## Contributing
 
 Issues and pull requests are welcome. CI checks formatting, analysis and the Dart tests on the
-oldest supported Flutter and the latest stable, builds the example for iOS (which compiles the Swift
-code) and runs the Swift tests. Before sending a change:
+oldest supported Flutter and the latest stable, builds the example for iOS with Xcode 26 and Xcode 27
+(which compiles the Swift code against both SDKs) and runs the Swift tests. Before sending a change:
 
 ```bash
 dart format lib test example/lib
