@@ -612,25 +612,41 @@ final class VeneerOverlayView: UIView {
     return top < bounds.height - 1 ? top : nil
   }
 
-  /// In the composer's pane's own coordinates; a tab bar in another pane
-  /// isn't under it.
+  /// The tab bar in the composer's pane, as the edges it takes: the bottom
+  /// for a bar along the bottom, a side for a bar in a vertical column (the
+  /// unfolded iPhone Duo). Zero when it's hidden or in another pane.
+  private var composerTabBarInsets: UIEdgeInsets {
+    guard let host = tabBarHost, !host.isHidden, tabBarPane.id == composerPane.id else { return .zero }
+    let pane = composerPane.frame(in: bounds)
+    let bar = host.tabBar.convert(host.tabBar.bounds, to: self)
+    guard bar.height > bar.width else {
+      return UIEdgeInsets(top: 0, left: 0, bottom: pane.maxY - bar.minY, right: 0)
+    }
+    return bar.midX > pane.midX
+      ? UIEdgeInsets(top: 0, left: 0, bottom: 0, right: max(0, pane.maxX - bar.minX))
+      : UIEdgeInsets(top: 0, left: max(0, bar.maxX - pane.minX), bottom: 0, right: 0)
+  }
+
+  /// In the composer's pane's own coordinates, less the side a tab bar
+  /// column takes; a tab bar in another pane isn't under it.
   private func composerPlacement(keyboardTop: CGFloat?) -> ComposerPlacement {
-    let sameColumn = tabBarPane.id == composerPane.id
+    let tabBar = composerTabBarInsets
+    let pane = composerPane.frame(in: bounds)
     return ComposerPlacement(
-      bounds: CGRect(origin: .zero, size: composerPane.frame(in: bounds).size),
+      bounds: CGRect(
+        x: 0, y: 0, width: max(0, pane.width - tabBar.left - tabBar.right), height: pane.height),
       safeAreaBottom: safeAreaInsets.bottom,
-      tabBarTop: tabBarHost.flatMap {
-        $0.isHidden || !sameColumn ? nil : $0.tabBar.convert($0.tabBar.bounds, to: self).minY
-      },
+      tabBarTop: tabBar.bottom > 0 ? pane.height - tabBar.bottom : nil,
       keyboardTop: keyboardTop)
   }
 
   /// Where the composer's own style puts it: above the keyboard, the tab bar
-  /// or the home indicator.
+  /// or the home indicator, and clear of a tab bar column at the side.
   private func layoutComposer() {
     guard let composer else { return }
+    let left = composerPane.frame(in: bounds).minX + composerTabBarInsets.left
     let frame = composer.frame(for: composerPlacement(keyboardTop: liveKeyboardTop))
-      .offsetBy(dx: composerOffset.x + composerPane.frame(in: bounds).minX, dy: composerOffset.y)
+      .offsetBy(dx: composerOffset.x + left, dy: composerOffset.y)
     if composer.frame != frame { composer.frame = frame }
   }
 

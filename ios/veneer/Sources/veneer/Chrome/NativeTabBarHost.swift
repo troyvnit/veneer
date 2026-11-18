@@ -169,9 +169,12 @@ final class NativeTabBarHost: NSObject, UITabBarControllerDelegate {
 
     isApplyingProgrammaticSelection = true
     controller.setTabs(tabs, animated: false)
-    if #available(iOS 27.0, *) {
-      controller.setProminentTabIdentifier(actionIdentifier, animated: false)
-    }
+    // Only in the iOS 27 SDK (Xcode 27, Swift 6.4): Xcode 26 can't compile it.
+    #if compiler(>=6.4)
+      if #available(iOS 27.0, *) {
+        controller.setProminentTabIdentifier(actionIdentifier, animated: false)
+      }
+    #endif
     isApplyingProgrammaticSelection = false
   }
 
@@ -190,9 +193,12 @@ final class NativeTabBarHost: NSObject, UITabBarControllerDelegate {
   }
 
   private func configure(_ tab: UITab, from item: [String: Any], iconSize: CGFloat = NativeTabBarHost.tabIconSize) {
-    if #available(iOS 26.1, *) {
-      tab.selectedImage = icon(item["selectedIcon"], size: iconSize)
-    }
+    // Declared for iOS 26.1, but only in the iOS 27 SDK (Xcode 27, Swift 6.4).
+    #if compiler(>=6.4)
+      if #available(iOS 26.1, *) {
+        tab.selectedImage = icon(item["selectedIcon"], size: iconSize)
+      }
+    #endif
     tab.badgeValue = item["badge"] as? String
     if let label = item["title"] as? String, !label.isEmpty { tab.accessibilityIdentifier = label }
   }

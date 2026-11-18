@@ -1,7 +1,13 @@
 # Changelog
 
-## Unreleased
+## 0.25.1
 
+- **Composer:** shows on the unfolded iPhone Duo (and the folded outer screen). With the tab bar in a
+  side column, the composer was placed above the column's top edge, off screen; it now sits above the
+  home indicator or the keyboard and stops short of the column.
+- **Builds with Xcode 26 again:** the tab bar's prominent tab and selected tab icons use iOS 27 SDK APIs,
+  which are now compiled only with Xcode 27 or later. Built with Xcode 26, the action tab isn't drawn as
+  prominent and tabs keep the same icon when selected.
 - **Docs and example:** the README covers every component, with new screenshots (including split
   layouts on the unfolded iPhone Duo) and a section on banners. The example app has a Components tab
   for the controls, alerts, banners, menus, glass behind Flutter content, the segment bar, the search
