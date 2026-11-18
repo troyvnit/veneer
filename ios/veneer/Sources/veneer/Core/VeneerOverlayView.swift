@@ -627,24 +627,36 @@ final class VeneerOverlayView: UIView {
       : UIEdgeInsets(top: 0, left: max(0, bar.maxX - pane.minX), bottom: 0, right: 0)
   }
 
-  /// In the composer's pane's own coordinates, less the side a tab bar
-  /// column takes; a tab bar in another pane isn't under it.
-  private func composerPlacement(keyboardTop: CGFloat?) -> ComposerPlacement {
+  /// What the composer keeps clear of at its sides: a tab bar column, and
+  /// the screen's own side safe area (the iPhone Duo's folded screen, whose
+  /// status bar runs down one side, or iPhone landscape) where its pane
+  /// reaches that edge.
+  private var composerSideInsets: UIEdgeInsets {
     let tabBar = composerTabBarInsets
+    let pane = composerPane.frame(in: bounds)
+    let left = pane.minX < 0.5 ? safeAreaInsets.left : 0
+    let right = pane.maxX > bounds.width - 0.5 ? safeAreaInsets.right : 0
+    return UIEdgeInsets(top: 0, left: max(tabBar.left, left), bottom: tabBar.bottom, right: max(tabBar.right, right))
+  }
+
+  /// In the composer's pane's own coordinates, less its side insets; a tab
+  /// bar in another pane isn't under it.
+  private func composerPlacement(keyboardTop: CGFloat?) -> ComposerPlacement {
+    let insets = composerSideInsets
     let pane = composerPane.frame(in: bounds)
     return ComposerPlacement(
       bounds: CGRect(
-        x: 0, y: 0, width: max(0, pane.width - tabBar.left - tabBar.right), height: pane.height),
+        x: 0, y: 0, width: max(0, pane.width - insets.left - insets.right), height: pane.height),
       safeAreaBottom: safeAreaInsets.bottom,
-      tabBarTop: tabBar.bottom > 0 ? pane.height - tabBar.bottom : nil,
+      tabBarTop: insets.bottom > 0 ? pane.height - insets.bottom : nil,
       keyboardTop: keyboardTop)
   }
 
   /// Where the composer's own style puts it: above the keyboard, the tab bar
-  /// or the home indicator, and clear of a tab bar column at the side.
+  /// or the home indicator, and clear of its side insets.
   private func layoutComposer() {
     guard let composer else { return }
-    let left = composerPane.frame(in: bounds).minX + composerTabBarInsets.left
+    let left = composerPane.frame(in: bounds).minX + composerSideInsets.left
     let frame = composer.frame(for: composerPlacement(keyboardTop: liveKeyboardTop))
       .offsetBy(dx: composerOffset.x + left, dy: composerOffset.y)
     if composer.frame != frame { composer.frame = frame }
@@ -692,6 +704,7 @@ final class VeneerOverlayView: UIView {
   override func safeAreaInsetsDidChange() {
     super.safeAreaInsetsDidChange()
     for host in navigationBarHosts.values { host.updateTopInset(in: self) }
+    layoutComposer()
   }
 
   /// Room the host keeps along the top of a screen with no status bar there

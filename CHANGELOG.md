@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.25.2
+
+- **Composer:** keeps clear of the screen's side safe area where its pane reaches that edge, like the
+  page content beside it: the status bar column on the iPhone Duo's folded screen, and the sides of an
+  iPhone in landscape. It ran under them before. It's laid out again when the safe area changes (a fold
+  or a rotation).
+
 ## 0.25.1
 
 - **Composer:** shows on the unfolded iPhone Duo (and the folded outer screen). With the tab bar in a
