@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Composer:** shows on the unfolded iPhone Duo (and the folded outer screen). With the tab bar in a
+  side column, the composer was placed above the column's top edge, off screen; it now sits above the
+  home indicator or the keyboard and stops short of the column.
+
 ## 0.25.0
 
 - **Tab bar:** taps on the tabs and the trailing button reach the bar again when UIKit lays it out as a side
