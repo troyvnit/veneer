@@ -161,4 +161,115 @@ abstract final class AppIcons {
 
   /// Phosphor `circle` (fill).
   static const IconData circleFill = IconData(0xE032, fontFamily: 'AppIcons');
+
+  /// Phosphor `compass` (regular).
+  static const IconData compass = IconData(0xE033, fontFamily: 'AppIcons');
+
+  /// Phosphor `compass` (fill).
+  static const IconData compassFill = IconData(0xE034, fontFamily: 'AppIcons');
+
+  /// Phosphor `suitcase-rolling` (regular).
+  static const IconData suitcaseRolling = IconData(0xE035, fontFamily: 'AppIcons');
+
+  /// Phosphor `suitcase-rolling` (fill).
+  static const IconData suitcaseRollingFill = IconData(0xE036, fontFamily: 'AppIcons');
+
+  /// Phosphor `book-open-text` (regular).
+  static const IconData bookOpenText = IconData(0xE037, fontFamily: 'AppIcons');
+
+  /// Phosphor `book-open-text` (fill).
+  static const IconData bookOpenTextFill = IconData(0xE038, fontFamily: 'AppIcons');
+
+  /// Phosphor `magnifying-glass` (regular).
+  static const IconData magnifyingGlass = IconData(0xE039, fontFamily: 'AppIcons');
+
+  /// Phosphor `user-circle` (regular).
+  static const IconData userCircle = IconData(0xE03A, fontFamily: 'AppIcons');
+
+  /// Phosphor `globe-hemisphere-west` (regular).
+  static const IconData globeHemisphereWest = IconData(0xE03B, fontFamily: 'AppIcons');
+
+  /// Phosphor `umbrella-simple` (regular).
+  static const IconData umbrellaSimple = IconData(0xE03C, fontFamily: 'AppIcons');
+
+  /// Phosphor `buildings` (regular).
+  static const IconData buildings = IconData(0xE03D, fontFamily: 'AppIcons');
+
+  /// Phosphor `mountains` (regular).
+  static const IconData mountains = IconData(0xE03E, fontFamily: 'AppIcons');
+
+  /// Phosphor `bank` (regular).
+  static const IconData bank = IconData(0xE03F, fontFamily: 'AppIcons');
+
+  /// Phosphor `cactus` (regular).
+  static const IconData cactus = IconData(0xE040, fontFamily: 'AppIcons');
+
+  /// Phosphor `map-pin` (regular).
+  static const IconData mapPin = IconData(0xE041, fontFamily: 'AppIcons');
+
+  /// Phosphor `map-pin` (fill).
+  static const IconData mapPinFill = IconData(0xE042, fontFamily: 'AppIcons');
+
+  /// Phosphor `star` (fill).
+  static const IconData starFill = IconData(0xE043, fontFamily: 'AppIcons');
+
+  /// Phosphor `calendar-blank` (regular).
+  static const IconData calendarBlank = IconData(0xE044, fontFamily: 'AppIcons');
+
+  /// Phosphor `airplane-tilt` (regular).
+  static const IconData airplaneTilt = IconData(0xE045, fontFamily: 'AppIcons');
+
+  /// Phosphor `bed` (regular).
+  static const IconData bed = IconData(0xE046, fontFamily: 'AppIcons');
+
+  /// Phosphor `fork-knife` (regular).
+  static const IconData forkKnife = IconData(0xE047, fontFamily: 'AppIcons');
+
+  /// Phosphor `clock` (regular).
+  static const IconData clock = IconData(0xE048, fontFamily: 'AppIcons');
+
+  /// Phosphor `wallet` (regular).
+  static const IconData wallet = IconData(0xE049, fontFamily: 'AppIcons');
+
+  /// Phosphor `users` (regular).
+  static const IconData users = IconData(0xE04A, fontFamily: 'AppIcons');
+
+  /// Phosphor `map-trifold` (regular).
+  static const IconData mapTrifold = IconData(0xE04B, fontFamily: 'AppIcons');
+
+  /// Phosphor `bookmark-simple` (regular).
+  static const IconData bookmarkSimple = IconData(0xE04C, fontFamily: 'AppIcons');
+
+  /// Phosphor `bookmark-simple` (fill).
+  static const IconData bookmarkSimpleFill = IconData(0xE04D, fontFamily: 'AppIcons');
+
+  /// Phosphor `eye-slash` (regular).
+  static const IconData eyeSlash = IconData(0xE04E, fontFamily: 'AppIcons');
+
+  /// Phosphor `cloud-sun` (regular).
+  static const IconData cloudSun = IconData(0xE04F, fontFamily: 'AppIcons');
+
+  /// Phosphor `sun` (regular).
+  static const IconData sun = IconData(0xE050, fontFamily: 'AppIcons');
+
+  /// Phosphor `heart` (regular).
+  static const IconData heart = IconData(0xE051, fontFamily: 'AppIcons');
+
+  /// Phosphor `android-logo` (regular).
+  static const IconData androidLogo = IconData(0xE052, fontFamily: 'AppIcons');
+
+  /// Phosphor `apple-logo` (regular).
+  static const IconData appleLogo = IconData(0xE053, fontFamily: 'AppIcons');
+
+  /// Phosphor `person-simple-hike` (regular).
+  static const IconData personSimpleHike = IconData(0xE054, fontFamily: 'AppIcons');
+
+  /// Phosphor `coffee` (regular).
+  static const IconData coffee = IconData(0xE055, fontFamily: 'AppIcons');
+
+  /// Phosphor `ticket` (regular).
+  static const IconData ticket = IconData(0xE056, fontFamily: 'AppIcons');
+
+  /// Phosphor `images-square` (regular).
+  static const IconData imagesSquare = IconData(0xE057, fontFamily: 'AppIcons');
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/cupertino.dart';
 
+import '../core/fallback_scope.dart';
 import '../core/veneer_bridge.dart';
 
 enum NativeAlertActionStyle { normal, cancel, destructive }
@@ -23,7 +24,8 @@ class NativeAlertAction {
 /// app or sheet is showing; [tint] colours its buttons (e.g. a brand colour
 /// for the preferred action). Only one action can be
 /// [NativeAlertActionStyle.cancel]; extras become normal actions. Elsewhere
-/// (Android, iOS 15–25) it is Flutter's [CupertinoAlertDialog].
+/// (Android, iOS 15–25, or under a [VeneerFallbackScope]) it is Flutter's
+/// [CupertinoAlertDialog].
 Future<int?> showNativeAlert({
   required BuildContext context,
   required String title,
@@ -32,7 +34,7 @@ Future<int?> showNativeAlert({
   Color? tint,
 }) async {
   final bridge = VeneerBridge.instance;
-  if (bridge.isSupported) {
+  if (useNativeLayer(context)) {
     return bridge.showAlert({
       'title': title,
       'message': message,

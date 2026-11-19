@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.25.3
+
+- **Glass:** a `GlassShape` with a `menu` no longer crashes when tapped. Its menu button forwarded
+  UIKit's highlight and dismissal preview requests to a `UIButton` that doesn't implement them in every
+  SDK (an unrecognized selector); it now leaves them to UIKit unless it has a preview to replace.
+- **Glass:** a hot restart clears the glass the previous Dart isolate left on screen. The new isolate
+  numbers its shapes from scratch, so old shapes stayed behind or showed stale labels.
+- **Sheets and alerts:** `showNativeSheet` and `showNativeAlert` show their Flutter versions under a
+  `VeneerFallbackScope`, like the other widgets.
+- **Example:** rebuilt as **Wander**, a travel journal with photos under Liquid Glass: Explore with a
+  pinned glass category bar and glass labels, place pages with a native menu and a booking sheet of
+  native controls, trips side by side on the unfolded iPhone Duo, a journal with the composer, a trip
+  planner with the prompt composer, and a switch that flips the whole app to the Flutter replicas.
+- **Docs:** a shorter README with a gallery, a native and Flutter comparison and a new demo; the full
+  per-component reference moved to `doc/components.md`.
+
 ## 0.25.2
 
 - **Composer:** keeps clear of the screen's side safe area where its pane reaches that edge, like the

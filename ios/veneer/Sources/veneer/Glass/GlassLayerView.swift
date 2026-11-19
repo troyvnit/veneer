@@ -237,6 +237,14 @@ final class GlassLayerView: UIView {
     shape.dematerialize { [weak self] in self?.detach(shape) }
   }
 
+  /// Drops every shape and group at once: a new Dart isolate (a hot restart)
+  /// starts its ids again and owns none of what the old one made.
+  func removeAll() {
+    for group in groups.values { group.removeFromSuperview() }
+    groups.removeAll()
+    shapes.removeAll()
+  }
+
   /// Moves `shape` into the scope for (`group`, `clip`), creating it if
   /// needed, and drops the scope/group it leaves if that empties them.
   /// Only adds/removes subviews — safe inside the FFI call.

@@ -3,14 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:veneer/veneer.dart';
 
 import '../app_icons.dart';
+import '../app_state.dart';
+import '../data/travel.dart';
+import 'clip_page.dart';
 import 'diagnostics_page.dart';
+import 'morph_page.dart';
 import 'search_page.dart';
-import 'split_page.dart';
 
-/// A tour of the smaller components: UIKit controls, alerts and banners,
+/// A tour of the components one by one: UIKit controls, alerts and banners,
 /// menus from Flutter-drawn triggers, glass behind Flutter content, the
-/// segment bar and search field, and pages for the search toolbar and split
-/// layouts.
+/// segment bar and search field, and pages for the search toolbar, merging
+/// glass and glass in clipped scroll views. A switch at the top flips the
+/// whole app to the Flutter replicas Android and iOS 15–25 show.
 class ComponentsPage extends StatefulWidget {
   const ComponentsPage({super.key});
 
@@ -55,36 +59,35 @@ class _ComponentsPageState extends State<ComponentsPage> {
   Future<void> _showAlert() async {
     final picked = await showNativeAlert(
       context: context,
-      title: 'Leave launch-crew?',
-      message: 'You won’t get its messages until someone adds you back.',
-      tint: Theme.of(context).colorScheme.primary,
+      title: 'Delete Iceland ring road?',
+      message: 'Its plan, bookings and journal go for everyone on the trip.',
+      tint: accent,
       actions: const [
-        NativeAlertAction(title: 'Leave', style: NativeAlertActionStyle.destructive, preferred: true),
+        NativeAlertAction(title: 'Delete', style: NativeAlertActionStyle.destructive, preferred: true),
         NativeAlertAction(title: 'Cancel', style: NativeAlertActionStyle.cancel),
       ],
     );
-    if (picked == 0) _snack('Left the channel');
+    if (picked == 0) _snack('Trip deleted');
   }
 
   Future<void> _showBanner() async {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final scheme = Theme.of(context).colorScheme;
     final shown = await showNativeBanner(
-      title: 'launch-crew',
+      title: 'Japan in spring',
       trailing: 'now',
-      subtitle: 'Maya Chen',
-      body: 'The build is green — shipping the beta to testers this afternoon. 🚀',
-      icon: const NativeIcon.icon(AppIcons.chatsCircleFill),
+      subtitle: 'Maya',
+      body: 'Added 12 photos from Fushimi Inari to the journal. 🌸',
+      icon: const NativeIcon.icon(AppIcons.bookOpenTextFill),
       badge: const NativeIcon.symbol('heart.circle.fill'),
       style: NativeBannerStyle(
         dark: dark,
-        iconBackground: scheme.primaryContainer,
+        iconBackground: accent,
         titleStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
       ),
-      onTap: () => _snack('Opened the message'),
+      onTap: () => _snack('Opened the journal'),
     );
     // No Flutter replica: elsewhere the app draws its own.
-    if (!shown) _snack('Maya Chen in launch-crew: the build is green 🚀');
+    if (!shown) _snack('Maya added 12 photos to Japan in spring 🌸');
   }
 
   void _snack(String text) {
@@ -98,7 +101,6 @@ class _ComponentsPageState extends State<ComponentsPage> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
       backgroundColor: CupertinoColors.systemGroupedBackground.resolveFrom(context),
       body: NativeNavigationBar(
@@ -117,6 +119,23 @@ class _ComponentsPageState extends State<ComponentsPage> {
           child: ListView(
             children: [
               CupertinoListSection.insetGrouped(
+                header: const Text('Rendering'),
+                footer: const _Footer(
+                  'The same widget tree, drawn by Flutter: what Android and iOS 15–25 show. Switching restarts the app.',
+                ),
+                children: [
+                  CupertinoListTile(
+                    leading: const Icon(AppIcons.androidLogo),
+                    title: const Text('Flutter replicas'),
+                    trailing: NativeSwitch(
+                      value: flutterReplicas.value,
+                      activeColor: accent,
+                      onChanged: (v) => flutterReplicas.value = v,
+                    ),
+                  ),
+                ],
+              ),
+              CupertinoListSection.insetGrouped(
                 header: const Text('Controls'),
                 footer: const _Footer('UIKit’s own switch, slider and segmented control, laid out by Flutter.'),
                 children: [
@@ -125,7 +144,7 @@ class _ComponentsPageState extends State<ComponentsPage> {
                     title: const Text('Notifications'),
                     trailing: NativeSwitch(
                       value: _notifications,
-                      activeColor: scheme.primary,
+                      activeColor: accent,
                       onChanged: (v) => setState(() => _notifications = v),
                     ),
                   ),
@@ -135,7 +154,7 @@ class _ComponentsPageState extends State<ComponentsPage> {
                       height: 32,
                       child: NativeSlider(
                         value: _volume,
-                        activeColor: scheme.primary,
+                        activeColor: accent,
                         onChanged: (v) => setState(() => _volume = v),
                       ),
                     ),
@@ -284,11 +303,25 @@ class _ComponentsPageState extends State<ComponentsPage> {
                     onTap: () => _push(const SearchPage()),
                   ),
                   CupertinoListTile(
-                    leading: const Icon(AppIcons.squaresFour),
-                    title: const Text('Split layout'),
-                    subtitle: const Text('A navigation bar per column'),
+                    leading: const Icon(AppIcons.drop),
+                    title: const Text('Merging glass'),
+                    subtitle: const Text('Shapes that fuse and split like native glass'),
                     trailing: const CupertinoListTileChevron(),
-                    onTap: () => _push(const SplitPage()),
+                    onTap: () => _push(const MorphPage()),
+                  ),
+                  CupertinoListTile(
+                    leading: const Icon(AppIcons.scissors),
+                    title: const Text('Clipped glass'),
+                    subtitle: const Text('Glass in scroll views, cut by Flutter clips'),
+                    trailing: const CupertinoListTileChevron(),
+                    onTap: () => _push(const ClipPage()),
+                  ),
+                  CupertinoListTile(
+                    leading: const Icon(AppIcons.gauge),
+                    title: const Text('Lab'),
+                    subtitle: const Text('Icon types, sync timing and diagnostics'),
+                    trailing: const CupertinoListTileChevron(),
+                    onTap: () => _push(const DiagnosticsPage()),
                   ),
                 ],
               ),
@@ -368,7 +401,7 @@ class _GlassStage extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Image.asset('assets/images/lake.jpg', fit: BoxFit.cover),
+          Image.asset('assets/images/maldives.jpg', fit: BoxFit.cover),
           Center(child: child),
         ],
       ),

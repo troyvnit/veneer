@@ -6,6 +6,8 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Record voice notes for your trip journal.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Veneer</string>
 	<key>CFBundleExecutable</key>

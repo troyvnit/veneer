@@ -421,12 +421,30 @@ private extension UIFont {
 final class MenuAnchorButton: UIButton {
   var previewsFlutterContent = false
 
+  private static let previewSelectors: Set<Selector> = [
+    #selector(UIContextMenuInteractionDelegate.contextMenuInteraction(_:configuration:highlightPreviewForItemWithIdentifier:)),
+    #selector(UIContextMenuInteractionDelegate.contextMenuInteraction(_:configuration:dismissalPreviewForItemWithIdentifier:)),
+  ]
+
+  /// A glass anchor keeps UIKit's own menu morph: it only claims the preview
+  /// methods when it has a preview to replace. UIButton doesn't implement
+  /// them in every SDK, so forwarding to `super` would be an unrecognized
+  /// selector.
+  override func responds(to aSelector: Selector!) -> Bool {
+    if let aSelector, Self.previewSelectors.contains(aSelector), !previewsFlutterContent {
+      return UIButton.instancesRespond(to: aSelector)
+    }
+    return super.responds(to: aSelector)
+  }
+
   override func contextMenuInteraction(
     _ interaction: UIContextMenuInteraction,
     configuration: UIContextMenuConfiguration,
     highlightPreviewForItemWithIdentifier identifier: any NSCopying
   ) -> UITargetedPreview? {
-    if previewsFlutterContent { return nil }
+    let selector = #selector(
+      UIContextMenuInteractionDelegate.contextMenuInteraction(_:configuration:highlightPreviewForItemWithIdentifier:))
+    guard !previewsFlutterContent, UIButton.instancesRespond(to: selector) else { return nil }
     return super.contextMenuInteraction(
       interaction, configuration: configuration, highlightPreviewForItemWithIdentifier: identifier)
   }
@@ -436,7 +454,9 @@ final class MenuAnchorButton: UIButton {
     configuration: UIContextMenuConfiguration,
     dismissalPreviewForItemWithIdentifier identifier: any NSCopying
   ) -> UITargetedPreview? {
-    if previewsFlutterContent { return nil }
+    let selector = #selector(
+      UIContextMenuInteractionDelegate.contextMenuInteraction(_:configuration:dismissalPreviewForItemWithIdentifier:))
+    guard !previewsFlutterContent, UIButton.instancesRespond(to: selector) else { return nil }
     return super.contextMenuInteraction(
       interaction, configuration: configuration, dismissalPreviewForItemWithIdentifier: identifier)
   }

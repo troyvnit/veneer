@@ -2,13 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:veneer/veneer.dart';
 
-import 'pages/assistant_page.dart';
-import 'pages/chat_page.dart';
-import 'pages/clip_page.dart';
-import 'pages/components_page.dart';
-import 'pages/morph_page.dart';
-import 'pages/sync_test_page.dart';
 import 'app_icons.dart';
+import 'app_state.dart';
+import 'data/travel.dart';
+import 'pages/assistant_page.dart';
+import 'pages/components_page.dart';
+import 'pages/explore_page.dart';
+import 'pages/journal_page.dart';
+import 'pages/stay_sheet.dart';
+import 'pages/sync_test_page.dart';
+import 'pages/trips_page.dart';
 
 /// Launch arguments (see ios/Runner/AppDelegate.swift) let
 /// `tool/measure_sync.py` runs be scripted:
@@ -43,15 +46,64 @@ void assistantSheet() => runNativeSheet(
   ),
 );
 
-ThemeData exampleTheme(Brightness brightness) => ThemeData(colorSchemeSeed: Colors.indigo, brightness: brightness);
+/// The stay sheet's own engine (see `openStaySheet`); the place arrives as
+/// the sheet's payload.
+@pragma('vm:entry-point')
+void staySheet() => runNativeSheet(
+  MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: exampleTheme(Brightness.light),
+    darkTheme: exampleTheme(Brightness.dark),
+    home: const StaySheet(),
+  ),
+);
 
-class ExampleApp extends StatelessWidget {
+ThemeData exampleTheme(Brightness brightness) =>
+    ThemeData(colorSchemeSeed: accent, brightness: brightness, splashFactory: NoSplash.splashFactory);
+
+/// Wander, a travel journal: the showcase for every Veneer component.
+class ExampleApp extends StatefulWidget {
   const ExampleApp({super.key});
 
   @override
+  State<ExampleApp> createState() => _ExampleAppState();
+}
+
+class _ExampleAppState extends State<ExampleApp> {
+  /// Off for the one frame between taking the app down and bringing it back.
+  bool _mounted = true;
+
+  @override
+  void initState() {
+    super.initState();
+    flutterReplicas.value = Veneer.debugForceFallback;
+    flutterReplicas.addListener(_switchRendering);
+  }
+
+  @override
+  void dispose() {
+    flutterReplicas.removeListener(_switchRendering);
+    super.dispose();
+  }
+
+  /// Flipping between native UIKit and the Flutter replicas rebuilds the app
+  /// from scratch: it comes down for a frame while the native layer is still
+  /// on (so its native chrome is removed), then mounts again with
+  /// [Veneer.debugForceFallback] set the new way.
+  void _switchRendering() {
+    setState(() => _mounted = false);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Veneer.debugForceFallback = flutterReplicas.value;
+      setState(() => _mounted = true);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (!_mounted) return const ColoredBox(color: Colors.black);
     return MaterialApp(
-      title: 'Veneer',
+      key: ValueKey(flutterReplicas.value),
+      title: 'Wander',
       debugShowCheckedModeBanner: false,
       theme: exampleTheme(Brightness.light),
       darkTheme: exampleTheme(Brightness.dark),
@@ -80,8 +132,9 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    // The assistant sheet's engine starts now, so the sheet opens with content.
+    // The sheets' engines start now, so they open with content.
     NativeSheet.prewarm('assistantSheet');
+    NativeSheet.prewarm('staySheet');
     // Scripted measurement runs (tool/measure_sync.py) open the sync test directly.
     if (launchMeasureMode) {
       WidgetsBinding.instance.addPostFrameCallback((_) => openSyncTest(context));
@@ -100,23 +153,26 @@ class _HomePageState extends State<HomePage> {
     return ValueListenableBuilder(
       valueListenable: trailingIconKind,
       builder: (context, kind, _) => NativeChromeScope(
-        // One of each icon type: SF Symbol, Material IconData (with a selected
-        // variant), an SVG asset, and Cupertino IconData from a package font.
         tabs: const [
           NativeTabItem(
-            title: 'Chat',
-            icon: NativeIcon.icon(AppIcons.chatsCircle),
-            selectedIcon: NativeIcon.icon(AppIcons.chatsCircleFill),
+            title: 'Explore',
+            icon: NativeIcon.icon(AppIcons.compass),
+            selectedIcon: NativeIcon.icon(AppIcons.compassFill),
+          ),
+          NativeTabItem(
+            title: 'Trips',
+            icon: NativeIcon.icon(AppIcons.suitcaseRolling),
+            selectedIcon: NativeIcon.icon(AppIcons.suitcaseRollingFill),
+          ),
+          NativeTabItem(
+            title: 'Journal',
+            icon: NativeIcon.icon(AppIcons.bookOpenText),
+            selectedIcon: NativeIcon.icon(AppIcons.bookOpenTextFill),
             badge: '3',
           ),
           NativeTabItem(title: 'Components', icon: NativeIcon.icon(AppIcons.squaresFour)),
-          NativeTabItem(
-            title: 'Morph',
-            icon: NativeIcon.icon(AppIcons.drop),
-            selectedIcon: NativeIcon.icon(AppIcons.dropFill),
-          ),
-          NativeTabItem(title: 'Clip', icon: NativeIcon.svgAsset('assets/icons/scissors.svg')),
         ],
+        tintColor: accent,
         scrollEdgeEffect: NativeScrollEdgeEffect.soft,
         trailingAction: NativeTabAction(
           icon: _trailingIcons[kind]!,
@@ -125,7 +181,10 @@ class _HomePageState extends State<HomePage> {
         ),
         selectedIndex: _index,
         onTabSelected: (i) => setState(() => _index = i),
-        child: IndexedStack(index: _index, children: const [ChatPage(), ComponentsPage(), MorphPage(), ClipPage()]),
+        child: IndexedStack(
+          index: _index,
+          children: const [ExplorePage(), TripsPage(), JournalPage(), ComponentsPage()],
+        ),
       ),
     );
   }

@@ -7,104 +7,103 @@
 [![Platform](https://img.shields.io/badge/platform-iOS%20%7C%20Android-lightgrey.svg)](#platform-support)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Real native iOS 26 UI for Flutter apps — Liquid Glass, UIKit bars, native composers and
-sheets — driven by your Flutter widget tree, with matching Flutter UI on Android and older iOS.**
+**Real native iOS 26 UI for Flutter apps — Liquid Glass, UIKit bars, sheets, menus and composers —
+driven by your Flutter widget tree, with matching Flutter UI on Android and older iOS.**
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/troyvnit/veneer/main/doc/demo.gif" width="270" alt="Demo: native tab bar and composer, glass tabs, and an assistant in a native UIKit sheet">
-  <br>
-  <sub>The example app on the iOS 27 simulator, real time. <a href="https://github.com/troyvnit/veneer/raw/main/doc/demo.mp4">Full-quality video</a>.</sub>
+  <img src="doc/images/hero.jpg" width="900" alt="Wander, the example app: a place page, Explore with glass over photos, and a native booking sheet">
 </p>
 
-<p align="center">
-  <img src="doc/images/chat.jpg" width="180" alt="Native tab bar, navigation bar and composer over a Flutter chat">
-  <img src="doc/images/assistant.jpg" width="180" alt="Assistant in a native UIKit sheet with a native prompt composer">
-  <img src="doc/images/components.jpg" width="180" alt="UIKit switch, slider, segmented control and menus laid out by Flutter">
-  <img src="doc/images/banner.jpg" width="180" alt="An in-app notification banner on Liquid Glass">
-</p>
-<p align="center">
-  <img src="doc/images/menu_anchor.jpg" width="180" alt="A native UIMenu with a title, subtitles and a checkmark, opened from a Flutter row">
-  <img src="doc/images/medium.jpg" width="180" alt="The sheet at its medium detent, in Liquid Glass">
-  <img src="doc/images/glass.jpg" width="180" alt="Liquid Glass behind Flutter text, a glass segment bar and a native search field">
-  <img src="doc/images/alert.jpg" width="180" alt="A native UIAlertController with a destructive action">
-</p>
+Veneer puts real UIKit on screen where your Flutter widgets say it should be. The tab bar is a real
+`UITabBarController`, the navigation bar a real `UINavigationBar`, sheets are real
+`UISheetPresentationController` sheets, and glass is real `UIGlassEffect` bending your Flutter pixels —
+with UIKit's own animations, gestures and accessibility. You write ordinary Flutter widgets; on
+Android and iOS 15–25 the same tree renders Flutter replicas, so one codebase serves every platform.
+
+**[Components](doc/components.md)** · **[Example app](example)** · **[How it works](doc/architecture.md)** ·
+**[Changelog](CHANGELOG.md)**
+
+<table>
+  <tr>
+    <td width="290" align="center">
+      <img src="https://raw.githubusercontent.com/troyvnit/veneer/main/doc/demo.gif" width="270" alt="Scrolling Explore under a pinned glass bar, opening a place and booking a stay in a native sheet">
+      <br><sub><a href="https://github.com/troyvnit/veneer/raw/main/doc/demo.mp4">Full-quality video</a></sub>
+    </td>
+    <td>
+      <b>What you're watching</b> — the example app on the iOS 27 simulator, in real time:
+      <ul>
+        <li>Photos scroll under a <b>glass segment bar</b> that pins below the <b>native navigation
+        bar</b>, and under glass labels laid out by Flutter.</li>
+        <li>A pushed page runs its photo under the bar; the <b>glass bar buttons</b> sit right on it.</li>
+        <li>“Book a stay” opens a <b>real UIKit sheet</b> with a medium and a large detent, holding
+        Flutter content with a native <b>segmented control, slider and switches</b>.</li>
+        <li>The <b>tab bar</b> slides away under the pushed page and comes back with it.</li>
+      </ul>
+      Every frame, native views move with the Flutter pixels under them: one synchronous
+      <code>dart:ffi</code> call after Flutter paints.
+    </td>
+  </tr>
+</table>
+
+## Why Veneer
+
+- **The real thing, not a look-alike.** Flutter's Cupertino widgets imitate iOS; Veneer *is* iOS. Bars,
+  sheets, menus, alerts, banners, controls and Liquid Glass come from UIKit, so they look, move and
+  feel exactly like the system — including what Apple changes next.
+- **One widget tree.** `NativeNavigationBar`, `NativeComposer`, `GlassShape` and friends are plain
+  widgets. No platform checks, no second UI for Android.
+- **In sync with Flutter.** Glass follows scrolling, clips and route transitions in the same frame as
+  the content under it, and merges and morphs the way native glass does.
+- **Ready for big screens.** Split layouts give each column its own navigation bar, and the tab bar
+  becomes a side column on the unfolded iPhone Duo.
+
+> **Status: pre-1.0.** The API may still change between minor versions; every change is in the
+> [changelog](CHANGELOG.md). Verified on the iOS 26 and 27 simulators (iPhone and the iPhone Duo,
+> folded and unfolded) and the Android emulator; real-device performance measurements are still to come.
+
+## Native and Flutter, side by side
+
+<table>
+  <tr>
+    <td align="center"><img src="doc/images/explore.jpg" width="260" alt="Explore on iOS 26: native navigation bar, tab bar and Liquid Glass"><br><sub><b>iOS 26+</b> — UIKit and Liquid Glass</sub></td>
+    <td align="center"><img src="doc/images/replicas.jpg" width="260" alt="The same screen as Flutter replicas"><br><sub><b>Android, iOS 15–25</b> — Flutter replicas</sub></td>
+  </tr>
+</table>
+
+The same widget tree, with no platform checks. The replicas match the native layout, sizes and corner
+radii, with solid surfaces instead of glass. The example app has a **Flutter replicas** switch to flip
+between the two at runtime.
+
+## Gallery
+
+<table>
+  <tr>
+    <td align="center" valign="top"><a href="doc/components.md#navigation-bar"><img src="doc/images/place.jpg" width="220" alt="Glass bar buttons on a full-bleed photo"></a><br><sub><b>Navigation bar</b><br>Glass buttons over content</sub></td>
+    <td align="center" valign="top"><a href="doc/components.md#sheets"><img src="doc/images/stay_sheet.jpg" width="220" alt="A native sheet with native controls"></a><br><sub><b>Sheets and controls</b><br>A UIKit sheet with Flutter inside</sub></td>
+    <td align="center" valign="top"><a href="doc/components.md#menus"><img src="doc/images/add_to_trip.jpg" width="220" alt="A native menu from a glass button"></a><br><sub><b>Menus</b><br>From glass, bars and any widget</sub></td>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="doc/components.md#composer"><img src="doc/images/journal_compose.jpg" width="220" alt="The composer above the keyboard"></a><br><sub><b>Composer</b><br>Morphs with the keyboard</sub></td>
+    <td align="center" valign="top"><a href="doc/components.md#prompt-composer"><img src="doc/images/assistant.jpg" width="220" alt="An assistant with the prompt composer"></a><br><sub><b>Prompt composer</b><br>An assistant in a sheet</sub></td>
+    <td align="center" valign="top"><a href="doc/components.md#banners"><img src="doc/images/banner.jpg" width="220" alt="An in-app banner"></a><br><sub><b>Banners</b><br>Above bars and sheets</sub></td>
+  </tr>
+  <tr>
+    <td align="center" valign="top"><a href="doc/components.md#glass-shapes"><img src="doc/images/glass_scroll.jpg" width="220" alt="Glass over scrolling photos"></a><br><sub><b>Glass</b><br>Laid out by Flutter, refracting it</sub></td>
+    <td align="center" valign="top"><a href="doc/components.md#controls-and-alerts"><img src="doc/images/alert.jpg" width="220" alt="A native alert"></a><br><sub><b>Alerts</b><br><code>UIAlertController</code>, tinted</sub></td>
+    <td align="center" valign="top"><a href="doc/components.md#tab-bar"><img src="doc/images/trips.jpg" width="220" alt="Trips with the native tab bar"></a><br><sub><b>Tab bar</b><br>With a trailing action</sub></td>
+  </tr>
+</table>
 
 ### Built for the iPhone Duo
 
 <p align="center">
-  <img src="doc/images/duo_split.jpg" width="560" alt="A split layout on the unfolded iPhone Duo: a list and its detail, each column with its own native navigation bar">
+  <img src="doc/images/duo_trips.jpg" width="640" alt="Trips on the unfolded iPhone Duo: the list and the selected trip side by side, each with its own native navigation bar, and the tab bar as a side column">
 </p>
 
 Unfold an iPhone Duo and the same widget tree becomes a two-column app. `NativeChromePane` gives each
 column its own `UINavigationBar` and scroll edge effects; the tab bar moves to a glass column at the
-trailing edge and reports its inset so content stays clear of it. See [Split layouts](#split-layouts).
-
-<p align="center">
-  <img src="doc/images/duo_components.jpg" width="560" alt="The Components page on the unfolded iPhone Duo, with the tab bar as a side column">
-</p>
-
-Veneer puts **one** native overlay above the Flutter surface and keeps it in sync with Flutter
-layout every frame. The tab bar is a real `UITabBarController`, the navigation bar is a real
-`UINavigationBar`, sheets are real `UISheetPresentationController` sheets, and glass is real
-`UIGlassEffect` refracting your Flutter pixels, with UIKit's own animations, gestures and
-accessibility. Bars, composers, sheets and glass shapes aren't platform views, so separate glass
-widgets can merge and morph into each other the way native glass does. (The leaf controls and
-`GlassBackground` are platform views, composited with your Flutter content.)
-
-Everything is a regular Flutter widget. On iOS 26 and later it renders natively; on Android and
-iOS 15–25 the same widget tree renders Flutter replicas with the same layout, sizes and
-behaviour, so one codebase serves every platform.
-
-> **Status: pre-1.0.** The API may still change between minor versions; every change is in the
-> [changelog](CHANGELOG.md). It is verified on the iOS 26 and 27 simulators (iPhone and the
-> unfolded iPhone Duo) and the Android emulator; real-device performance measurements are still to come.
-
-## Contents
-
-- [Features](#features)
-- [Platform support](#platform-support)
-- [Installation](#installation)
-- [Quick start](#quick-start)
-- [Components](#components)
-  - [Tab bar](#tab-bar) · [Navigation bar](#navigation-bar) · [Split layouts](#split-layouts) ·
-    [Composer](#composer) · [Prompt composer](#prompt-composer) · [Sheets](#sheets) · [Menus](#menus) ·
-    [Glass shapes](#glass-shapes) · [Search field](#search-field) · [Search toolbar](#search-toolbar) ·
-    [Segment bar](#segment-bar) · [Controls and alerts](#controls-and-alerts) · [Banners](#banners) ·
-    [Icons](#icons)
-- [Android and older iOS](#android-and-older-ios)
-- [Limitations](#limitations)
-- [Example app](#example-app)
-- [How it works](#how-it-works)
-- [Contributing](#contributing)
-- [License](#license)
-
-## Features
-
-| | |
-|---|---|
-| **Tab bar** | A real `UITabBarController`: the floating Liquid Glass bar, selection morph, badges and the split layout's detached trailing button. Slides away when another screen covers it. |
-| **Navigation bar** | A real `UINavigationBar` with glass bar buttons, a title capsule, grouped trailing buttons, native menus and iOS 26's scroll edge effect over Flutter content. |
-| **Split layouts** | A navigation bar per column on wide screens like the unfolded iPhone Duo, with the tab bar as a side column and routes that show in one pane. |
-| **Composer** | A messaging composer: a glass capsule that morphs into an expanded card above the keyboard, inside the keyboard's own animation, with interactive keyboard dismissal, mentions and Slack-style voice recording. |
-| **Prompt composer** | An assistant-style composer: grows from a capsule into a card for long prompts and attachments, turns its voice button into send as you type, and splits glass buttons off for a voice session. |
-| **Sheets** | Real UIKit sheets hosting Flutter content: detents, grabber, Liquid Glass at partial heights, the page behind receding — with Veneer's bars and composers inside. |
-| **Menus** | Native `UIMenu`s from bar buttons, composer buttons, glass shapes and any Flutter-drawn trigger — with titles, subtitles, checkmarks and disabled items — and UIKit context menus on long-pressed Flutter widgets. |
-| **Controls and alerts** | UIKit's `UISwitch`, `UISlider`, `UISegmentedControl` and `UIAlertController`, laid out by Flutter. |
-| **Banners** | In-app notification banners on Liquid Glass, in a window above the app's bars and sheets. |
-| **Search toolbar** | The system search at the bottom of the screen, as Settings and Passwords have it: field, clear and close buttons, keyboard dictation and the ride on the keyboard are all UIKit's. |
-| **Glass shapes** | `UIGlassEffect` shapes laid out by Flutter, merging within groups, clipped by Flutter clips, interactive; glass behind Flutter content; a glass search field and segment bar. |
-| **Icons** | SF Symbols, any `IconData` (Material, Cupertino, custom and variable icon fonts), SVG and images — all rendered natively. |
-
-## Platform support
-
-| Platform | What renders |
-|---|---|
-| **iOS 26+** | The native layer: UIKit bars, sheets and composers, Liquid Glass, scroll edge effects |
-| **iOS 15–25, Android** | Flutter replicas of the same UI, matching layout, sizes, positions, colours and corner radii, with solid surfaces instead of glass |
-| Web, desktop | Not supported (the bridge uses `dart:ffi`) |
-
-`Veneer.isSupported` tells you which path is active. You rarely need it: every widget picks
-its own path, so app code needs no `Platform.isIOS` checks.
+trailing edge and reports its inset, so content stays clear of it. See
+[Split layouts](doc/components.md#split-layouts).
 
 ## Installation
 
@@ -193,527 +192,35 @@ class InboxPage extends StatelessWidget {
 
 ## Components
 
-### Tab bar
-
-```dart
-NativeChromeScope(
-  tabs: const [
-    NativeTabItem(title: 'Chat', icon: NativeIcon.symbol('bubble.left'), selectedIcon: NativeIcon.symbol('bubble.left.fill')),
-    NativeTabItem(title: 'Library', icon: NativeIcon.icon(Icons.photo_library_outlined), badge: '3'),
-  ],
-  trailingAction: NativeTabAction(icon: NativeIcon.symbol('sparkles'), title: 'Assistant', onPressed: openAssistant),
-  scrollEdgeEffect: NativeScrollEdgeEffect.soft,
-  selectedIndex: index,
-  onTabSelected: (i) => setState(() => index = i),
-  child: pages,
-)
-```
-
-- A real `UITabBarController`, so the glass bar, selection animation, badges, VoiceOver and the
-  large content viewer are UIKit's. Icons, titles and badges update in place.
-- **Split layout:** `trailingAction` becomes the detached glass button at the trailing edge. It
-  acts as a button by default; with `selectable: true` it's a tab reported as index `tabs.length`.
-- Up to **5 items** including the trailing button (UIKit's limit on iPhone before a "More" tab).
-- Slides away while another route covers its page, and while a Flutter popup shows (with
-  `VeneerNavigatorObserver`).
-
-### Navigation bar
-
-```dart
-NativeNavigationBar(
-  leading: NativeBarButton(icon: const NativeIcon.symbol('chevron.left'), title: 'Back', onPressed: pop),
-  title: NativeBarTitle(title: 'launch-crew', subtitle: '6 members', icon: const NativeIcon.symbol('lock.fill'), capsule: true),
-  trailing: [
-    NativeBarButton(icon: const NativeIcon.symbol('headphones'), title: 'Huddle', onPressed: huddle),
-    NativeBarButton(icon: const NativeIcon.symbol('ellipsis'), title: 'More', menu: moreItems),
-  ],
-  child: page,
-)
-```
-
-- A real `UINavigationBar`: 44 pt glass buttons, and adjacent trailing buttons sharing one glass
-  capsule. When its buttons change, UIKit morphs the glass between the old and new sets.
-- `NativeBarTitle(capsule: true)` shows a tappable glass capsule with an icon, title,
-  subtitle and optional `accessory` (such as a chevron), like a channel header; otherwise a
-  plain title, centred or leading (`alignment: NativeBarTitleAlignment.leading`). With
-  `fill: true` the capsule spans the space between the buttons (a chat header), and `iconSize`
-  fits an avatar-sized icon such as a group avatar. Pass `style`
-  and `subtitleStyle` to use your app's fonts and colours; the native bar loads the font
-  family from your Flutter assets.
-- Bar buttons can show a `badge` (a count, text, or `''` for a dot), use `prominent` tinted
-  glass, show text instead of an icon, and split into separate capsules with `group`.
-- **Scroll edge effect:** content dissolves into iOS 26's own progressive blur under the bar
-  (`scrollEdgeEffect`, soft by default).
-- Shown while its page is visible; the most recently shown bar wins.
-
-### Split layouts
-
-<p>
-  <img src="doc/images/duo_split.jpg" width="420" alt="A list and its detail on the unfolded iPhone Duo, each with its own navigation bar">
-</p>
-
-```dart
-Row(children: [
-  SizedBox(
-    width: 375,
-    child: NativeChromePane(id: 'list', left: 0, width: 375, child: listWithTabs),
-  ),
-  Expanded(
-    child: NativeChromePane(id: 'detail', left: 376, width: screenWidth - 376, child: detail),
-  ),
-])
-```
-
-- Each `NativeChromePane` gets its own navigation bar and scroll edge effects, spanning only its
-  columns. `left` and `width` are where the pane rests, in logical pixels from the left of the
-  Flutter view; chrome doesn't follow a route transition sliding the pane's content.
-- A `NativeChromeScope` inside a pane confines the tab bar to it, as a bottom bar sized for the
-  pane. A composer inside a pane is laid out for the pane's width.
-- Routes that show in one pane mix in `NativePaneRoute` and report the pane's id in
-  `nativePane` (null while they cover the whole screen). Pages in other panes then stay
-  uncovered. The navigator needs a `VeneerNavigatorObserver`.
-
-### Composer
-
-A messaging composer for chat screens:
-
-```dart
-NativeComposer(
-  controller: composer,
-  placeholder: 'Message launch-crew',
-  leading: NativeComposerButton(icon: const NativeIcon.symbol('plus'), title: 'Attach', onPressed: attach),
-  idleAction: NativeComposerButton(icon: const NativeIcon.symbol('mic'), title: 'Voice message'),
-  toolbar: [
-    NativeComposerButton(icon: const NativeIcon.symbol('textformat'), title: 'Formatting'),
-    NativeComposerButton(icon: const NativeIcon.symbol('face.smiling'), title: 'Emoji'),
-  ],
-  onSend: send,
-  child: ListView(reverse: true, children: messages),
-)
-```
-
-- Idle, a 44 pt glass capsule above the tab bar. Focused, it morphs into a card above the
-  keyboard with a toolbar row and send button, inside the keyboard's own animation.
-- The text view grows to `maxLines`, then scrolls. `NativeComposerController` reads and sets
-  the text and focus.
-- **Interactive keyboard dismissal:** dragging the content down pulls the keyboard with the
-  finger, using UIKit's own mechanism, while Flutter keeps scrolling.
-- Use it in a `Scaffold(resizeToAvoidBottomInset: false)`: it handles the keyboard and pads
-  `child` for the space it takes.
-- **Mentions:** `controller.selection` follows the caret, `controller.replaceRange(start, end,
-  '@Name ')` completes the mention being typed, and `highlights: ['@Name']` draws mentions in
-  the tint colour.
-- **Voice recording** (both composers), as in Slack:
-
-  ```dart
-  NativePromptComposer(
-    controller: composer,
-    actions: [
-      NativeComposerButton(
-        icon: const NativeIcon.symbol('mic'),
-        title: 'Record',
-        onPressed: () => composer.startVoiceRecording(maxDuration: const Duration(minutes: 5)),
-      ),
-    ],
-    onVoiceRecorded: (clip) => attach(clip.path, clip.duration),
-    onVoiceRecordingFailed: (reason) => recordWithFlutter(),
-    recordingCancelLabel: 'Cancel',
-    recordingDoneLabel: 'Done',
-    child: conversation,
-  )
-  ```
-
-  The composer becomes a recording bar with cancel, a live waveform, the elapsed time and done.
-  Recording is native: an AAC `.m4a` file in the temporary directory, which your app owns from
-  then on. Your app needs an `NSMicrophoneUsageDescription`. The Flutter fallback reports
-  `NativeVoiceRecordingFailure.unavailable`.
-
-### Prompt composer
-
-An assistant-style composer:
-
-<p>
-  <img src="doc/images/attach.jpg" width="180" alt="Multi-line prompt with a photo attachment">
-  <img src="doc/images/menu.jpg" width="180" alt="Native menu from the composer's + button">
-</p>
-
-```dart
-NativePromptComposer(
-  controller: composer,
-  placeholder: 'Ask anything',
-  leading: NativeComposerButton(icon: const NativeIcon.symbol('plus'), title: 'Add', menu: [
-    NativeMenuItem(title: 'Photos', icon: const NativeIcon.symbol('photo.on.rectangle'), onSelected: pickPhoto),
-    NativeMenuItem(title: 'Files', icon: const NativeIcon.symbol('doc'), onSelected: pickFile),
-  ]),
-  actions: [NativeComposerButton(icon: const NativeIcon.symbol('mic'), title: 'Dictate', onPressed: dictate)],
-  primaryAction: NativeComposerButton(
-    icon: const NativeIcon.symbol('waveform'),
-    title: 'Voice mode',
-    onPressed: () => setState(() => voice = true),
-  ),
-  sideActions: [
-    NativeComposerButton(icon: const NativeIcon.symbol('mic.slash'), title: 'Mute', onPressed: toggleMute),
-    NativeComposerButton(
-      icon: const NativeIcon.symbol('xmark'),
-      title: 'End',
-      prominent: true,
-      onPressed: () => setState(() => voice = false),
-    ),
-  ],
-  showSideActions: voice,
-  attachments: [
-    NativeComposerAttachment(id: 'p1', thumbnail: NativeIcon.imageFile(photoPath), onRemove: () => remove('p1')),
-  ],
-  onSend: send,
-  child: conversation,
-)
-```
-
-- **One line (48 pt):** leading button, text, inline actions and a filled circle that shows
-  `primaryAction` while empty and becomes **send** once there's text or an attachment.
-- **Multi-line:** when the text wraps, has a line break or there are attachments, the capsule
-  grows into a card with attachments on top and the buttons on a bottom row.
-- **Side actions:** glass circles that split off the capsule like liquid while
-  `showSideActions` is true (for example a voice session's mute and end buttons).
-- **Attachments:** image tiles (no `title`) or file chips, with remove buttons; `loading`
-  dims a tile and shows a spinner while it uploads, and `onTap` makes the tile itself tappable
-  (to preview or play it).
-- **States:** `stopAction` replaces the circle while a reply is generating, `sendEnabled` and
-  `sendBusy` hold or spin the send button, and `editable: false` shows text (such as a live
-  transcript) without taking the keyboard.
-- Idle, it sits concentric with the display's corners; focused, it rides the keyboard.
-
-### Sheets
-
-Real UIKit sheets for Flutter content:
-
-<p>
-  <img src="doc/images/assistant.jpg" width="180" alt="Sheet at the large detent">
-  <img src="doc/images/medium.jpg" width="180" alt="Sheet at the medium detent">
-</p>
-
-```dart
-// main.dart: the sheet's Flutter app
-@pragma('vm:entry-point')
-void assistantSheet() => runNativeSheet(
-  MaterialApp(theme: appTheme, home: const AssistantPage()),
-);
-
-// Warm it up early so the sheet opens with content:
-NativeSheet.prewarm('assistantSheet');
-
-// Present it:
-showNativeSheet<void>(
-  context: context,
-  entrypoint: 'assistantSheet',
-  detents: const [NativeSheetDetent.medium, NativeSheetDetent.large],
-  initialDetent: NativeSheetDetent.large,
-  builder: (context) => const AssistantPage(), // Android / iOS 15–25
-);
-
-// Inside the sheet:
-NativeSheet.close(context, result);
-```
-
-- On iOS 26 this presents a `FlutterViewController` as a `.pageSheet`, so detents, the grabber,
-  drag physics, dimming, the corner radius, Liquid Glass at partial heights and the page behind
-  receding are all UIKit's.
-- A Flutter engine renders into one view at a time, so the sheet runs **its own engine**,
-  started at `entrypoint` (a top-level function in `main.dart`, or in `libraryUri`) and
-  spawned from a shared `FlutterEngineGroup`, which shares compiled code and the GPU context.
-  The next engine is warmed automatically once a sheet has slid up, and after it closes.
-- Each sheet engine registers all of your app's plugins unless you choose them: set
-  `VeneerPlugin.sheetPluginRegistrant` in your app delegate to register only what sheets use, so
-  plugins that observe the app (calls, push, analytics) don't run twice.
-- The sheet's isolate doesn't share state with your app: pass a `payload` in (read it with
-  `NativeSheet.payload()`; pre-warmed engines receive it when presented) and return a result
-  with `NativeSheet.close`. `arguments` reach the entrypoint instead, but bypass pre-warming.
-- While it's open, the sheet can ask the app for more with `NativeSheet.request(name, arguments)`
-  — a fresh credential, or data only the app holds. The app answers with the handler it set
-  through `NativeSheet.setRequestHandler((name, arguments) async => …)`; its value (or error, as
-  a `PlatformException`) comes back to the sheet. In the Flutter fallback the handler is called
-  directly, so the same code runs everywhere. A sheet presented from inside a sheet asks that
-  sheet's engine, which can forward the request with a handler of its own.
-- The app can talk to an open sheet too: give `showNativeSheet` a `NativeSheetController`,
-  then `controller.send(message)` reaches the sheet's `NativeSheet.messages(context)` stream,
-  and `controller.close(result)` dismisses it. Together with requests, a sheet can stay a view
-  of state the app owns: the payload is its first state, requests carry the user's actions to
-  the app, and the app's answers and messages bring fresher state back.
-- Sheet engines never restyle the app's status bar, and each engine is torn down when its
-  sheet is dismissed — unless the sheet was shown with `keepAlive: true`: then closing only
-  hides it. Its app keeps running (uploads, polling, audio; no frames while hidden), the next
-  `showNativeSheet` at that entrypoint presents the same app again, and inside it
-  `NativeSheet.shown` and `NativeSheet.presented` report each hide and reopening (with its
-  payload). `NativeSheet.release(entrypoint)` frees it, for example on sign-out.
-- A sheet's engine can call `showNativeSheet` itself: the new sheet is presented natively over
-  it, and goes away with it.
-- Plugin UI (contact pickers, calendar editors, share sheets) appears over an open sheet even
-  when the plugin presents from the window's root view controller: Veneer sends a presentation
-  UIKit would refuse there to the sheet on top. `VeneerPlugin.forwardsPresentationsOverSheets`
-  turns it off.
-- For a `NativeSheetDetent.content()` detent, wrap the sheet's content in `NativeSheetContent`:
-  UIKit sizes the sheet to it.
-- Inside, a `NativeNavigationBar` is a real `UINavigationBar` placed per Apple's sheet
-  templates (16 pt from the sheet's edges), and composers ride the sheet natively. Pulling down
-  drags the sheet when the content under the finger is at its top edge; otherwise the content
-  scrolls, as in UIKit.
-- Give the sheet page's `Scaffold` a transparent background so the sheet's material shows.
-- Without an `entrypoint`, or off iOS 26, `builder` runs in a Flutter sheet with the same
-  detents, grabber, iOS 26 look and drag physics. `NativeSheetRoute` pushes that Flutter sheet
-  directly, and `NativeSheetDetent.content()` sizes it to its content (native sheets use large).
-- The sheet's content gets the safe area a UIKit sheet gives it: the top clears the grabber, the
-  bottom clears the home indicator, and the keyboard moves the sheet to its largest detent.
-
-### Menus
-
-```dart
-NativeBarButton(
-  icon: const NativeIcon.symbol('ellipsis'),
-  title: 'More',
-  menu: [
-    NativeMenuItem(title: 'Share', icon: const NativeIcon.symbol('square.and.arrow.up'), onSelected: share),
-    NativeMenuItem(title: 'Delete', icon: const NativeIcon.symbol('trash'), destructive: true, onSelected: delete),
-  ],
-)
-```
-
-`menu` on `NativeBarButton`, `NativeComposerButton` and `GlassShape` opens a native `UIMenu` that
-grows out of the button. `NativeMenuItem.divider()` separates sections. An item can carry a
-`subtitle`, a checkmark (`checked`, the current choice in a picker) or be dimmed (`enabled: false`).
-Off iOS 26 a Flutter menu with iOS metrics opens instead.
-
-**Menus from a Flutter-drawn trigger** — a text row with a chevron, a filled pill:
-
-<p>
-  <img src="doc/images/menu_anchor.jpg" width="180" alt="A titled native menu with subtitles and a checkmark, opened from a Flutter list row">
-</p>
-
-```dart
-NativeMenuAnchor(
-  items: [
-    for (final status in statuses)
-      NativeMenuItem(title: status.label, checked: status == current, onSelected: () => pick(status)),
-  ],
-  child: statusRow,
-)
-```
-
-A tap on the child opens the native `UIMenu` growing out of it. An invisible native button
-(`GlassShape(style: GlassStyle.none)`) sits over the child and takes the tap, so the child draws the
-trigger but gets no touches of its own. Off iOS 26 a tap opens the Flutter menu next to it.
-
-**Context menus** on any Flutter widget:
-
-```dart
-NativeContextMenu(
-  borderRadius: BorderRadius.circular(18),
-  items: [
-    NativeMenuItem(title: 'Reply', icon: const NativeIcon.symbol('arrowshape.turn.up.left'), onSelected: reply),
-    NativeMenuItem(title: 'Delete', icon: const NativeIcon.symbol('trash'), destructive: true, onSelected: delete),
-  ],
-  child: bubble,
-)
-```
-
-A long press opens UIKit's context menu. The widget lifts over a blurred backdrop, with the
-press shrink, haptics and the settle back. UIKit recognizes the press on the Flutter view against
-where Flutter laid the widget out that frame, so it follows scrolling, and a press that moves
-still scrolls. The preview is a snapshot of the widget clipped to `borderRadius`. Off iOS 26 a
-long press opens the Flutter menu next to the widget.
-
-### Glass shapes
-
-```dart
-Stack(children: [
-  ListView(children: [for (final item in items) GlassShape(height: 56, label: item.name, icon: item.icon)]),
-  GlassGroup(
-    zIndex: 1,
-    child: Row(children: [
-      GlassShape(width: 56, height: 56, icon: const NativeIcon.symbol('plus'), onTap: add),
-      GlassShape(width: 56, height: 56, icon: const NativeIcon.symbol('ellipsis'), menu: moreItems),
-    ]),
-  ),
-])
-```
-
-- `GlassShape` is native `UIGlassEffect` positioned by Flutter layout every frame; its content
-  (icon, label) is native too. With `onTap` it uses UIKit's interactive glass response.
-- Shapes in the same `GlassGroup` merge within the group's spacing and morph out of their
-  neighbours. Groups stack by `zIndex`; shapes outside a group join their route's group.
-- Glass honours Flutter clips (`ClipRect`, `ClipRRect`, `ClipOval`, scroll viewports).
-- Glass always draws above Flutter content: Flutter widgets placed under a shape are refracted by it.
-
-**Glass behind Flutter content** — for surfaces whose content has to stay Flutter:
-
-<p>
-  <img src="doc/images/glass.jpg" width="180" alt="A GlassBackground pill holding Flutter text, a GlassSegmentBar and a NativeSearchField">
-</p>
-
-```dart
-GlassBackground(
-  cornerRadius: 28,
-  child: Padding(padding: const EdgeInsets.all(12), child: dockContent),
-)
-```
-
-`GlassBackground` is a platform view (`UIVisualEffectView` + `UIGlassEffect`) that Flutter composites
-under its child, so the child can be any widget. It costs more than a shape; use `GlassShape` when the
-content can be native. With `onTap` the glass is interactive and takes the tap itself (give the child
-`IgnorePointer`). Off iOS 26 it is the replica surface.
-
-### Search field
-
-```dart
-final search = GlobalKey<NativeSearchFieldState>();
-
-NativeSearchField(
-  key: search,
-  placeholder: 'Search all emoji',
-  controller: queryController,
-  onChanged: (query) => setState(() => this.query = query),
-  onSubmitted: (_) => search.currentState?.unfocus(),
-)
-```
-
-- A real `UISearchTextField` inside a glass capsule, positioned by Flutter layout like a
-  `GlassShape`: UIKit draws the magnifier, placeholder, clear button and caret, and owns the keyboard.
-- Text flows both ways through the `controller`: typing updates it, and setting `controller.text`
-  (e.g. clearing it) updates the native field. `onChanged`, `onSubmitted` and `onFocusChanged` report
-  the user's edits; `NativeSearchFieldState.focus()` / `unfocus()` move the keyboard.
-- `onMicrophonePressed` adds a microphone at the trailing edge while the field is empty, the way Apple's
-  apps offer dictation; the clear button takes its place once there is text. Set `microphoneActive` while
-  the app is listening to fill it. Dictation itself is the app's: veneer only reports the tap.
-- `searchIcon`, `microphoneIcon` and `microphoneActiveIcon` swap UIKit's magnifier and microphone symbols
-  for the app's own `NativeIcon`s (an icon font, an SVG), drawn at `iconSize` points.
-- Off iOS 26 it renders a Flutter field of the same height on the fallback surface.
-
-### Search toolbar
-
-```dart
-final search = GlobalKey<NativeSearchToolbarState>();
-
-Scaffold(
-  resizeToAvoidBottomInset: false,
-  body: NativeSearchToolbar(
-    key: search,
-    placeholder: 'Search places and orders',
-    controller: queryController,
-    onChanged: runSearch,
-    onClose: () => Navigator.pop(context),
-    child: results,
-  ),
-)
-```
-
-- A search page's bar, the way Settings and Passwords show it on iOS 26: a real `UISearchController`
-  on a navigation item with `.integrated` placement, in a `UINavigationController` whose toolbar is
-  the only thing drawn. UIKit lays it out in its floating bar at the bottom, follows the keyboard up
-  and down, and shows the clear button and, while searching, the close button. Dictation is the
-  keyboard's own.
-- It opens in search mode with the keyboard up (`autofocus`); the close button calls `onClose` after
-  the bar has left search mode, typically to pop the page.
-- `child` fills the screen and gets bottom padding for the space the bar takes, keyboard included,
-  so results scroll underneath it and end above it. The keyboard inset is consumed, so an inner
-  `Scaffold` doesn't also resize.
-- Text flows both ways through the `controller`, as in [Search field](#search-field);
-  `NativeSearchToolbarState.focus()` / `unfocus()` move the keyboard.
-- While another route covers its page, the bar is hidden rather than removed, and comes back as it
-  was left. One search toolbar is shown at a time.
-- Off iOS 26 it renders a Flutter search field and close button above the keyboard.
-
-### Segment bar
-
-```dart
-GlassSegmentBar(
-  segments: const [
-    GlassSegment(icon: NativeIcon.symbol('clock'), label: 'Recent'),
-    GlassSegment(icon: NativeIcon.symbol('face.smiling'), label: 'Smileys'),
-    GlassSegment(icon: NativeIcon.symbol('leaf'), label: 'Nature'),
-  ],
-  selectedIndex: section,
-  onSelected: jumpToSection,
-)
-```
-
-- One glass capsule holding a row of native buttons, with a highlight capsule that springs to the
-  selected segment — like an emoji keyboard's category bar.
-- Segments show an icon, or a short label (e.g. an emoji) when there is no icon; with an icon the
-  label is its accessibility label. `foreground`, `selectedForeground` and `selectionColor` default
-  to the system's secondary label, label and an adaptive light capsule.
-- The bar is `segments.length * segmentWidth` wide plus its padding. Off iOS 26 it renders the same
-  capsule in Flutter.
-
-### Controls and alerts
-
-<p>
-  <img src="doc/images/components.jpg" width="180" alt="UIKit switch, slider and segmented control in a Flutter list">
-  <img src="doc/images/alert.jpg" width="180" alt="A native alert with a destructive action">
-</p>
-
-```dart
-NativeSwitch(value: notify, onChanged: (v) => setState(() => notify = v), activeColor: brand);
-NativeSlider(value: speed, min: 0, max: 4, onChanged: setSpeed);
-NativeSegmentedControl(labels: const ['Member', 'Admin'], selectedIndex: role, onValueChanged: setRole);
-
-final picked = await showNativeAlert(
-  context: context,
-  title: 'Delete this item?',
-  tint: brand,
-  actions: const [
-    NativeAlertAction(title: 'Delete', style: NativeAlertActionStyle.destructive, preferred: true),
-    NativeAlertAction(title: 'Cancel', style: NativeAlertActionStyle.cancel),
-  ],
-);
-```
-
-The controls are UIKit's own, as platform views Flutter lays out (so they work in Flutter-drawn sheets).
-They're controlled: the value shown is the one you pass. `showNativeAlert` presents a
-`UIAlertController` and answers with the index of the action picked. Off iOS 26 they're Flutter's
-Cupertino controls and `CupertinoAlertDialog`.
-
-### Banners
-
-```dart
-final shown = await showNativeBanner(
-  title: 'launch-crew',
-  trailing: 'now',
-  subtitle: 'Maya Chen',
-  body: 'The build is green — shipping the beta to testers this afternoon.',
-  icon: const NativeIcon.symbol('bubble.left.and.bubble.right.fill'),
-  badge: const NativeIcon.symbol('heart.circle.fill'),
-  style: NativeBannerStyle(dark: isDark, iconBackground: brandContainer),
-  onTap: openThread,
-);
-if (!shown) showMySnackBar(); // Android and iOS 15–25
-```
-
-<p>
-  <img src="doc/images/banner.jpg" width="180" alt="An in-app notification banner on Liquid Glass">
-</p>
-
-- An in-app notification on Liquid Glass that drops in from the top of the screen in a window of its
-  own, so it shows above the app's navigation and tab bars and its native sheets, which Flutter
-  content can't cover. VoiceOver announces it.
-- Tap it for `onTap`; swipe it up to dismiss it. It leaves after `duration` (held while touched), when
-  `hideNativeBanner()` is called, or when another banner replaces it; `onDismissed` runs either way.
-- `NativeBannerStyle` sets its fonts, colours, glass tint, border, shadow and metrics.
-- There is no Flutter replica: off iOS 26 it returns `false` so the app can show its own.
-
-### Icons
-
-Every icon parameter takes a `NativeIcon`, rendered natively:
-
-| | |
+| Widget | What it is |
 |---|---|
-| `NativeIcon.symbol('heart.fill')` | SF Symbol |
-| `NativeIcon.icon(Icons.add)` | Any `IconData`: Material, Cupertino, package or custom icon fonts, and variable fonts (`fill`, `weight`, `grade`, `opticalSize`) |
-| `NativeIcon.svgAsset('assets/x.svg')`, `.svgFile(path)`, `.svg(markup)` | SVG, drawn by Veneer's native renderer (CSS, gradients, clip paths, masks, `use`, text…) |
-| `NativeIcon.image('assets/photo.jpg')`, `.imageFile(path)` | Raster images in their own colours |
+| [`NativeChromeScope`](doc/components.md#tab-bar) | A real `UITabBarController`: the floating Liquid Glass bar, selection morph, badges and a detached trailing action. Slides away when another screen covers it. |
+| [`NativeNavigationBar`](doc/components.md#navigation-bar) | A real `UINavigationBar`: glass bar buttons, title capsules, grouped buttons, native menus and iOS 26's scroll edge effect over Flutter content. |
+| [`NativeChromePane`](doc/components.md#split-layouts) | Split layouts: a navigation bar per column, and routes that show in one pane. |
+| [`NativeComposer`](doc/components.md#composer) | A messaging composer that morphs into a card above the keyboard, with mentions and voice recording. |
+| [`NativePromptComposer`](doc/components.md#prompt-composer) | An assistant composer: attachments, a voice button that becomes send, and a voice session. |
+| [`showNativeSheet`](doc/components.md#sheets) | Real UIKit sheets hosting Flutter: detents, grabber, Liquid Glass at partial heights. |
+| [`NativeMenuAnchor`, `NativeContextMenu`](doc/components.md#menus) | `UIMenu`s from any Flutter widget, and context menus on long-pressed widgets. |
+| [`GlassShape`, `GlassGroup`, `GlassBackground`](doc/components.md#glass-shapes) | `UIGlassEffect` laid out by Flutter: merging, clipped, interactive, or behind Flutter content. |
+| [`NativeSearchField`](doc/components.md#search-field), [`NativeSearchToolbar`](doc/components.md#search-toolbar) | A glass search field, and the system search bar at the bottom of the screen. |
+| [`GlassSegmentBar`](doc/components.md#segment-bar) | A row of icons on one glass capsule with a sliding highlight. |
+| [`NativeSwitch`, `NativeSlider`, `NativeSegmentedControl`, `showNativeAlert`](doc/components.md#controls-and-alerts) | UIKit's controls and alerts, laid out by Flutter. |
+| [`showNativeBanner`](doc/components.md#banners) | In-app notification banners on Liquid Glass, above the app's bars and sheets. |
+| [`NativeIcon`](doc/components.md#icons) | SF Symbols, any `IconData`, SVG and images, all rendered natively. |
 
-Glyphs and SVGs are template images that tint like SF Symbols; pass `tinted: false` to keep an
-SVG's own colours. Release builds tree-shake icon fonts down to the `const` `IconData`s you use,
-as with `Icon`. Off iOS 26, SF Symbols map to close Material icons (override with
-`NativeIcon.symbol(name, fallback: …)`).
+The full reference, with every option and an example for each, is in
+**[doc/components.md](doc/components.md)**.
+
+## Platform support
+
+| Platform | What renders |
+|---|---|
+| **iOS 26+** | The native layer: UIKit bars, sheets and composers, Liquid Glass, scroll edge effects |
+| **iOS 15–25, Android** | Flutter replicas of the same UI, matching layout, sizes, positions, colours and corner radii, with solid surfaces instead of glass |
+| Web, desktop | Not supported (the bridge uses `dart:ffi`) |
+
+`Veneer.isSupported` tells you which path is active. You rarely need it: every widget picks
+its own path, so app code needs no `Platform.isIOS` checks.
 
 ## Android and older iOS
 
@@ -721,13 +228,10 @@ Where the native layer isn't available, every widget renders a Flutter replica w
 native layout, sizes, positions and corner radii, iOS system colours, and solid surfaces
 instead of glass. It follows light and dark mode.
 
-<p>
-  <img src="doc/images/fallback_chat.jpg" width="180" alt="Flutter replicas of the tab bar, navigation bar and composer">
-  <img src="doc/images/fallback_sheet.jpg" width="180" alt="Flutter sheet with replica controls">
-</p>
 
 To preview the replicas on an iOS 26 device, set `Veneer.debugForceFallback = true` before
-`runApp`. Wrap any subtree in `VeneerFallbackScope` to force its replicas.
+`runApp` (the example's **Flutter replicas** switch does this at runtime, remounting the app). Wrap
+any subtree in `VeneerFallbackScope` to force its replicas.
 
 To match your design system, add a `VeneerFallbackStyle` to your theme's `extensions` (one per
 brightness); the replicas read their surfaces, labels, accent, badge colours and shadows from it:
@@ -749,7 +253,7 @@ A Flutter sheet given a `backgroundColor` stays solid at every detent; pass a
   under different clips don't merge. Opaque Flutter widgets painted over glass don't hide it.
 - **Route transitions:** the tab bar slides away under pushed routes, but the navigation bar
   and composer switch at the start of a push instead of sliding with the page.
-- **Sheets:** the sheet's Flutter content runs in its own isolate (see [Sheets](#sheets)).
+- **Sheets:** the sheet's Flutter content runs in its own isolate (see [Sheets](doc/components.md#sheets)).
 - **Gestures:** a touch that starts on an interactive glass shape belongs to UIKit and can't
   start a Flutter scroll.
 - **Context menus:** the lifted preview is a still snapshot, so animated content freezes while
@@ -759,25 +263,27 @@ A Flutter sheet given a `backgroundColor` stays solid at every detent; pass a
 
 ## Example app
 
-The [example](example) is a small messaging app that exercises every component:
+The [example](example) is **Wander**, a travel journal that uses every component:
 
 ```bash
 cd example
 flutter run
 ```
 
-- **Chat:** a channel with the native navigation bar, scroll edge effect and composer.
-- **Components:** UIKit controls, alerts and banners, menus from Flutter rows and context menus,
-  glass behind Flutter content, the segment bar and search field, and pages for the search toolbar
-  and a split layout (best on the unfolded iPhone Duo). Its gauge button opens the **Lab**: icon
-  types, the sync-lag test and native stats.
-- **AI button** (tab bar): an assistant in a native sheet with the prompt composer, attachments,
-  voice mode and native menus.
-- **Morph, Clip:** merging glass groups and glass inside Flutter clips.
+- **Explore:** featured places on glass cards, a glass category bar that pins under the navigation
+  bar, and a grid of photos with glass labels and native context menus. Search opens the native search
+  toolbar.
+- **Place pages:** the photo runs under the bar; glass buttons open a native menu of trips and a
+  **Book a stay** sheet with native controls, an alert and a banner.
+- **Trips:** a list and its detail; side by side on wide screens like the unfolded iPhone Duo.
+- **Journal:** the native composer with a toolbar, mentions and voice notes.
+- **Components:** each component on its own, merging and clipped glass, the **Lab** (icon types,
+  sync timing) and the **Flutter replicas** switch.
+- **Assistant** (the tab bar's trailing button): a trip planner in a native sheet with the prompt
+  composer.
 
-Launch with `-VENEER_FALLBACK 1` to see the Android / iOS 15–25 UI on an iOS 26 simulator. The
-example's icons are [Phosphor Icons](https://phosphoricons.com) (MIT), compiled into an icon
-font by `example/tool/icon_font/build_icon_font.py`.
+Photos are from [Unsplash](https://unsplash.com) (credits in the [example's README](example/README.md));
+icons are [Phosphor Icons](https://phosphoricons.com) (MIT).
 
 ## How it works
 

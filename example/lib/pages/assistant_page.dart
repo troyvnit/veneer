@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:veneer/veneer.dart';
 
 import '../app_icons.dart';
+import '../data/travel.dart';
 
 /// Opens the assistant from the tab bar's AI button in a sheet: on iOS 26 a
 /// real UIKit sheet running the `assistantSheet` entrypoint (see main.dart),
@@ -20,7 +21,7 @@ void openAssistant(BuildContext context) {
   );
 }
 
-/// An assistant chat in a sheet: a native navigation bar and prompt composer
+/// A travel assistant in a sheet: a native navigation bar and prompt composer
 /// over a Flutter conversation — "+" menu for attachments, dictation, and a
 /// voice button that becomes send as you type. Voice mode splits mute and
 /// end buttons off the composer's glass and shows a live orb.
@@ -55,14 +56,15 @@ class _AssistantPageState extends State<AssistantPage> {
   static const _voices = ['Harbor', 'Aurora', 'Sage'];
 
   static const _replies = [
-    'Here’s a simple plan: cache the map tiles for saved routes first, then queue edits made offline and sync '
-        'them when the connection returns. Want me to split that into tasks?',
-    'Good question. The short version: keep the state in one place, pass it down, and let widgets rebuild '
-        'from it. I can sketch the structure if that helps.',
-    'That photo has lovely evening light. For a caption, something like “Last light over the ridge” would '
-        'fit — or I can suggest a few more.',
-    'Sure — three ideas for the weekend: a sunrise hike to the lookout, a picnic by the lake, or a slow '
-        'morning at the farmers market followed by a bike ride along the coast.',
+    'Here’s a three-day plan for Lisbon. Day 1: Alfama and the castle in the morning, tram 28 after lunch, '
+        'sunset at Senhora do Monte. Day 2: Belém — the tower, the monastery, and pastéis de nata. Day 3: a '
+        'day trip to Sintra, back for dinner in Bairro Alto. Want me to add it to a trip?',
+    'Early April is cherry blossom season in Kyoto, so book rooms now. Philosopher’s Path and Maruyama Park '
+        'are the classic spots; go at sunrise to beat the crowds.',
+    'What a view! For a caption, something like “Blue hour on the caldera” would fit — or I can suggest a '
+        'few more.',
+    'Three ideas for a long weekend: Santorini for sunsets and swimming, Lisbon for food and miradouros, or '
+        'Marrakech for the souks and a night in the desert.',
   ];
 
   @override
@@ -104,8 +106,9 @@ class _AssistantPageState extends State<AssistantPage> {
   /// A canned reply on the prompt's topic, or the next one in turn.
   String _replyFor(String prompt, {required bool hasPhoto}) {
     if (hasPhoto || prompt.contains('photo') || prompt.contains('caption')) return _replies[2];
-    if (prompt.contains('weekend') || prompt.contains('trip')) return _replies[3];
-    if (prompt.contains('offline') || prompt.contains('sync') || prompt.contains('plan')) return _replies[0];
+    if (prompt.contains('weekend') || prompt.contains('where')) return _replies[3];
+    if (prompt.contains('kyoto') || prompt.contains('japan') || prompt.contains('blossom')) return _replies[1];
+    if (prompt.contains('lisbon') || prompt.contains('plan') || prompt.contains('days')) return _replies[0];
     return _replies[_replyIndex++ % _replies.length];
   }
 
@@ -190,7 +193,7 @@ class _AssistantPageState extends State<AssistantPage> {
               ],
         child: NativePromptComposer(
           controller: _composer,
-          placeholder: 'Ask anything',
+          placeholder: 'Plan a trip, ask anything',
           leading: NativeComposerButton(
             icon: const NativeIcon.icon(AppIcons.plus),
             title: 'Add',
@@ -199,8 +202,8 @@ class _AssistantPageState extends State<AssistantPage> {
                 title: 'Photos',
                 icon: const NativeIcon.icon(AppIcons.images),
                 onSelected: () => _attach(
-                  title: 'lake.jpg',
-                  thumbnail: const NativeIcon.image('assets/images/lake.jpg'),
+                  title: 'kyoto.jpg',
+                  thumbnail: const NativeIcon.image('assets/images/kyoto.jpg'),
                   photo: true,
                 ),
               ),
@@ -208,8 +211,8 @@ class _AssistantPageState extends State<AssistantPage> {
                 title: 'Camera',
                 icon: const NativeIcon.icon(AppIcons.camera),
                 onSelected: () => _attach(
-                  title: 'coast.jpg',
-                  thumbnail: const NativeIcon.image('assets/images/coast.jpg'),
+                  title: 'santorini.jpg',
+                  thumbnail: const NativeIcon.image('assets/images/santorini.jpg'),
                   photo: true,
                 ),
               ),
@@ -217,7 +220,7 @@ class _AssistantPageState extends State<AssistantPage> {
                 title: 'Files',
                 icon: const NativeIcon.icon(AppIcons.fileText),
                 onSelected: () => _attach(
-                  title: 'trip-plan.pdf',
+                  title: 'japan-itinerary.pdf',
                   subtitle: 'PDF · 2 pages',
                   thumbnail: const NativeIcon.icon(AppIcons.fileTextFill),
                 ),
@@ -254,7 +257,7 @@ class _AssistantPageState extends State<AssistantPage> {
           ],
           showSideActions: _voice,
           attachments: List.of(_attachments),
-          tintColor: const Color(0xFF0A84FF),
+          tintColor: accent,
           onSend: _send,
           child: GestureDetector(
             behavior: HitTestBehavior.translucent,
@@ -290,7 +293,7 @@ class _Greeting extends StatelessWidget {
       padding: EdgeInsets.only(top: padding.top, bottom: padding.bottom),
       child: Center(
         child: Text(
-          'What can I help with?',
+          'Where to next?',
           style: TextStyle(fontSize: 26, fontWeight: FontWeight.w600, color: Theme.of(context).colorScheme.onSurface),
         ),
       ),
@@ -351,7 +354,7 @@ class _UserBubble extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
               decoration: BoxDecoration(
-                color: dark ? const Color(0xFF0A3D70) : const Color(0xFFDCEBFF),
+                color: dark ? const Color(0xFF5C241A) : const Color(0xFFFFE3DC),
                 borderRadius: BorderRadius.circular(24),
               ),
               child: Text(

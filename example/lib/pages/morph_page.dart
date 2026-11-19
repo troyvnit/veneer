@@ -128,25 +128,5 @@ class _Backdrop extends StatelessWidget {
   const _Backdrop();
 
   @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1A2A6C), Color(0xFFB21F1F), Color(0xFFFDBB2D)],
-        ),
-      ),
-      child: GridView.count(
-        crossAxisCount: 6,
-        physics: const NeverScrollableScrollPhysics(),
-        children: [
-          for (var i = 0; i < 90; i++)
-            Center(
-              child: Icon(AppIcons.circleFill, size: 10, color: Colors.white.withValues(alpha: i.isEven ? 0.7 : 0.3)),
-            ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Image.asset('assets/images/marrakech.jpg', fit: BoxFit.cover);
 }

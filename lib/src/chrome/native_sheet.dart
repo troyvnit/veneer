@@ -98,9 +98,10 @@ class NativeSheetDetent {
 /// [NativeSheetController.close] it — the other half of [NativeSheet.request],
 /// so a sheet can stay a view of state the app owns.
 ///
-/// **Elsewhere (Android, iOS 15–25, or without an entrypoint)** — [builder]'s
-/// content in a Flutter sheet with the same behaviour ([NativeSheetRoute]),
-/// its Veneer widgets drawn as Flutter replicas.
+/// **Elsewhere (Android, iOS 15–25, under a [VeneerFallbackScope], or
+/// without an entrypoint)** — [builder]'s content in a Flutter sheet with the
+/// same behaviour ([NativeSheetRoute]), its Veneer widgets drawn as Flutter
+/// replicas.
 ///
 /// In both: rests at each of [detents] (default: large only); a grabber shows
 /// when there's more than one (override with [showGrabber]); the page behind
@@ -134,7 +135,7 @@ Future<T?> showNativeSheet<T>({
   NativeSheetController? controller,
 }) async {
   final bridge = VeneerBridge.instance;
-  if (entrypoint != null && bridge.isSupported) {
+  if (entrypoint != null && useNativeLayer(context)) {
     int? presentedId;
     try {
       final result = await bridge.presentSheet(

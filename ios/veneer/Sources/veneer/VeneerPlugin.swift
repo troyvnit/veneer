@@ -120,10 +120,12 @@ public class VeneerPlugin: NSObject, FlutterPlugin {
         return
       }
       overlay.glassLayer.defaultSpacing = CGFloat((args["spacing"] as? NSNumber)?.doubleValue ?? 16)
-      // A new isolate (hot restart) attaches to the same overlay; a composer
-      // the old one showed has no Dart owner left to remove it.
+      // A new isolate (hot restart) attaches to the same overlay; a composer,
+      // search toolbar or glass the old one showed has no Dart owner left to
+      // remove it.
       overlay.setComposer(nil)
       overlay.setSearchToolbar(nil)
+      overlay.glassLayer.removeAll()
       DispatchQueue.main.async { overlay.resendLayout() }
       let fn: @convention(c) (UnsafePointer<Double>?, Int32, Int32) -> Void = veneer_apply_frame
       result([
