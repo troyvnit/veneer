@@ -459,9 +459,14 @@ abstract class _ComposerHostState<W extends StatefulWidget> extends State<W> {
     }
     final firstShow = _lastSent == null;
     _lastSent = encoded;
-    _bridge.setComposer(config, handlerSet);
+    final shown = _bridge.setComposer(config, handlerSet);
     if (takingOver || (firstShow && _controller.text.isNotEmpty)) {
-      _bridge.composerCommand('setText', text: _controller.text, selection: _controller.selection);
+      // setComposer reaches native a turn later; text sent first would find
+      // no composer and be dropped. Send the text as it is by then.
+      shown.then((_) {
+        if (!mounted || _active != this) return;
+        _bridge.composerCommand('setText', text: _controller.text, selection: _controller.selection);
+      });
     }
   }
 

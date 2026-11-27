@@ -214,6 +214,29 @@ void main() {
     expect((calls.last.arguments as Map)['command'], 'unfocus');
   });
 
+  testWidgets('a composer shown with text sends it after the native composer exists', variant: ios, (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: NativeComposer(child: SizedBox())));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pumpAndSettle();
+    calls.clear();
+
+    final controller = NativeComposerController(text: 'saved draft');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: NativeComposer(controller: controller, child: const SizedBox()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final shown = calls.indexWhere((c) => c.method == 'setComposer');
+    final restored = calls.indexWhere(
+      (c) => c.method == 'composerCommand' && (c.arguments as Map)['text'] == 'saved draft',
+    );
+    expect(shown, isNot(-1));
+    expect(restored, greaterThan(shown), reason: 'text sent before the composer exists is dropped natively');
+  });
+
   testWidgets('composer controller follows the native caret and completes a mention', variant: ios, (tester) async {
     final controller = NativeComposerController();
     final changes = <String>[];

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.25.4
+
+- **Composer:** a composer that appears with text already in its controller (a restored draft, a
+  prefilled prompt) shows that text. The text was sent to native before the composer it belonged to
+  existed there, so it was dropped and the bar came up empty while the controller still held it.
+
 ## 0.25.3
 
 - **Glass:** a `GlassShape` with a `menu` no longer crashes when tapped. Its menu button forwarded
